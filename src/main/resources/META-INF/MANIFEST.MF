@@ -1,0 +1,31 @@
+Manifest-Version: 1.0
+MIDlet-Name: UMK3 SEfan.RU
+MIDlet-Version: 4.7.79
+MIDlet-Vendor: Electronic Arts
+MIDlet-1: UMK3 SEfan.RU, /i.png, com.ea.sdk.SDKMIDlet
+MicroEdition-Profile: MIDP-2.0
+MicroEdition-Configuration: CLDC-1.0
+MIDlet-Icon: /i.png
+Created-By: Metaflow
+JAMDAT-MoreGames-URI: ${jamdat.moregames.uri}
+Content-Folder: Games
+MG_BUYURI_28442: http://sefan.ru/?rId=9750&sp=32122&mc=MG16-CH-MG
+Blood: red
+JAMDAT-MoreGames: ${jamdat.moregames}
+MG_BUYURI_28182: http://sefan.ru/?rId=7281&sp=32122&mc=MG16-CH-MG
+MG_CATURI_28442: http://sefan.ru/?rId=4373&sp=32122&mc=MG16-CH-MG
+MG_BUYURI_30403: http://sefan.ru/?rId=22783&sp=32122&mc=MG16-CH-MG
+MG_BUYURI_31302: http://sefan.ru/?rId=20667&sp=32122&mc=MG16-CH-MG
+MG_CATURI_LOG: http://sefan.ru/?rId=4373&sp=32122&mc=MG16-CH-MG
+MG_BUYURI_27804: http://sefan.ru/?rId=7280&sp=32122&mc=MG16-CH-MG
+MG_CATURI_24171: http://sefan.ru/?rId=4373&sp=32122&mc=MG16-CH-MG
+Fatality: on
+MG_MGPANEL0: 30403,27282,31302,29662,28182,27804
+JAMDAT-BUILD: 4.7.79.en.nkn80
+MG_BUYURI_29662: http://sefan.ru/?rId=15614&sp=32122&mc=MG16-CH-MG
+MG_Impl: wapstatic
+MG_BUYURI_27282: http://sefan.ru/?rId=4603&sp=32122&mc=MG16-CH-MG
+MG_PRODUCTS: 24171,28442,28902,LOG,MGPANEL0
+MG_BUYURI_28902: http://sefan.ru/?rId=11808&sp=32122&mc=MG16-CH-MG
+MG_BUYURI_24171: http://sefan.ru/?rId=4602&sp=32122&mc=MG16-CH-MG
+MG_CATURI_28902: http://sefan.ru/?rId=4373&sp=32122&mc=MG16-CH-MG

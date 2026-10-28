@@ -1,0 +1,42 @@
+# Build artifacts
+build/
+.rms/
+*.class
+
+# Temporary decompilation and scratch directories
+decompiled/
+remapped_decompiled/
+reverse_engineered/
+scratch_decompile/
+vineflower_out/
+vineflower_renamed/
+vineflower_renamed_test/
+vineflower_test2/
+test_full_clean/
+src_clean/
+
+# Intermediate jars & scratch scripts
+Ultimate_Mortal_Kombat_3_remapped.jar
+scratch_s.java
+fix_vf.py
+mod_test.py
+sources_list.txt
+test_files.txt
+tools/vineflower_test/
+tools/vf_single/
+tools/*.class
+
+
+# Logs & Environment
+*.log
+launcher_log.txt
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
