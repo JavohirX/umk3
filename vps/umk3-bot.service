@@ -1,0 +1,15 @@
+[Unit]
+Description=Ultimate Mortal Kombat 3 - Telegram Mini App Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/umk3-bot
+ExecStart=/opt/umk3-bot/venv/bin/python3 /opt/umk3-bot/bot.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,59 @@
+name: Deploy to VPS Server
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            SUDO=""
+            if command -v sudo >/dev/null 2>&1 && [ "$USER" != "root" ]; then
+              SUDO="sudo"
+            fi
+
+            echo "=== 1. Ensuring target directory exists ==="
+            $SUDO mkdir -p /var/www/umk3
+            $SUDO chown -R $USER:$USER /var/www/umk3
+
+            echo "=== 2. Pulling latest code ==="
+            if [ -d "/var/www/umk3/.git" ]; then
+              cd /var/www/umk3
+              git fetch origin main || git fetch origin master
+              git reset --hard origin/main || git reset --hard origin/master
+            else
+              git clone https://github.com/JavohirX/umk3 /var/www/umk3
+              cd /var/www/umk3
+            fi
+
+            echo "=== 3. Setting up Python environment for Telegram Bot ==="
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
+            fi
+            ./venv/bin/pip install --upgrade pip
+            ./venv/bin/pip install aiogram python-dotenv
+
+            echo "=== 4. Reloading Nginx & Restarting Bot Service ==="
+            if [ -f "vps/umk3-bot.service" ]; then
+              $SUDO cp vps/umk3-bot.service /etc/systemd/system/umk3-bot.service || true
+              $SUDO systemctl daemon-reload || true
+            fi
+            $SUDO systemctl reload nginx || true
+            $SUDO systemctl restart umk3-bot || true
+
+            echo "=== Deployment to VPS Completed Successfully! ==="
