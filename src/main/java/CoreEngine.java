@@ -1268,7 +1268,7 @@ public final class CoreEngine implements EntityInterface {
 
          this.currentAnimSet = exec_a_int_arr_int_arr_byte_bool_to_animationset(var3, var1, var8, false);
          return false;
-      } catch (IOException var6) {
+      } catch (Exception var6) {
          return true;
       }
    }
@@ -2572,10 +2572,10 @@ public final class CoreEngine implements EntityInterface {
 
          if (this.actorTimerW == 100 || this.actorTimerW == 101) {
             var1.setColor(9985856);
-            var7 = (this.linkedStateMachine.actorBoundsArray[0] >> 8) - val_int_eO;
+            int var7_x = (this.linkedStateMachine.actorBoundsArray[0] >> 8) - val_int_eO;
             int var8 = (this.linkedStateMachine.actorBoundsArray[1] >> 8) - exec_k_to_int();
-            var1.drawLine(var2 + this.spriteTransformLookupB[1] * this.actorCurrentAnimIndex, var8 - 1, var7, var8 - 1);
-            var1.drawLine(var2 + this.spriteTransformLookupB[1] * this.actorCurrentAnimIndex, var8, var7, var8);
+            var1.drawLine(var2 + this.spriteTransformLookupB[1] * this.actorCurrentAnimIndex, var8 - 1, var7_x, var8 - 1);
+            var1.drawLine(var2 + this.spriteTransformLookupB[1] * this.actorCurrentAnimIndex, var8, var7_x, var8);
          }
 
          if (this.val_bool_B) {
@@ -2761,7 +2761,7 @@ public final class CoreEngine implements EntityInterface {
 
       var1[4] = var23 | var10;
       int var24 = var1[4];
-      byte var15;
+      int var15;
       if (var4) {
          var15 = 2;
       } else {
@@ -2794,7 +2794,7 @@ public final class CoreEngine implements EntityInterface {
 
       var1[4] = var27 | var15;
       int var28 = var1[4];
-      byte var19;
+      int var19;
       if (var8) {
          var19 = 1;
       } else {
@@ -3109,51 +3109,14 @@ public final class CoreEngine implements EntityInterface {
          int var19 = var2[5];
          exec_e_coreengine_to_void(this);
          byte var16 = 15;
-         int var4;
-         boolean var27;
-         if (((var4 = var2[4]) & 256) != 0) {
-            var27 = 1;
-         } else {
-            var27 = 0;
-         }
-
-         boolean var5 = (boolean)var27;
-         if ((var4 & 4) != 0) {
-            var27 = (boolean)1;
-         } else {
-            var27 = (boolean)0;
-         }
-
-         boolean var6 = var27;
-         if ((var4 & 128) != 0) {
-            var27 = (boolean)1;
-         } else {
-            var27 = (boolean)0;
-         }
-
-         boolean var7 = var27;
-         if ((var4 & 2) != 0) {
-            var27 = (boolean)1;
-         } else {
-            var27 = (boolean)0;
-         }
-
-         boolean var8 = var27;
-         if ((var4 & 1) != 0) {
-            var27 = (boolean)1;
-         } else {
-            var27 = (boolean)0;
-         }
-
-         boolean var21 = var27;
-         if ((var4 & 16384) != 0) {
-            var27 = (boolean)1;
-         } else {
-            var27 = (boolean)0;
-         }
-
-         byte var24 = var27;
-         var27 = var36.actorCurrentAnimIndex;
+         int var4 = var2[4];
+         boolean var5 = (var4 & 256) != 0;
+         boolean var6 = (var4 & 4) != 0;
+         boolean var7 = (var4 & 128) != 0;
+         boolean var8 = (var4 & 2) != 0;
+         boolean var21 = (var4 & 1) != 0;
+         boolean var24 = (var4 & 16384) != 0;
+         int var27 = var36.actorCurrentAnimIndex;
          this.val_int_Q = var2[0] * var27;
          this.val_int_R = var2[1];
          this.val_int_S = var2[3];
@@ -3332,13 +3295,8 @@ public final class CoreEngine implements EntityInterface {
 
             if (var37 >= 0) {
                var27 = this.exec_a_to_int();
-               if (this.characterId == 5) {
-                  var24 = 1;
-               } else {
-                  var24 = 0;
-               }
-
-               exec_a_int_int_int_int_to_void(var37, var27, -87, var24);
+               int var24_val = (this.characterId == 5) ? 1 : 0;
+               exec_a_int_int_int_int_to_void(var37, var27, -87, var24_val);
             }
          }
 
@@ -3349,7 +3307,7 @@ public final class CoreEngine implements EntityInterface {
          }
 
          ActorStateMachine var12 = (ActorStateMachine)var1;
-         int var11 = this.exec_a_bool_to_bool(false);
+         boolean var11 = this.exec_a_bool_to_bool(false);
          int var10 = val_arr_int_bj[var12.actorActionFrame];
          int var9 = this.actorCurrentAnimIndex;
          byte var20;
@@ -3465,15 +3423,9 @@ public final class CoreEngine implements EntityInterface {
 
          if (var20 >= 0) {
             int var35 = this.exec_a_to_int();
-            var11 = this.exec_b_to_int() + -87;
-            byte var23;
-            if (this.characterId == 5) {
-               var23 = 1;
-            } else {
-               var23 = 0;
-            }
-
-            exec_a_int_int_int_int_to_void(var20, var35, var11, var23);
+            int var11_y = this.exec_b_to_int() + -87;
+            int var23_val = (this.characterId == 5) ? 1 : 0;
+            exec_a_int_int_int_int_to_void(var20, var35, var11_y, var23_val);
          }
 
          return 0;
@@ -3744,7 +3696,8 @@ public final class CoreEngine implements EntityInterface {
       var7 = var0;
       int var9 = var0.getActiveComboByte();
 
-      for (int var8 = (var51 = var7.scratchpadBuffer).length - 2; var8 >= 0; var8--) {
+      byte[] var51 = var7.scratchpadBuffer;
+      for (int var8 = var51.length - 2; var8 >= 0; var8--) {
          var51[var8 + 1] = var51[var8];
       }
 
@@ -4217,6 +4170,7 @@ public final class CoreEngine implements EntityInterface {
                int var72 = var89;
                short var66 = var86;
                int var30 = 0;
+               ActorStateMachine var87 = null;
 
                while (true) {
                   if (var30 >= 8) {
@@ -4547,7 +4501,7 @@ public final class CoreEngine implements EntityInterface {
 
                                  val_animationset_v = var70;
                                  val_arr_spritepartsequence_j = var76;
-                              } catch (IOException var15) {
+                              } catch (Exception var15) {
                               }
                            }
 
@@ -4555,7 +4509,7 @@ public final class CoreEngine implements EntityInterface {
                               try {
                                  val_animationset_w = exec_b_int_to_animationset(134217837);
                                  val_spritepartsequence_B = exec_a_int_int_to_spritepartsequence(134217758, 0);
-                              } catch (IOException var14) {
+                              } catch (Exception var14) {
                               }
                            }
 
@@ -4921,7 +4875,7 @@ public final class CoreEngine implements EntityInterface {
                                  val_animationset_B = exec_a_int_to_animationset(134217845);
                                  val_spritepartsequence_G = exec_a_int_int_to_spritepartsequence(134217775, 0);
                                  val_spritepartsequence_H = exec_a_int_int_to_spritepartsequence(134217776, 0);
-                              } catch (IOException var13) {
+                              } catch (Exception var13) {
                               }
 
                               exec_ab_to_void();
@@ -5186,7 +5140,7 @@ public final class CoreEngine implements EntityInterface {
                         try {
                            var5.val_animationset_g = exec_a_int_to_animationset(var4);
                            var5.val_spritepartsequence_f = exec_a_int_int_to_spritepartsequence(var3, 0);
-                        } catch (IOException var11) {
+                        } catch (Exception var11) {
                         }
                      }
 
@@ -5387,7 +5341,7 @@ public final class CoreEngine implements EntityInterface {
                         val_spritepartsequence_D = exec_a_int_int_to_spritepartsequence(134217767, 1);
                         val_spritepartsequence_E = exec_a_int_int_to_spritepartsequence(134217768, 1);
                         val_spritepartsequence_F = exec_a_int_int_to_spritepartsequence(134217769, 1);
-                     } catch (IOException var12) {
+                     } catch (Exception var12) {
                      }
 
                      if (exec_A_to_bool()) {
@@ -5630,6 +5584,7 @@ public final class CoreEngine implements EntityInterface {
                   if (var23.exec_a_arr_byte_to_bool(val_arr_arr_byte_z[var26])) {
                      boolean var43 = false;
                      byte var34 = 0;
+                     boolean var34_flag = false;
                      switch (var26) {
                         case 0:
                            val_coreengine_b.currentHealth = 0;
@@ -5656,7 +5611,7 @@ public final class CoreEngine implements EntityInterface {
 
                            val_bool_aC = var43;
                            var43 = true;
-                           var34 = val_bool_aC;
+                           var34_flag = val_bool_aC;
                            break;
                         case 3:
                            if (!val_bool_aD) {
@@ -5667,7 +5622,7 @@ public final class CoreEngine implements EntityInterface {
 
                            val_bool_aD = var43;
                            var43 = true;
-                           var34 = val_bool_aD;
+                           var34_flag = val_bool_aD;
                            break;
                         case 4:
                            if (!val_bool_aE) {
@@ -5678,7 +5633,7 @@ public final class CoreEngine implements EntityInterface {
 
                            val_bool_aE = var43;
                            var43 = true;
-                           var34 = val_bool_aE;
+                           var34_flag = val_bool_aE;
                            break;
                         case 5:
                            val_int_dS = 0;
@@ -5722,7 +5677,7 @@ public final class CoreEngine implements EntityInterface {
                      if (var43) {
                         StringBuffer var48 = new StringBuffer().append(" - ");
                         String var36;
-                        if (var34) {
+                        if (var34_flag) {
                            var36 = "ON";
                         } else {
                            var36 = "OFF";
@@ -5733,7 +5688,7 @@ public final class CoreEngine implements EntityInterface {
                         var49 = "";
                      }
 
-                     var8(var9.append(var49).toString());
+                     var8 = new EncodedTextBuffer(var9.append(var49).toString());
                      val_encodedtextbuffer_N = var8;
                      val_int_ej = 3500;
                   }
@@ -5950,7 +5905,7 @@ public final class CoreEngine implements EntityInterface {
                                        var5 = 1;
                                  }
 
-                                 if (var5) {
+                                 if (var5 != 0) {
                                     var5 = val_arr_int_bm[0] + (var1[0] << 8);
                                     val_arr_int_bm[0] = var5;
                                     var5 = val_arr_int_bm[1] + (var1[1] << 8);
@@ -6926,20 +6881,14 @@ public final class CoreEngine implements EntityInterface {
                val_int_cE = 1;
                val_int_cF = (val_int_o - val_int_ai) / exec_l_to_int();
                exec_a_byte_byte_to_void((byte)0, (byte)4);
-               boolean var8;
-               if (val_arr_short_f[0] > val_int_cF) {
-                  var8 = 1;
-               } else {
-                  var8 = 0;
-               }
-
-               val_bool_ab = (boolean)var8;
+               boolean var8 = val_arr_short_f[0] > val_int_cF;
+               val_bool_ab = var8;
                if (var8) {
                   val_int_cF = (val_int_o - val_int_ai - 2 * exec_h_to_int()) / exec_l_to_int() - 1;
                   val_int_cO = 0;
                }
 
-               var8 = (val_int_o - val_int_ai) / 2;
+               int var8_pos = (val_int_o - val_int_ai) / 2;
                int var10;
                if (val_bool_ab) {
                   var10 = exec_h_to_int() - 7 * exec_l_to_int() / 4;
@@ -6947,7 +6896,7 @@ public final class CoreEngine implements EntityInterface {
                   var10 = 0;
                }
 
-               val_int_cB = (val_int_cB = var8 + var10) - Math.min(val_arr_short_f[0], val_int_cF) * exec_l_to_int() / 2;
+               val_int_cB = (val_int_cB = var8_pos + var10) - Math.min(val_arr_short_f[0], val_int_cF) * exec_l_to_int() / 2;
                return;
             }
          } else {
@@ -7093,14 +7042,7 @@ public final class CoreEngine implements EntityInterface {
                      }
                      break label369;
                   case 8:
-                     boolean var0;
-                     if (!val_bool_S) {
-                        var0 = 1;
-                     } else {
-                        var0 = 0;
-                     }
-
-                     val_bool_S = (boolean)var0;
+                     val_bool_S = !val_bool_S;
                      if (val_bool_ap && --val_int_bp < 0) {
                         val_int_bp = 2;
                      }
@@ -7153,12 +7095,7 @@ public final class CoreEngine implements EntityInterface {
 
                      val_arr_int_aj[0] = val_int_bm + val_int_bn / 2 - val_arr_int_al[0] / 2 + val_int_bp * (val_int_bn + val_int_bo);
                      val_arr_int_aj[1] = val_int_bm + val_int_bn / 2 - val_arr_int_al[0] / 2 + val_int_bp * (val_int_bn + val_int_bo);
-                     if (val_bool_Q) {
-                        var0 = 1;
-                     } else {
-                        var0 = 0;
-                     }
-
+                     byte var0 = (byte)(val_bool_Q ? 1 : 0);
                      val_byte_h = var0;
                      exec_a_byte_byte_to_void(var0, val_byte_i);
                      if (val_bool_R) {
@@ -7646,14 +7583,8 @@ public final class CoreEngine implements EntityInterface {
       val_bool_K = false;
       val_bool_L = false;
       val_byte_h = 0;
-      byte var3;
-      if (val_int_aF > 0) {
-         var3 = 4;
-      } else {
-         var3 = 0;
-      }
-
-      val_byte_i = (byte)var3;
+      byte var3 = (byte)(val_int_aF > 0 ? 4 : 0);
+      val_byte_i = var3;
       switch (val_int_aE) {
          case 0:
             val_int_aH = 0;
@@ -7699,22 +7630,16 @@ public final class CoreEngine implements EntityInterface {
             val_arr_int_r = new int[var3];
             val_arr_encodedtextbuffer_a = new EncodedTextBuffer[val_int_aG];
             val_arr_int_u = new int[val_int_aG];
-            boolean var17;
-            if (val_int_aG > val_arr_int_O[val_int_aH]) {
-               var17 = 1;
-            } else {
-               var17 = 0;
-            }
-
-            val_bool_J = (boolean)var17;
-            if (var17) {
+            boolean isOverMax = (val_int_aG > val_arr_int_O[val_int_aH]);
+            val_bool_J = isOverMax;
+            if (isOverMax) {
                val_arr_int_t = new int[3];
             } else {
                val_arr_int_t = new int[val_int_aG];
             }
 
             exec_L_to_void();
-            var17 = 0;
+            int var17 = 0;
 
             for (int var9 = 0; var9 < (var0.length - 2) / 2; var9++) {
                if (!val_arr_bool_a[var0[(var9 << 1) + 2 + 1]]) {
@@ -7761,32 +7686,10 @@ public final class CoreEngine implements EntityInterface {
             val_arr_int_r = null;
             exec_b_byte_to_void((byte)4);
             boolean var10;
-            if (val_int_aE != 4) {
-               var10 = 0;
-            } else {
-               var10 = 1;
-            }
-
-            boolean var4 = (boolean)var10;
-            if (val_int_aE != 4) {
-               var10 = (byte)20;
-            } else {
-               var10 = (byte)17;
-            }
-
-            byte var5 = var10;
-            if (val_int_aE != 4) {
-               var10 = val_int_bb;
-            } else {
-               var10 = val_int_n / 2;
-            }
-
-            var1 = var10;
-            if (val_int_aE != 4) {
-               var10 = val_int_aJ;
-            } else {
-               var10 = val_int_aJ + (val_int_aK - val_int_aJ) / 2;
-            }
+            boolean var4 = (val_int_aE == 4);
+            byte var5 = (byte)(val_int_aE != 4 ? 20 : 17);
+            int var1_val = (val_int_aE != 4 ? val_int_bb : val_int_n / 2);
+            int var10_val = (val_int_aE != 4 ? val_int_aJ : val_int_aJ + (val_int_aK - val_int_aJ) / 2);
 
             EncodedTextBuffer var6 = var2;
             if (var2 == null) {
@@ -7794,8 +7697,8 @@ public final class CoreEngine implements EntityInterface {
             }
 
             int var10000 = val_int_n - 2 * val_int_bb;
-            val_int_aM = var1;
-            val_int_aN = var10;
+            val_int_aM = var1_val;
+            val_int_aN = var10_val;
             val_int_aO = var10000;
             val_int_aP = val_int_aK - val_int_aJ;
             val_encodedtextbuffer_e = var6;
@@ -8630,7 +8533,7 @@ public final class CoreEngine implements EntityInterface {
                      var22 = (short)((short)(var31 + 1) + 1);
                      int var21 = var6.val_contextservicenode_a.val_arr_byte_b[(short)(var31 + 1)] & 255;
                      var6.val_arr_int_b[0] = var19;
-                     var31 = var38 - var7;
+                     var31 = (short)(var38 - var7);
                      var6.val_arr_int_b[1] = var31;
                      var6.val_arr_int_b[2] = -var19 - var20;
                      var6.val_arr_int_b[3] = var7 - var10003 - var21;
@@ -9348,7 +9251,10 @@ public final class CoreEngine implements EntityInterface {
                               int var11 = Integer.MAX_VALUE;
                               int var12 = -1;
                               int var13 = 0;
-                              synchronized (var40 = getGlobalAudioContext()){} // $VF: monitorenter 
+                              int var36 = 0;
+                               AudioClipNode var37 = null;
+                               int var41 = -1;
+                               synchronized (var40 = getGlobalAudioContext()){} // $VF: monitorenter 
 
                               try {
                                  var36 = 0;
@@ -9764,6 +9670,9 @@ public final class CoreEngine implements EntityInterface {
                         if (var6 < 0L) {
                            var10 = 0L - var6;
                         }
+
+                        int var18 = 0;
+
 
                         label136: {
                            if (var10 <= var8) {
@@ -10342,7 +10251,7 @@ public final class CoreEngine implements EntityInterface {
          bufferedStreamRead(var4, var1.val_arr_arr_byte_b[var5], 0, var1.val_arr_arr_short_a[var6][var0] & 65535);
          var1.val_arr_byte_d[var5] = (byte)var0;
          var4.close();
-      } catch (IOException var7) {
+      } catch (Exception var7) {
       }
 
       return var1.val_arr_short_a[var0];
@@ -10582,28 +10491,12 @@ public final class CoreEngine implements EntityInterface {
                                     int var5 = (var2.actorBoundsArray[1] >> 8) - exec_k_to_int();
                                     SpritePartSequence var6 = var2.getCurrentSequence();
                                     AnimationSet var19 = val_arr_animationset_g[var2.actorActionFrame];
-                                    boolean var7;
-                                    if (!var2.actorGroundedFlag) {
-                                       var7 = 1;
-                                    } else {
-                                       var7 = 0;
-                                    }
+                                    var2.actorGroundedFlag = !var2.actorGroundedFlag;
+                                    boolean isAction0 = (var2.actorActionFrame == 0 && var2.actorPosX == 2);
 
-                                    var2.actorGroundedFlag = (boolean)var7;
-                                    if (var2.actorActionFrame == 0 && var2.actorPosX == 2) {
-                                       var7 = (boolean)1;
-                                    } else {
-                                       var7 = (boolean)0;
-                                    }
-
-                                    if ((!var7 || var2.actorGroundedFlag) && var19 != null && var6 != null) {
-                                       if (var2.actorFacingDirection == 1) {
-                                          var7 = 0;
-                                       } else {
-                                          var7 = 4;
-                                       }
-
-                                       var6.drawSequence(var2.actorState, var19, var59, var5, var7);
+                                    if ((!isAction0 || var2.actorGroundedFlag) && var19 != null && var6 != null) {
+                                       int transform = (var2.actorFacingDirection == 1) ? 0 : 4;
+                                       var6.drawSequence(var2.actorState, var19, var59, var5, transform);
                                     }
                                  }
                               }
@@ -10935,36 +10828,21 @@ public final class CoreEngine implements EntityInterface {
    public static Object exec_a_spriteimage_arr_byte_to_object(SpriteImage var0, byte[] var1) {
       FontCharmap var6 = exec_a_to_fontcharmap();
       byte var2;
-      boolean var3;
-      if (((var2 = var1[0]) & 128) != 0) {
-         var3 = 1;
-      } else {
-         var3 = 0;
-      }
-
-      boolean var5;
-      if ((var2 & 64) != 0) {
-         var5 = true;
-      } else {
-         var5 = false;
-      }
+      boolean isBit128 = ((var2 = var1[0]) & 128) != 0;
+      boolean var5 = (var2 & 64) != 0;
 
       byte[] var7 = new byte[12];
       System.arraycopy(var1, 1, var7, 0, 7);
       var7[7] = 0;
       var7[8] = var7[0];
       var7[9] = var7[1];
-      if (var3) {
-         var7[10] = 2;
-      } else {
-         var7[10] = 1;
-      }
+      var7[10] = (byte)(isBit128 ? 2 : 1);
 
       if (var5) {
          var7[10] = (byte)(var7[10] | 128);
       }
 
-      var3 = readShortBigEndian(var1, 8);
+      short var3 = (short)readShortBigEndian(var1, 8);
       short var8 = readShortBigEndian(var1, 10);
       var2 = 12;
       short[] var4 = new short[var3];
@@ -11007,7 +10885,7 @@ public final class CoreEngine implements EntityInterface {
       var19[4] = var15[3];
       var19[5] = var15[4];
       var19[6] = var15[5];
-      var19[7] = new Integer(-1);
+      var19[7] = Integer.valueOf(-1);
       return var19;
    }
 
@@ -11428,7 +11306,7 @@ public final class CoreEngine implements EntityInterface {
                }
             }
          }
-      } catch (IOException var12) {
+      } catch (Exception var12) {
       }
 
       val_bool_a = true;
@@ -12284,7 +12162,7 @@ public final class CoreEngine implements EntityInterface {
          }
 
          return var3;
-      } catch (IOException var6) {
+      } catch (Exception var6) {
          return null;
       }
    }
@@ -12350,7 +12228,7 @@ public final class CoreEngine implements EntityInterface {
                   }
             }
 
-            if (var11) {
+            if (var11 != 0) {
                long[] var10000 = var3.frameHistoryArray;
                int var10001 = var3.loopState;
                var11 = var3.loopState + 1;
@@ -12446,14 +12324,18 @@ public final class CoreEngine implements EntityInterface {
          var8 = exec_a_string_to_spriteimage("/" + var9);
       } else {
          exec_G_int_to_void(var0);
-         DataInputStream var4;
-         var4 = new DataInputStream(new ByteArrayInputStream(val_arr_arr_byte_y[var0]));
-         int var10001 = var4.readInt();
-         var4.readInt();
-         var4.skipBytes(var3 << 3);
-         int var5 = var4.readInt();
-         int var6 = 4 + var10001 + 4 + var4.readInt();
-         var4.close();
+         int var10001 = 0;
+         int var5 = 0;
+         int var6 = 0;
+         try {
+            DataInputStream var4 = new DataInputStream(new ByteArrayInputStream(val_arr_arr_byte_y[var0]));
+            var10001 = var4.readInt();
+            var4.readInt();
+            var4.skipBytes(var3 << 3);
+            var5 = var4.readInt();
+            var6 = 4 + var10001 + 4 + var4.readInt();
+            var4.close();
+         } catch (Exception varEx) {}
          byte[] var11 = null;
          byte[] var10 = null;
          if (var1 != -1 || var2 != 0) {
@@ -12531,49 +12413,53 @@ public final class CoreEngine implements EntityInterface {
    }
 
    public static SpritePartSequence exec_a_int_int_to_spritepartsequence(int var0, int var1) {
-      DataInputStream var7;
-      var0 = (var7 = openResourceStream(var0)).readUnsignedByte();
-      int var2 = var7.readUnsignedByte();
-      SpritePartSequence var8;
-      var8 = new SpritePartSequence(var2, var7.readUnsignedByte(), var1, var0);
-      int var9 = 0;
+      try {
+         DataInputStream var7;
+         var0 = (var7 = openResourceStream(var0)).readUnsignedByte();
+         int var2 = var7.readUnsignedByte();
+         SpritePartSequence var8;
+         var8 = new SpritePartSequence(var2, var7.readUnsignedByte(), var1, var0);
+         int var9 = 0;
 
-      for (int var10 = 0; var10 < var2; var10++) {
-         short var15 = var7.readShort();
-         var0 = var7.readUnsignedByte();
+         for (int var10 = 0; var10 < var2; var10++) {
+            short var15 = var7.readShort();
+            var0 = var7.readUnsignedByte();
 
-         for (int var3 = 0; var3 < var0; var3++) {
-            int var10000 = var7.readUnsignedByte();
-            short var4 = var7.readShort();
-            short var5 = var7.readShort();
-            int var11 = var10;
-            short var12 = (short)var10000;
-            int var6;
-            var8.frameOffsets[var6 = var9 * 3] = var12;
-            var8.frameOffsets[++var6] = (short)var4;
-            var8.frameOffsets[var6 + 1] = (short)var5;
-            if (var8.frameDurations != null) {
-               var8.frameDurations[var10] = (byte)var9;
-            }
-
-            if (var8.partOffsets[var11] == 0) {
-               short[] var18 = var8.partOffsets;
-               if (var11 == 0) {
-                  var6 = var15;
-               } else {
-                  var6 = var8.partOffsets[var11 - 1] + var15;
+            for (int var3 = 0; var3 < var0; var3++) {
+               int var10000 = var7.readUnsignedByte();
+               short var4 = var7.readShort();
+               short var5 = var7.readShort();
+               int var11 = var10;
+               short var12 = (short)var10000;
+               int var6;
+               var8.frameOffsets[var6 = var9 * 3] = var12;
+               var8.frameOffsets[++var6] = (short)var4;
+               var8.frameOffsets[var6 + 1] = (short)var5;
+               if (var8.frameDurations != null) {
+                  var8.frameDurations[var10] = (byte)var9;
                }
 
-               var18[var11] = (short)var6;
-               var8.sequenceFlags += var15;
+               if (var8.partOffsets[var11] == 0) {
+                  short[] var18 = var8.partOffsets;
+                  if (var11 == 0) {
+                     var6 = var15;
+                  } else {
+                     var6 = var8.partOffsets[var11 - 1] + var15;
+                  }
+
+                  var18[var11] = (short)var6;
+                  var8.sequenceFlags += var15;
+               }
+
+               var9++;
             }
-
-            var9++;
          }
-      }
 
-      var7.close();
-      return var8;
+         var7.close();
+         return var8;
+      } catch (Exception varEx) {
+         return null;
+      }
    }
 
    public static byte[] exec_b_string_to_arr_byte(String var0) {
@@ -12582,9 +12468,10 @@ public final class CoreEngine implements EntityInterface {
       GrowableByteBuffer var4;
       var4 = new GrowableByteBuffer();
 
+      int var9 = -1;
       try {
          var9 = var3.read();
-      } catch (IOException var8) {
+      } catch (Exception var8) {
          var9 = -1;
       }
 
@@ -12619,7 +12506,7 @@ public final class CoreEngine implements EntityInterface {
 
          try {
             var9 = var3.read();
-         } catch (IOException var7) {
+         } catch (Exception var7) {
             var9 = -1;
          }
       }
@@ -12670,13 +12557,8 @@ public final class CoreEngine implements EntityInterface {
       val_int_aE = var0[0];
       val_bool_I = (boolean)var1;
       val_byte_h = 1;
-      if (val_int_aF > 0) {
-         var1 = 4;
-      } else {
-         var1 = 0;
-      }
-
-      val_byte_i = var1;
+      byte var_b = (byte)(val_int_aF > 0 ? 4 : 0);
+      val_byte_i = var_b;
       val_int_aH = 1;
       val_arr_encodedtextbuffer_a = new EncodedTextBuffer[val_int_aG = val_int_p];
       val_arr_int_u = new int[val_int_aG];
@@ -12743,6 +12625,7 @@ public final class CoreEngine implements EntityInterface {
       AudioPlaybackContext var2;
       synchronized (var2 = getGlobalAudioContext()){} // $VF: monitorenter 
 
+      Throwable var9 = null;
       label65: {
          label64: {
             try {
@@ -13237,13 +13120,15 @@ public final class CoreEngine implements EntityInterface {
          DataInputStream var6;
          var6 = new DataInputStream(new ByteArrayInputStream(val_arr_arr_byte_y[var2]));
          var4 = var6;
-         int var10002 = var6.readInt();
-         var6.readInt();
-         var6.skipBytes(var1 << 3);
-         val_int_eq = var6.readInt();
-         var2 = var6.readInt();
-         var6.reset();
-         var6.skipBytes(4 + var10002 + 4 + var2);
+         try {
+            int var10002 = var6.readInt();
+            var6.readInt();
+            var6.skipBytes(var1 << 3);
+            val_int_eq = var6.readInt();
+            var2 = var6.readInt();
+            var6.reset();
+            var6.skipBytes(4 + var10002 + 4 + var2);
+         } catch (Exception varEx) {}
       }
 
       return var4;
@@ -13259,7 +13144,7 @@ public final class CoreEngine implements EntityInterface {
 
       boolean var3;
       if (var1) {
-         var3 = 0;
+         var3 = false;
       } else {
          String var4 = exec_a_tokenstring_to_string(var0);
          GameMidletLoop var5 = val_gamemidletloop_a;
@@ -13271,8 +13156,8 @@ public final class CoreEngine implements EntityInterface {
          var0 = var6.wrappedToken;
          var10000 = exec_a_string_to_tokenstring(exec_c_string_to_string(var11));
          short[] var2 = var10000.tokenShortArray;
-         var3 = exec_a_arr_short_to_int(var10000.tokenShortArray);
-         exec_a_arr_short_int_tokenstring_to_void(var2, var3, var0);
+         int var3_len = exec_a_arr_short_to_int(var10000.tokenShortArray);
+         exec_a_arr_short_int_tokenstring_to_void(var2, var3_len, var0);
          exec_a_tokenstring_to_string(var6.wrappedToken);
 
          try {
@@ -13499,25 +13384,31 @@ public final class CoreEngine implements EntityInterface {
    }
 
    public static AnimationSet exec_a_int_arr_int_arr_byte_bool_to_animationset(int var0, int[] var1, byte[] var2, boolean var3) {
-      DataInputStream var6;
-      int var7 = exec_a_datainputstream_to_int(var6 = openResourceStream(var0));
-      int var4;
-      long[] var10 = new long[var4 = var6.readUnsignedByte()];
+      DataInputStream var6 = openResourceStream(var0);
+      int var7 = 0;
+      long[] var10 = null;
+      byte[] var9 = null;
+      byte[] var19 = null;
+      try {
+         var7 = exec_a_datainputstream_to_int(var6);
+         int var4;
+         var10 = new long[var4 = var6.readUnsignedByte()];
 
-      for (int var5 = 0; var5 < var4; var5++) {
-         var10[var5] = var6.readLong();
-      }
+         for (int var5 = 0; var5 < var4; var5++) {
+            var10[var5] = var6.readLong();
+         }
 
-      int var8;
-      byte[] var9 = new byte[var8 = var6.readUnsignedByte()];
-      byte[] var19 = new byte[var8];
+         int var8;
+         var9 = new byte[var8 = var6.readUnsignedByte()];
+         var19 = new byte[var8];
 
-      for (int var16 = 0; var16 < var8; var16++) {
-         var9[var16] = (byte)var6.readUnsignedByte();
-         var19[var16] = (byte)var6.readUnsignedByte();
-      }
+         for (int var16 = 0; var16 < var8; var16++) {
+            var9[var16] = (byte)var6.readUnsignedByte();
+            var19[var16] = (byte)var6.readUnsignedByte();
+         }
 
-      var6.close();
+         var6.close();
+      } catch (Exception varEx) {}
       boolean var22 = (boolean)var3;
       byte[] var20 = var2;
       int[] var17 = var1;
@@ -13560,8 +13451,8 @@ public final class CoreEngine implements EntityInterface {
 
       for (int var25 = 1; var25 < var26.totalAnimFrames; var25++) {
          byte var21 = var26.animConfigBytes[var25];
-         var4 = var26.frameDelayArray[var25];
-         var3 = var25;
+         int var4 = var26.frameDelayArray[var25];
+         int var3_idx = var25;
          var26.frameDelayArray[var25] = var4;
          var26.animConfigBytes[var25] = var21;
          if (var26.isLoaded) {
@@ -13573,7 +13464,7 @@ public final class CoreEngine implements EntityInterface {
             }
 
             if (var21 != 0) {
-               exec_a_arr_byte_byte_to_void(var26.spriteIndexMatrix[var3], var21);
+               exec_a_arr_byte_byte_to_void(var26.spriteIndexMatrix[var3_idx], var21);
             }
          } else {
             var26.spriteImages[var25] = exec_a_int_int_byte_to_spriteimage(var26.currentFrameIndex, var4, var21);
@@ -13700,13 +13591,8 @@ public final class CoreEngine implements EntityInterface {
          if (var1.val_audioclipnode_b != null && var1.val_audioclipnode_b.mediaPlayer != null) {
             try {
                Player var8 = var1.val_audioclipnode_b.mediaPlayer;
-               if (var0) {
-                  var0 = -1;
-               } else {
-                  var0 = 1;
-               }
-
-               var8.setLoopCount(var0);
+               int loopCount = var0 ? -1 : 1;
+               var8.setLoopCount(loopCount);
             } catch (Exception var3) {
             }
          }
@@ -13923,7 +13809,7 @@ public final class CoreEngine implements EntityInterface {
             val_animationset_x = var1;
             val_arr_spritepartsequence_k = var2;
             return;
-         } catch (IOException var4) {
+         } catch (Exception var4) {
          }
       }
    }
@@ -14103,13 +13989,8 @@ public final class CoreEngine implements EntityInterface {
       }
 
       int var6 = val_int_cD >> 8;
-      if (var0) {
-         var0 = 1;
-      } else {
-         var0 = 4;
-      }
-
-      exec_a_encodedtextbuffer_arr_short_int_int_int_int_int_to_void(var3, var1, var2, var4, var5, var6, 16 | var0);
+      int alignFlag = var0 ? 1 : 4;
+      exec_a_encodedtextbuffer_arr_short_int_int_int_int_int_to_void(var3, var1, var2, var4, var5, var6, 16 | alignFlag);
    }
 
    public static void exec_A_int_to_void(int var0) {
@@ -14280,11 +14161,7 @@ public final class CoreEngine implements EntityInterface {
    }
 
    public static void exec_a_int_int_bool_bool_to_void(int var0, int var1, boolean var2, boolean var3) {
-      if (var3) {
-         var3 = 3;
-      } else {
-         var3 = 2;
-      }
+      byte subType = (byte)(var3 ? 3 : 2);
 
       exec_a_int_int_int_int_int_int_int_int_int_byte_bool_bool_bool_bool_bool_bool_animationset_spritepartsequence_animationset_spritepartsequence_to_bool(
          var0,
@@ -14296,7 +14173,7 @@ public final class CoreEngine implements EntityInterface {
          0,
          1,
          0,
-         var3,
+         subType,
          false,
          false,
          false,
@@ -14386,22 +14263,26 @@ public final class CoreEngine implements EntityInterface {
    }
 
    public static int bufferedStreamRead(InputStream var0, byte[] var1, int var2, int var3) {
-      for (int var4 = 0; var4 < var3; var4++) {
-         int var5;
-         if ((var5 = var0.read()) == -1) {
-            if (var4 == 0) {
-               var5 = -1;
-            } else {
-               var5 = var4;
+      try {
+         for (int var4 = 0; var4 < var3; var4++) {
+            int var5;
+            if ((var5 = var0.read()) == -1) {
+               if (var4 == 0) {
+                  var5 = -1;
+               } else {
+                  var5 = var4;
+               }
+
+               return var5;
             }
 
-            return var5;
+            var1[var4 + var2] = (byte)var5;
          }
 
-         var1[var4 + var2] = (byte)var5;
+         return var3;
+      } catch (Exception varEx) {
+         return -1;
       }
-
-      return var3;
    }
 
    public static TokenString exec_a_string_to_tokenstring(String var0) {
@@ -14553,7 +14434,7 @@ public final class CoreEngine implements EntityInterface {
                val_animationset_C = exec_a_int_int_byte_bool_to_animationset(134217846, -1, (byte)0, false);
                val_spritepartsequence_I = exec_a_int_int_to_spritepartsequence(134217777, 1);
                return;
-            } catch (IOException var3) {
+            } catch (Exception var3) {
             }
          default:
             return;
@@ -14590,22 +14471,24 @@ public final class CoreEngine implements EntityInterface {
 
    public static int exec_a_datainputstream_to_int(DataInputStream var0) {
       int var1 = -1;
-      switch (var0.readUnsignedByte()) {
-         case 1:
-            int var4 = var0.readUnsignedByte();
-            var1 = (var4 & 192) << 18;
-            var1 = var4 & 63 | var1;
-            break;
-         case 2:
-            int var10000 = var0.readUnsignedShort();
-            var1 = (var10000 & 61440) << 12;
-            var1 = var10000 & 4095 | var1;
-         case 3:
-         default:
-            break;
-         case 4:
-            var1 = var0.readInt();
-      }
+      try {
+         switch (var0.readUnsignedByte()) {
+            case 1:
+               int var4 = var0.readUnsignedByte();
+               var1 = (var4 & 192) << 18;
+               var1 = var4 & 63 | var1;
+               break;
+            case 2:
+               int var10000 = var0.readUnsignedShort();
+               var1 = (var10000 & 61440) << 12;
+               var1 = var10000 & 4095 | var1;
+            case 3:
+            default:
+               break;
+            case 4:
+               var1 = var0.readInt();
+         }
+      } catch (Exception varEx) {}
 
       return var1;
    }
@@ -14812,11 +14695,13 @@ public final class CoreEngine implements EntityInterface {
 
    public static void exec_G_int_to_void(int var0) {
       if (val_arr_arr_byte_y[var0] == null) {
-         DataInputStream var1;
-         byte[] var2 = new byte[(var1 = openResourceStreamByName(val_arr_string_c[var0])).readInt()];
-         val_arr_arr_byte_y[var0] = var2;
-         var1.readFully(val_arr_arr_byte_y[var0]);
-         var1.close();
+         try {
+            DataInputStream var1 = openResourceStreamByName(val_arr_string_c[var0]);
+            byte[] var2 = new byte[var1.readInt()];
+            val_arr_arr_byte_y[var0] = var2;
+            var1.readFully(val_arr_arr_byte_y[var0]);
+            var1.close();
+         } catch (Exception varEx) {}
       }
    }
 
@@ -14899,7 +14784,7 @@ public final class CoreEngine implements EntityInterface {
             val_spritepartsequence_s = exec_a_int_int_to_spritepartsequence(134217755, 0);
             val_spritepartsequence_t = exec_a_int_int_to_spritepartsequence(134217756, 0);
             return;
-         } catch (IOException var0) {
+         } catch (Exception var0) {
          }
       }
    }
@@ -14986,7 +14871,7 @@ public final class CoreEngine implements EntityInterface {
          if (val_inputstream_a != null) {
             try {
                val_inputstream_a.close();
-            } catch (IOException var2) {
+            } catch (Exception var2) {
             }
 
             val_inputstream_a = null;
@@ -15083,9 +14968,11 @@ public final class CoreEngine implements EntityInterface {
       int var2 = 0;
       byte var3 = 0;
 
-      for (int var4 = var1 << 3; var3 < var4; var3 += 8) {
-         var2 |= (var0.read() & 0xFF) << var3;
-      }
+      try {
+         for (int var4 = var1 << 3; var3 < var4; var3 += 8) {
+            var2 |= (var0.read() & 0xFF) << var3;
+         }
+      } catch (Exception varEx) {}
 
       return var2;
    }
@@ -15191,7 +15078,7 @@ public final class CoreEngine implements EntityInterface {
          var1.read(var3);
          var1.close();
          return var3;
-      } catch (IOException var2) {
+      } catch (Exception var2) {
          return null;
       }
    }
@@ -15209,7 +15096,7 @@ public final class CoreEngine implements EntityInterface {
       try {
          val_arr_animationset_g[var0] = exec_a_int_int_byte_bool_to_animationset(var1, -1, (byte)0, false);
          return false;
-      } catch (IOException var2) {
+      } catch (Exception var2) {
          return true;
       }
    }
@@ -15218,7 +15105,7 @@ public final class CoreEngine implements EntityInterface {
       SpriteImage var1;
       var1 = new SpriteImage(var0);
       if (var1.sourceImage.getImage() == null) {
-         throw new IOException("Error creating SDKImage from a file path.");
+         throw new RuntimeException("Error creating SDKImage from a file path.");
       } else {
          return var1;
       }
@@ -15229,11 +15116,13 @@ public final class CoreEngine implements EntityInterface {
    }
 
    public static long skipStreamBytes(InputStream var0, long var1) {
-      for (long var3 = 0L; var3 < var1; var3++) {
-         if (var0.read() == -1) {
-            return var3;
+      try {
+         for (long var3 = 0L; var3 < var1; var3++) {
+            if (var0.read() == -1) {
+               return var3;
+            }
          }
-      }
+      } catch (Exception varEx) {}
 
       return var1;
    }
@@ -15670,7 +15559,7 @@ public final class CoreEngine implements EntityInterface {
       try {
          val_animationset_y = exec_a_int_int_byte_bool_to_animationset(134217836, -1, (byte)0, false);
          val_spritepartsequence_C = exec_a_int_int_to_spritepartsequence(134217757, 0);
-      } catch (IOException var0) {
+      } catch (Exception var0) {
       }
    }
 
@@ -16028,3132 +15917,237 @@ public final class CoreEngine implements EntityInterface {
       val_int_aB = 1000;
    }
 
-   static {
-      byte[] var0;
-      (var0 = new byte[7])[0] = 2;
-      var0[1] = 0;
-      var0[2] = 1;
-      var0[3] = 0;
-      var0[4] = 1;
-      var0[5] = 1;
-      var0[6] = 0;
-      val_arr_byte_c = (byte[])var0;
-      (var0 = new int[7])[0] = 0;
-      var0[1] = 167772201;
-      var0[2] = 167772200;
-      var0[3] = 167772199;
-      var0[4] = 167772195;
-      var0[5] = 167772202;
-      var0[6] = 167772198;
-      val_arr_int_h = var0;
-      byte[] var4;
-      (var4 = new byte[4])[0] = 80;
-      var4[1] = 76;
-      var4[2] = 84;
-      var4[3] = 69;
-      val_arr_byte_d = (byte[])var4;
-      (var4 = new int[8])[0] = 0;
-      var4[1] = 6;
-      var4[2] = 3;
-      var4[3] = 5;
-      var4[4] = 2;
-      var4[5] = 4;
-      var4[6] = 1;
-      var4[7] = 7;
-      val_arr_int_a = var4;
-      (var4 = new int[8])[0] = 0;
-      var4[1] = 6;
-      var4[2] = 4;
-      var4[3] = 2;
-      var4[4] = 5;
-      var4[5] = 3;
-      var4[6] = 1;
-      var4[7] = 7;
-      val_arr_int_b = var4;
-      (var4 = new int[2])[0] = -1;
-      var4[1] = -1;
-      val_arr_int_q = var4;
-      byte[] var8;
-      (var8 = new byte[2])[0] = 0;
-      var8[1] = 1;
-      val_arr_byte_g = (byte[])var8;
-      (var8 = new int[12])[0] = 1;
-      var8[1] = 71;
-      var8[2] = 86;
-      var8[3] = 23;
-      var8[4] = 31;
-      var8[5] = 27;
-      var8[6] = 11;
-      var8[7] = 28;
-      var8[8] = 20;
-      var8[9] = 26;
-      var8[10] = 72;
-      var8[11] = 25;
-      val_arr_int_v = var8;
-      (var8 = new int[3])[0] = 4;
-      var8[1] = 25;
-      var8[2] = 51;
-      val_arr_int_w = var8;
-      (var8 = new int[3])[0] = 6;
-      var8[1] = 20;
-      var8[2] = 74;
-      val_arr_int_x = var8;
-      (var8 = new int[18])[0] = 0;
-      var8[1] = 72;
-      var8[2] = 17;
-      var8[3] = 21;
-      var8[4] = 23;
-      var8[5] = 20;
-      var8[6] = 18;
-      var8[7] = 22;
-      var8[8] = 19;
-      var8[9] = 1;
-      var8[10] = 20;
-      var8[11] = 2;
-      var8[12] = 22;
-      var8[13] = 5;
-      var8[14] = 21;
-      var8[15] = 6;
-      var8[16] = 25;
-      var8[17] = 8;
-      val_arr_int_y = var8;
-      (var8 = new int[14])[0] = 0;
-      var8[1] = 19;
-      var8[2] = 31;
-      var8[3] = 12;
-      var8[4] = 11;
-      var8[5] = 14;
-      var8[6] = 36;
-      var8[7] = 10;
-      var8[8] = 32;
-      var8[9] = 16;
-      var8[10] = 37;
-      var8[11] = 18;
-      var8[12] = 40;
-      var8[13] = 9;
-      val_arr_int_z = var8;
-      (var8 = new int[2])[0] = 3;
-      var8[1] = 36;
-      val_arr_int_A = var8;
-      (var8 = new int[4])[0] = 3;
-      var8[1] = 31;
-      var8[2] = 10;
-      var8[3] = 13;
-      val_arr_int_B = var8;
-      (var8 = new int[4])[0] = 3;
-      var8[1] = 11;
-      var8[2] = 12;
-      var8[3] = 13;
-      val_arr_int_C = var8;
-      (var8 = new int[4])[0] = 2;
-      var8[1] = 31;
-      var8[2] = 10;
-      var8[3] = 13;
-      val_arr_int_D = var8;
-      (var8 = new int[4])[0] = 2;
-      var8[1] = 11;
-      var8[2] = 12;
-      var8[3] = 13;
-      val_arr_int_E = var8;
-      (var8 = new int[5])[0] = 3;
-      var8[1] = 32;
-      var8[2] = 33;
-      var8[3] = 34;
-      var8[4] = 35;
-      val_arr_int_F = var8;
-      (var8 = new int[4])[0] = 3;
-      var8[1] = 37;
-      var8[2] = 38;
-      var8[3] = 39;
-      val_arr_int_G = var8;
-      (var8 = new int[6])[0] = 0;
-      var8[1] = 20;
-      var8[2] = 17;
-      var8[3] = 3;
-      var8[4] = 37;
-      var8[5] = 4;
-      val_arr_int_H = var8;
-      (var8 = new int[3])[0] = 5;
-      var8[1] = 22;
-      var8[2] = 112;
-      val_arr_int_I = var8;
-      (var8 = new int[3])[0] = 5;
-      var8[1] = 20;
-      var8[2] = 41;
-      val_arr_int_J = var8;
-      (var8 = new int[3])[0] = 5;
-      var8[1] = 20;
-      var8[2] = 41;
-      val_arr_int_K = var8;
-      (var8 = new int[3])[0] = 4;
-      var8[1] = 17;
-      var8[2] = 53;
-      val_arr_int_L = var8;
-      (var8 = new int[3])[0] = 4;
-      var8[1] = 25;
-      var8[2] = 50;
-      val_arr_int_M = var8;
-      (var8 = new int[3])[0] = 4;
-      var8[1] = 40;
-      var8[2] = 52;
-      val_arr_int_N = var8;
-      (var8 = new int[4])[0] = 167772236;
-      var8[1] = 167772237;
-      var8[2] = 167772239;
-      var8[3] = 167772240;
-      val_arr_int_R = var8;
-      (var8 = new int[2])[0] = 167772240;
-      var8[1] = 167772239;
-      val_arr_int_S = var8;
-      (var8 = new int[11])[0] = 167772184;
-      var8[1] = 167772189;
-      var8[2] = 167772176;
-      var8[3] = 167772175;
-      var8[4] = 167772178;
-      var8[5] = 167772177;
-      var8[6] = 167772179;
-      var8[7] = 167772164;
-      var8[8] = 167772165;
-      var8[9] = 167772162;
-      var8[10] = 167772163;
-      val_arr_int_T = var8;
-      (var8 = new int[5])[0] = 167772179;
-      var8[1] = 167772164;
-      var8[2] = 167772165;
-      var8[3] = 167772162;
-      var8[4] = 167772163;
-      val_arr_int_U = var8;
-      (var8 = new int[11])[0] = 0;
-      var8[1] = 1;
-      var8[2] = 1;
-      var8[3] = 1;
-      var8[4] = 1;
-      var8[5] = 1;
-      var8[6] = 3;
-      var8[7] = 2;
-      var8[8] = 2;
-      var8[9] = 2;
-      var8[10] = 2;
-      val_arr_int_V = var8;
-      (var8 = new int[5])[0] = 0;
-      var8[1] = 1;
-      var8[2] = 1;
-      var8[3] = 1;
-      var8[4] = 1;
-      val_arr_int_W = var8;
-      byte[] var34;
-      (var34 = new byte[3])[0] = 11;
-      var34[1] = 11;
-      var34[2] = 11;
-      val_arr_byte_h = (byte[])var34;
-      (var34 = new byte[3])[0] = 0;
-      var34[1] = 0;
-      var34[2] = 0;
-      val_arr_byte_i = var34;
-      (var34 = new int[4])[0] = 167772188;
-      var34[1] = 167772185;
-      var34[2] = 167772186;
-      var34[3] = 167772187;
-      val_arr_int_ah = var34;
-      (var34 = new int[3])[0] = 167772237;
-      var34[1] = 167772234;
-      var34[2] = 167772236;
-      val_arr_int_an = var34;
-      (var34 = new int[4])[0] = 167772189;
-      var34[1] = 167772167;
-      var34[2] = 167772168;
-      var34[3] = 167772184;
-      val_arr_int_ao = var34;
-      (var34 = new int[4])[0] = 0;
-      var34[1] = 1;
-      var34[2] = 1;
-      var34[3] = 2;
-      val_arr_int_ap = var34;
-      (var34 = new int[7])[0] = 167772237;
-      var34[1] = 167772234;
-      var34[2] = 167772240;
-      var34[3] = 167772238;
-      var34[4] = 167772238;
-      var34[5] = 167772232;
-      var34[6] = 167772233;
-      val_arr_int_ax = var34;
-      (var34 = new int[11])[0] = 167772189;
-      var34[1] = 167772167;
-      var34[2] = 167772167;
-      var34[3] = 167772179;
-      var34[4] = 167772180;
-      var34[5] = 167772182;
-      var34[6] = 167772183;
-      var34[7] = 167772190;
-      var34[8] = 167772191;
-      var34[9] = 167772160;
-      var34[10] = 167772161;
-      val_arr_int_ay = var34;
-      (var34 = new int[11])[0] = 0;
-      var34[1] = 1;
-      var34[2] = 1;
-      var34[3] = 2;
-      var34[4] = 2;
-      var34[5] = 3;
-      var34[6] = 3;
-      var34[7] = 3;
-      var34[8] = 3;
-      var34[9] = 5;
-      var34[10] = 6;
-      val_arr_int_az = var34;
-      (var34 = new int[3])[0] = 28;
-      var34[1] = 29;
-      var34[2] = 30;
-      val_arr_int_aE = var34;
-      byte[][] var44 = new byte[10][];
-      byte[] var1;
-      (var1 = new byte[3])[0] = 28;
-      var1[1] = 19;
-      var1[2] = 21;
-      var44[0] = (byte[])var1;
-      (var1 = new byte[3])[0] = 20;
-      var1[1] = 11;
-      var1[2] = 13;
-      var44[1] = var1;
-      (var1 = new byte[3])[0] = 12;
-      var1[1] = 28;
-      var1[2] = 31;
-      var44[2] = var1;
-      (var1 = new byte[3])[0] = 11;
-      var1[1] = 28;
-      var1[2] = 15;
-      var44[3] = var1;
-      (var1 = new byte[3])[0] = 11;
-      var1[1] = 14;
-      var1[2] = 28;
-      var44[4] = var1;
-      (var1 = new byte[3])[0] = 25;
-      var1[1] = 22;
-      var1[2] = 1;
-      var44[5] = var1;
-      (var1 = new byte[3])[0] = 15;
-      var1[1] = 14;
-      var1[2] = 25;
-      var44[6] = var1;
-      (var1 = new byte[3])[0] = 23;
-      var1[1] = 11;
-      var1[2] = 30;
-      var44[7] = var1;
-      (var1 = new byte[3])[0] = 33;
-      var1[1] = 11;
-      var1[2] = 15;
-      var44[8] = var1;
-      (var1 = new byte[3])[0] = 29;
-      var1[1] = 25;
-      var1[2] = 16;
-      var44[9] = var1;
-      val_arr_arr_byte_d = var44;
-      int[][] var230 = new int[6][];
-      (var34 = new int[3])[0] = 32;
-      var34[1] = 160;
-      var34[2] = 1200;
-      var230[0] = var34;
-      (var34 = new int[3])[0] = -32;
-      var34[1] = 160;
-      var34[2] = 1200;
-      var230[1] = var34;
-      (var34 = new int[3])[0] = 64;
-      var34[1] = 128;
-      var34[2] = 1200;
-      var230[2] = var34;
-      (var34 = new int[3])[0] = -64;
-      var34[1] = 128;
-      var34[2] = 1200;
-      var230[3] = var34;
-      (var34 = new int[3])[0] = 96;
-      var34[1] = 96;
-      var34[2] = 1000;
-      var230[4] = var34;
-      (var34 = new int[3])[0] = -96;
-      var34[1] = 96;
-      var34[2] = 1000;
-      var230[5] = var34;
-      val_arr_arr_int_e = var230;
-      int[][] var231 = new int[6][];
-      (var34 = new int[3])[0] = 32;
-      var34[1] = 160;
-      var34[2] = 900;
-      var231[0] = var34;
-      (var34 = new int[3])[0] = -32;
-      var34[1] = 160;
-      var34[2] = 900;
-      var231[1] = var34;
-      (var34 = new int[3])[0] = 64;
-      var34[1] = 128;
-      var34[2] = 900;
-      var231[2] = var34;
-      (var34 = new int[3])[0] = -64;
-      var34[1] = 128;
-      var34[2] = 900;
-      var231[3] = var34;
-      (var34 = new int[3])[0] = 96;
-      var34[1] = 96;
-      var34[2] = 900;
-      var231[4] = var34;
-      (var34 = new int[3])[0] = -96;
-      var34[1] = 96;
-      var34[2] = 900;
-      var231[5] = var34;
-      val_arr_arr_int_f = var231;
-      int[][] var232 = new int[6][];
-      (var34 = new int[3])[0] = 32;
-      var34[1] = 32;
-      var34[2] = 550;
-      var232[0] = var34;
-      (var34 = new int[3])[0] = 64;
-      var34[1] = 32;
-      var34[2] = 650;
-      var232[1] = var34;
-      (var34 = new int[3])[0] = 96;
-      var34[1] = 32;
-      var34[2] = 620;
-      var232[2] = var34;
-      (var34 = new int[3])[0] = 64;
-      var34[1] = 64;
-      var34[2] = 610;
-      var232[3] = var34;
-      (var34 = new int[3])[0] = 96;
-      var34[1] = 64;
-      var34[2] = 580;
-      var232[4] = var34;
-      (var34 = new int[3])[0] = 64;
-      var34[1] = 96;
-      var34[2] = 590;
-      var232[5] = var34;
-      val_arr_arr_int_g = var232;
-      (var1 = new int[54])[0] = 17;
-      var1[1] = -18;
-      var1[2] = 0;
-      var1[3] = -5;
-      var1[4] = -17;
-      var1[5] = 0;
-      var1[6] = 6;
-      var1[7] = -24;
-      var1[8] = 0;
-      var1[9] = 16;
-      var1[10] = -35;
-      var1[11] = 0;
-      var1[12] = -4;
-      var1[13] = -32;
-      var1[14] = 0;
-      var1[15] = 7;
-      var1[16] = -44;
-      var1[17] = 0;
-      var1[18] = 13;
-      var1[19] = -59;
-      var1[20] = 100;
-      var1[21] = -2;
-      var1[22] = -56;
-      var1[23] = 100;
-      var1[24] = 26;
-      var1[25] = -51;
-      var1[26] = 100;
-      var1[27] = -14;
-      var1[28] = -50;
-      var1[29] = 100;
-      var1[30] = 21;
-      var1[31] = -72;
-      var1[32] = 200;
-      var1[33] = 4;
-      var1[34] = -73;
-      var1[35] = 200;
-      var1[36] = -11;
-      var1[37] = -69;
-      var1[38] = 200;
-      var1[39] = 14;
-      var1[40] = -86;
-      var1[41] = 200;
-      var1[42] = -3;
-      var1[43] = -88;
-      var1[44] = 200;
-      var1[45] = 5;
-      var1[46] = -101;
-      var1[47] = 200;
-      var1[48] = -18;
-      var1[49] = -36;
-      var1[50] = 200;
-      var1[51] = 30;
-      var1[52] = -36;
-      var1[53] = 200;
-      val_arr_int_aO = var1;
-      (var1 = new int[17])[0] = 134217838;
-      var1[1] = 134217759;
-      var1[2] = 1;
-      var1[3] = 134217760;
-      var1[4] = 1;
-      var1[5] = 134217761;
-      var1[6] = 1;
-      var1[7] = 134217762;
-      var1[8] = 1;
-      var1[9] = 134217763;
-      var1[10] = 1;
-      var1[11] = 134217764;
-      var1[12] = 1;
-      var1[13] = 134217765;
-      var1[14] = 1;
-      var1[15] = 134217766;
-      var1[16] = 1;
-      val_arr_int_aP = var1;
-      (var1 = new int[23])[0] = 134217827;
-      var1[1] = 134217731;
-      var1[2] = 1;
-      var1[3] = 134217732;
-      var1[4] = 1;
-      var1[5] = 134217733;
-      var1[6] = 1;
-      var1[7] = 134217734;
-      var1[8] = 1;
-      var1[9] = 134217735;
-      var1[10] = 1;
-      var1[11] = 134217736;
-      var1[12] = 1;
-      var1[13] = 134217736;
-      var1[14] = 1;
-      var1[15] = 134217737;
-      var1[16] = 1;
-      var1[17] = 134217738;
-      var1[18] = 1;
-      var1[19] = 134217738;
-      var1[20] = 1;
-      var1[21] = 134217739;
-      var1[22] = 1;
-      val_arr_int_aQ = var1;
-      short[] var10000 = new short[]{-1, 0};
-      short[] var236;
-      (var236 = new short[4])[0] = -1;
-      var236[1] = -1;
-      var236[2] = -1;
-      var236[3] = -1;
-      (var236 = new short[4])[0] = -1;
-      var236[1] = -1;
-      var236[2] = -1;
-      var236[3] = -1;
-      (var236 = new short[7])[0] = -1;
-      var236[1] = -1;
-      var236[2] = 3;
-      var236[3] = -1;
-      var236[4] = -1;
-      var236[5] = -1;
-      var236[6] = -1;
-      var10000 = new short[]{-1, 0};
-      String[] var239;
-      (var239 = new String[11])[0] = "a.mbf";
-      var239[1] = "b.mbf";
-      var239[2] = "c.mbf";
-      var239[3] = "d.mbf";
-      var239[4] = "e.mbf";
-      var239[5] = "f.mbf";
-      var239[6] = "g.mbf";
-      var239[7] = "h.mbf";
-      var239[8] = "i.mbf";
-      var239[9] = "j.mbf";
-      var239[10] = "k.mbf";
-      val_arr_string_a = var239;
-      (var236 = new int[11])[0] = 1;
-      var236[1] = 1;
-      var236[2] = 1;
-      var236[3] = 1;
-      var236[4] = 1;
-      var236[5] = 1;
-      var236[6] = 1;
-      var236[7] = 1;
-      var236[8] = 1;
-      var236[9] = 1;
-      var236[10] = 1;
-      val_arr_int_e = var236;
-      byte[] var241;
-      (var241 = new byte[7])[0] = 43;
-      var241[1] = 51;
-      var241[2] = 28;
-      var241[3] = 49;
-      var241[4] = 32;
-      var241[5] = 8;
-      var241[6] = 46;
-      val_arr_byte_o = (byte[])var241;
-      (var241 = new int[7])[0] = 167772171;
-      var241[1] = 167772174;
-      var241[2] = 167772169;
-      var241[3] = 167772173;
-      var241[4] = 167772170;
-      var241[5] = 167772166;
-      var241[6] = 167772172;
-      val_arr_int_aR = var241;
-      (var241 = new int[7])[0] = 39;
-      var241[1] = 16777255;
-      var241[2] = 33554472;
-      var241[3] = 67108903;
-      var241[4] = 50331688;
-      var241[5] = 83886120;
-      var241[6] = 100663317;
-      val_arr_int_aS = var241;
-      (var241 = new int[7])[0] = 37;
-      var241[1] = 16777253;
-      var241[2] = 33554470;
-      var241[3] = 67108901;
-      var241[4] = 50331686;
-      var241[5] = 83886118;
-      var241[6] = 100663314;
-      val_arr_int_aT = var241;
-      (var241 = new int[7])[0] = 38;
-      var241[1] = 16777254;
-      var241[2] = 33554471;
-      var241[3] = 67108902;
-      var241[4] = 50331687;
-      var241[5] = 83886119;
-      var241[6] = 100663315;
-      val_arr_int_aU = var241;
-      (var241 = new int[7])[0] = 40;
-      var241[1] = 16777256;
-      var241[2] = 33554473;
-      var241[3] = 67108904;
-      var241[4] = 50331689;
-      var241[5] = 83886121;
-      var241[6] = -1;
-      val_arr_int_aV = var241;
-      (var241 = new int[7])[0] = 32;
-      var241[1] = 16777248;
-      var241[2] = 33554465;
-      var241[3] = 67108896;
-      var241[4] = 50331681;
-      var241[5] = 83886113;
-      var241[6] = -1;
-      val_arr_int_aW = var241;
-      int[][] var248 = new int[7][];
-      (var34 = new int[68])[0] = 0;
-      var34[1] = 1;
-      var34[2] = 1;
-      var34[3] = 0;
-      var34[4] = 2;
-      var34[5] = 0;
-      var34[6] = 3;
-      var34[7] = 0;
-      var34[8] = 4;
-      var34[9] = 0;
-      var34[10] = 5;
-      var34[11] = 0;
-      var34[12] = 6;
-      var34[13] = 1;
-      var34[14] = 7;
-      var34[15] = 1;
-      var34[16] = 8;
-      var34[17] = 0;
-      var34[18] = 9;
-      var34[19] = 0;
-      var34[20] = 10;
-      var34[21] = 0;
-      var34[22] = 11;
-      var34[23] = 0;
-      var34[24] = 12;
-      var34[25] = 0;
-      var34[26] = 13;
-      var34[27] = 0;
-      var34[28] = 14;
-      var34[29] = 0;
-      var34[30] = 15;
-      var34[31] = 0;
-      var34[32] = 16;
-      var34[33] = 0;
-      var34[34] = 17;
-      var34[35] = 0;
-      var34[36] = 18;
-      var34[37] = 1;
-      var34[38] = 19;
-      var34[39] = 0;
-      var34[40] = 20;
-      var34[41] = 0;
-      var34[42] = 21;
-      var34[43] = 0;
-      var34[44] = 22;
-      var34[45] = 1;
-      var34[46] = 23;
-      var34[47] = 1;
-      var34[48] = 24;
-      var34[49] = 0;
-      var34[50] = 25;
-      var34[51] = 0;
-      var34[52] = 26;
-      var34[53] = 0;
-      var34[54] = 27;
-      var34[55] = 0;
-      var34[56] = 28;
-      var34[57] = 0;
-      var34[58] = -1;
-      var34[59] = 0;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 29;
-      var34[63] = 0;
-      var34[64] = 30;
-      var34[65] = 1;
-      var34[66] = 31;
-      var34[67] = 0;
-      var248[0] = var34;
-      (var34 = new int[68])[0] = 16777217;
-      var34[1] = 1;
-      var34[2] = 16777218;
-      var34[3] = 0;
-      var34[4] = 16777219;
-      var34[5] = 0;
-      var34[6] = 16777220;
-      var34[7] = 0;
-      var34[8] = 16777221;
-      var34[9] = 0;
-      var34[10] = 16777222;
-      var34[11] = 0;
-      var34[12] = 16777223;
-      var34[13] = 1;
-      var34[14] = 16777224;
-      var34[15] = 1;
-      var34[16] = 16777225;
-      var34[17] = 0;
-      var34[18] = 16777226;
-      var34[19] = 0;
-      var34[20] = 16777227;
-      var34[21] = 0;
-      var34[22] = 16777228;
-      var34[23] = 0;
-      var34[24] = 16777229;
-      var34[25] = 0;
-      var34[26] = 16777230;
-      var34[27] = 0;
-      var34[28] = 16777231;
-      var34[29] = 0;
-      var34[30] = 16777232;
-      var34[31] = 0;
-      var34[32] = 16777233;
-      var34[33] = 0;
-      var34[34] = 16777234;
-      var34[35] = 0;
-      var34[36] = 16777235;
-      var34[37] = 1;
-      var34[38] = 16777236;
-      var34[39] = 0;
-      var34[40] = 16777237;
-      var34[41] = 0;
-      var34[42] = 16777238;
-      var34[43] = 0;
-      var34[44] = 16777239;
-      var34[45] = 1;
-      var34[46] = 16777240;
-      var34[47] = 1;
-      var34[48] = 16777241;
-      var34[49] = 0;
-      var34[50] = 16777242;
-      var34[51] = 0;
-      var34[52] = 16777243;
-      var34[53] = 0;
-      var34[54] = -1;
-      var34[55] = 0;
-      var34[56] = 16777244;
-      var34[57] = 0;
-      var34[58] = -1;
-      var34[59] = 0;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 16777245;
-      var34[63] = 0;
-      var34[64] = 16777246;
-      var34[65] = 1;
-      var34[66] = 16777247;
-      var34[67] = 0;
-      var248[1] = var34;
-      (var34 = new int[68])[0] = 33554433;
-      var34[1] = 1;
-      var34[2] = 33554434;
-      var34[3] = 0;
-      var34[4] = 33554435;
-      var34[5] = 0;
-      var34[6] = 33554436;
-      var34[7] = 0;
-      var34[8] = 33554437;
-      var34[9] = 0;
-      var34[10] = 33554438;
-      var34[11] = 0;
-      var34[12] = 33554439;
-      var34[13] = 1;
-      var34[14] = 33554440;
-      var34[15] = 1;
-      var34[16] = 33554441;
-      var34[17] = 0;
-      var34[18] = 33554442;
-      var34[19] = 0;
-      var34[20] = 33554443;
-      var34[21] = 0;
-      var34[22] = 33554444;
-      var34[23] = 0;
-      var34[24] = 33554445;
-      var34[25] = 0;
-      var34[26] = 33554446;
-      var34[27] = 0;
-      var34[28] = 33554447;
-      var34[29] = 0;
-      var34[30] = 33554448;
-      var34[31] = 0;
-      var34[32] = 33554449;
-      var34[33] = 0;
-      var34[34] = 33554450;
-      var34[35] = 0;
-      var34[36] = 33554451;
-      var34[37] = 1;
-      var34[38] = 33554452;
-      var34[39] = 0;
-      var34[40] = 33554453;
-      var34[41] = 0;
-      var34[42] = 33554454;
-      var34[43] = 0;
-      var34[44] = 33554455;
-      var34[45] = 1;
-      var34[46] = 33554456;
-      var34[47] = 1;
-      var34[48] = 33554457;
-      var34[49] = 0;
-      var34[50] = 33554458;
-      var34[51] = 0;
-      var34[52] = 33554459;
-      var34[53] = 1;
-      var34[54] = 33554460;
-      var34[55] = 0;
-      var34[56] = 33554461;
-      var34[57] = 0;
-      var34[58] = -1;
-      var34[59] = 0;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 33554462;
-      var34[63] = 0;
-      var34[64] = 33554463;
-      var34[65] = 1;
-      var34[66] = 33554464;
-      var34[67] = 0;
-      var248[2] = var34;
-      (var34 = new int[68])[0] = 67108865;
-      var34[1] = 1;
-      var34[2] = 67108866;
-      var34[3] = 0;
-      var34[4] = 67108867;
-      var34[5] = 0;
-      var34[6] = 67108868;
-      var34[7] = 0;
-      var34[8] = 67108869;
-      var34[9] = 0;
-      var34[10] = 67108870;
-      var34[11] = 0;
-      var34[12] = 67108871;
-      var34[13] = 1;
-      var34[14] = 67108872;
-      var34[15] = 1;
-      var34[16] = 67108873;
-      var34[17] = 0;
-      var34[18] = 67108874;
-      var34[19] = 0;
-      var34[20] = 67108875;
-      var34[21] = 0;
-      var34[22] = 67108876;
-      var34[23] = 0;
-      var34[24] = 67108877;
-      var34[25] = 0;
-      var34[26] = 67108878;
-      var34[27] = 0;
-      var34[28] = 67108879;
-      var34[29] = 0;
-      var34[30] = 67108880;
-      var34[31] = 0;
-      var34[32] = 67108881;
-      var34[33] = 0;
-      var34[34] = 67108882;
-      var34[35] = 0;
-      var34[36] = 67108883;
-      var34[37] = 1;
-      var34[38] = 67108884;
-      var34[39] = 0;
-      var34[40] = 67108885;
-      var34[41] = 0;
-      var34[42] = 67108886;
-      var34[43] = 0;
-      var34[44] = 67108887;
-      var34[45] = 1;
-      var34[46] = 67108888;
-      var34[47] = 1;
-      var34[48] = 67108889;
-      var34[49] = 0;
-      var34[50] = 67108890;
-      var34[51] = 0;
-      var34[52] = 67108891;
-      var34[53] = 0;
-      var34[54] = -1;
-      var34[55] = 0;
-      var34[56] = 67108892;
-      var34[57] = 0;
-      var34[58] = -1;
-      var34[59] = 0;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 67108893;
-      var34[63] = 0;
-      var34[64] = 67108894;
-      var34[65] = 1;
-      var34[66] = 67108895;
-      var34[67] = 0;
-      var248[3] = var34;
-      (var34 = new int[68])[0] = 50331649;
-      var34[1] = 1;
-      var34[2] = 50331650;
-      var34[3] = 0;
-      var34[4] = 50331651;
-      var34[5] = 0;
-      var34[6] = 50331652;
-      var34[7] = 0;
-      var34[8] = 50331653;
-      var34[9] = 0;
-      var34[10] = 50331654;
-      var34[11] = 0;
-      var34[12] = 50331655;
-      var34[13] = 1;
-      var34[14] = 50331656;
-      var34[15] = 1;
-      var34[16] = 50331657;
-      var34[17] = 0;
-      var34[18] = 50331658;
-      var34[19] = 0;
-      var34[20] = 50331659;
-      var34[21] = 0;
-      var34[22] = 50331660;
-      var34[23] = 0;
-      var34[24] = 50331661;
-      var34[25] = 0;
-      var34[26] = 50331662;
-      var34[27] = 0;
-      var34[28] = 50331663;
-      var34[29] = 0;
-      var34[30] = 50331664;
-      var34[31] = 0;
-      var34[32] = 50331665;
-      var34[33] = 0;
-      var34[34] = 50331666;
-      var34[35] = 0;
-      var34[36] = 50331667;
-      var34[37] = 1;
-      var34[38] = 50331668;
-      var34[39] = 0;
-      var34[40] = 50331669;
-      var34[41] = 0;
-      var34[42] = 50331670;
-      var34[43] = 0;
-      var34[44] = 50331671;
-      var34[45] = 1;
-      var34[46] = 50331672;
-      var34[47] = 1;
-      var34[48] = 50331673;
-      var34[49] = 0;
-      var34[50] = 50331674;
-      var34[51] = 0;
-      var34[52] = 50331675;
-      var34[53] = 0;
-      var34[54] = 50331676;
-      var34[55] = 0;
-      var34[56] = 50331677;
-      var34[57] = 0;
-      var34[58] = -1;
-      var34[59] = 0;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 50331678;
-      var34[63] = 0;
-      var34[64] = 50331679;
-      var34[65] = 1;
-      var34[66] = 50331680;
-      var34[67] = 0;
-      var248[4] = var34;
-      (var34 = new int[68])[0] = 83886081;
-      var34[1] = 1;
-      var34[2] = 83886082;
-      var34[3] = 0;
-      var34[4] = 83886083;
-      var34[5] = 0;
-      var34[6] = 83886084;
-      var34[7] = 0;
-      var34[8] = 83886085;
-      var34[9] = 0;
-      var34[10] = 83886086;
-      var34[11] = 0;
-      var34[12] = 83886087;
-      var34[13] = 1;
-      var34[14] = 83886088;
-      var34[15] = 1;
-      var34[16] = 83886089;
-      var34[17] = 0;
-      var34[18] = 83886090;
-      var34[19] = 0;
-      var34[20] = 83886091;
-      var34[21] = 0;
-      var34[22] = 83886092;
-      var34[23] = 0;
-      var34[24] = 83886093;
-      var34[25] = 0;
-      var34[26] = 83886094;
-      var34[27] = 0;
-      var34[28] = 83886095;
-      var34[29] = 0;
-      var34[30] = 83886096;
-      var34[31] = 0;
-      var34[32] = 83886097;
-      var34[33] = 0;
-      var34[34] = 83886098;
-      var34[35] = 0;
-      var34[36] = 83886099;
-      var34[37] = 1;
-      var34[38] = 83886100;
-      var34[39] = 0;
-      var34[40] = 83886101;
-      var34[41] = 0;
-      var34[42] = 83886102;
-      var34[43] = 0;
-      var34[44] = 83886103;
-      var34[45] = 1;
-      var34[46] = 83886104;
-      var34[47] = 1;
-      var34[48] = 83886105;
-      var34[49] = 0;
-      var34[50] = 83886106;
-      var34[51] = 0;
-      var34[52] = 83886107;
-      var34[53] = 0;
-      var34[54] = 83886107;
-      var34[55] = 0;
-      var34[56] = 83886108;
-      var34[57] = 0;
-      var34[58] = 83886109;
-      var34[59] = 1;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 83886110;
-      var34[63] = 0;
-      var34[64] = 83886111;
-      var34[65] = 1;
-      var34[66] = 83886112;
-      var34[67] = 0;
-      var248[5] = var34;
-      (var34 = new int[68])[0] = 100663297;
-      var34[1] = 1;
-      var34[2] = 100663298;
-      var34[3] = 0;
-      var34[4] = 100663299;
-      var34[5] = 0;
-      var34[6] = 100663299;
-      var34[7] = 0;
-      var34[8] = 100663297;
-      var34[9] = 1;
-      var34[10] = 100663298;
-      var34[11] = 0;
-      var34[12] = 100663300;
-      var34[13] = 1;
-      var34[14] = 100663300;
-      var34[15] = 1;
-      var34[16] = 100663301;
-      var34[17] = 0;
-      var34[18] = 100663302;
-      var34[19] = 0;
-      var34[20] = 100663303;
-      var34[21] = 0;
-      var34[22] = -1;
-      var34[23] = -1;
-      var34[24] = -1;
-      var34[25] = -1;
-      var34[26] = -1;
-      var34[27] = -1;
-      var34[28] = 100663304;
-      var34[29] = 0;
-      var34[30] = -1;
-      var34[31] = -1;
-      var34[32] = -1;
-      var34[33] = -1;
-      var34[34] = -1;
-      var34[35] = -1;
-      var34[36] = -1;
-      var34[37] = -1;
-      var34[38] = -1;
-      var34[39] = -1;
-      var34[40] = -1;
-      var34[41] = -1;
-      var34[42] = 100663305;
-      var34[43] = 0;
-      var34[44] = 100663297;
-      var34[45] = 1;
-      var34[46] = 100663306;
-      var34[47] = 1;
-      var34[48] = -1;
-      var34[49] = -1;
-      var34[50] = -1;
-      var34[51] = -1;
-      var34[52] = 100663307;
-      var34[53] = 0;
-      var34[54] = 100663307;
-      var34[55] = 0;
-      var34[56] = -1;
-      var34[57] = -1;
-      var34[58] = -1;
-      var34[59] = -1;
-      var34[60] = -1;
-      var34[61] = 0;
-      var34[62] = 100663308;
-      var34[63] = 0;
-      var34[64] = 100663309;
-      var34[65] = 1;
-      var34[66] = 100663310;
-      var34[67] = 0;
-      var248[6] = var34;
-      val_arr_arr_int_h = var248;
-      short[][] var249 = new short[7][];
-      short[] var70;
-      (var70 = new short[4])[0] = -55;
-      var70[1] = 3;
-      var70[2] = 49;
-      var70[3] = -20;
-      var249[0] = var70;
-      (var70 = new short[4])[0] = -60;
-      var70[1] = 36;
-      var70[2] = 74;
-      var70[3] = -27;
-      var249[1] = var70;
-      (var70 = new short[4])[0] = -70;
-      var70[1] = 15;
-      var70[2] = 60;
-      var70[3] = -30;
-      var249[2] = var70;
-      (var70 = new short[4])[0] = -72;
-      var70[1] = 13;
-      var70[2] = 72;
-      var70[3] = -37;
-      var249[3] = var70;
-      (var70 = new short[4])[0] = -87;
-      var70[1] = 11;
-      var70[2] = 53;
-      var70[3] = -45;
-      var249[4] = var70;
-      (var70 = new short[4])[0] = -80;
-      var70[1] = 23;
-      var70[2] = 78;
-      var70[3] = -34;
-      var249[5] = var70;
-      (var70 = new short[4])[0] = -70;
-      var70[1] = -8;
-      var70[2] = 45;
-      var70[3] = -10;
-      var249[6] = var70;
-      val_arr_arr_short_c = var249;
-      short[][] var250 = new short[7][];
-      (var70 = new short[4])[0] = -20;
-      var70[1] = 40;
-      var70[2] = 80;
-      var70[3] = 0;
-      var250[0] = var70;
-      (var70 = new short[4])[0] = -15;
-      var70[1] = 30;
-      var70[2] = 75;
-      var70[3] = 0;
-      var250[1] = var70;
-      (var70 = new short[4])[0] = -18;
-      var70[1] = 44;
-      var70[2] = 73;
-      var70[3] = 0;
-      var250[2] = var70;
-      (var70 = new short[4])[0] = -22;
-      var70[1] = 44;
-      var70[2] = 85;
-      var70[3] = 0;
-      var250[3] = var70;
-      (var70 = new short[4])[0] = -14;
-      var70[1] = 31;
-      var70[2] = 73;
-      var70[3] = 0;
-      var250[4] = var70;
-      (var70 = new short[4])[0] = -17;
-      var70[1] = 36;
-      var70[2] = 77;
-      var70[3] = 0;
-      var250[5] = var70;
-      (var70 = new short[4])[0] = -50;
-      var70[1] = 12;
-      var70[2] = 45;
-      var70[3] = -10;
-      var250[6] = var70;
-      val_arr_arr_short_d = var250;
-      short[][] var251 = new short[7][];
-      (var70 = new short[4])[0] = -90;
-      var70[1] = 10;
-      var70[2] = 52;
-      var70[3] = -70;
-      var251[0] = var70;
-      (var70 = new short[4])[0] = -100;
-      var70[1] = 10;
-      var70[2] = 58;
-      var70[3] = -80;
-      var251[1] = var70;
-      (var70 = new short[4])[0] = -90;
-      var70[1] = 10;
-      var70[2] = 68;
-      var70[3] = -70;
-      var251[2] = var70;
-      (var70 = new short[4])[0] = -90;
-      var70[1] = 10;
-      var70[2] = 47;
-      var70[3] = -70;
-      var251[3] = var70;
-      (var70 = new short[4])[0] = -90;
-      var70[1] = 10;
-      var70[2] = 47;
-      var70[3] = -70;
-      var251[4] = var70;
-      (var70 = new short[4])[0] = -90;
-      var70[1] = 10;
-      var70[2] = 47;
-      var70[3] = -70;
-      var251[5] = var70;
-      (var70 = new short[4])[0] = -105;
-      var70[1] = 10;
-      var70[2] = 72;
-      var70[3] = -85;
-      var251[6] = var70;
-      val_arr_arr_short_e = var251;
-      short[][] var252 = new short[7][];
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 47;
-      var70[3] = -55;
-      var252[0] = var70;
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 46;
-      var70[3] = -55;
-      var252[1] = var70;
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 59;
-      var70[3] = -55;
-      var252[2] = var70;
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 62;
-      var70[3] = -55;
-      var252[3] = var70;
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 53;
-      var70[3] = -55;
-      var252[4] = var70;
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 62;
-      var70[3] = -55;
-      var252[5] = var70;
-      (var70 = new short[4])[0] = -75;
-      var70[1] = 10;
-      var70[2] = 77;
-      var70[3] = -55;
-      var252[6] = var70;
-      val_arr_arr_short_f = var252;
-      (var241 = new int[45])[0] = 750;
-      var241[1] = 1000;
-      var241[2] = 32;
-      var241[3] = 16;
-      var241[4] = 260;
-      var241[5] = 49;
-      var241[6] = 0;
-      var241[7] = 0;
-      var241[8] = 0;
-      var241[9] = 0;
-      var241[10] = 57;
-      var241[11] = 0;
-      var241[12] = 17;
-      var241[13] = 0;
-      var241[14] = 0;
-      var241[15] = 51;
-      var241[16] = 3;
-      var241[17] = 17;
-      var241[18] = 0;
-      var241[19] = 0;
-      var241[20] = 21;
-      var241[21] = -1;
-      var241[22] = 4;
-      var241[23] = 0;
-      var241[24] = 0;
-      var241[25] = 16;
-      var241[26] = -7;
-      var241[27] = 5;
-      var241[28] = 0;
-      var241[29] = 0;
-      var241[30] = 78;
-      var241[31] = -48;
-      var241[32] = 17;
-      var241[33] = 0;
-      var241[34] = 3;
-      var241[35] = -19;
-      var241[36] = -140;
-      var241[37] = 3;
-      var241[38] = 0;
-      var241[39] = 2;
-      var241[40] = -76;
-      var241[41] = -62;
-      var241[42] = 8;
-      var241[43] = 0;
-      var241[44] = 0;
-      val_arr_int_aX = var241;
-      (var241 = new int[45])[0] = 600;
-      var241[1] = 1000;
-      var241[2] = 92;
-      var241[3] = 32;
-      var241[4] = 400;
-      var241[5] = 47;
-      var241[6] = 0;
-      var241[7] = 0;
-      var241[8] = 0;
-      var241[9] = 0;
-      var241[10] = 39;
-      var241[11] = -12;
-      var241[12] = 2;
-      var241[13] = 0;
-      var241[14] = 0;
-      var241[15] = 49;
-      var241[16] = -30;
-      var241[17] = 17;
-      var241[18] = 0;
-      var241[19] = 0;
-      var241[20] = 27;
-      var241[21] = -12;
-      var241[22] = 3;
-      var241[23] = 0;
-      var241[24] = 0;
-      var241[25] = -7;
-      var241[26] = -31;
-      var241[27] = 9;
-      var241[28] = 0;
-      var241[29] = 0;
-      var241[30] = -41;
-      var241[31] = -40;
-      var241[32] = 8;
-      var241[33] = 0;
-      var241[34] = 0;
-      var241[35] = -58;
-      var241[36] = -48;
-      var241[37] = 8;
-      var241[38] = 0;
-      var241[39] = 0;
-      var241[40] = -52;
-      var241[41] = -50;
-      var241[42] = 9;
-      var241[43] = 0;
-      var241[44] = 0;
-      val_arr_int_aY = var241;
-      (var241 = new int[35])[0] = 580;
-      var241[1] = 1200;
-      var241[2] = 48;
-      var241[3] = 92;
-      var241[4] = 800;
-      var241[5] = 48;
-      var241[6] = 1;
-      var241[7] = 0;
-      var241[8] = 0;
-      var241[9] = 0;
-      var241[10] = 37;
-      var241[11] = 0;
-      var241[12] = 3;
-      var241[13] = 0;
-      var241[14] = 0;
-      var241[15] = 14;
-      var241[16] = -171;
-      var241[17] = 3;
-      var241[18] = 0;
-      var241[19] = 2;
-      var241[20] = -36;
-      var241[21] = -80;
-      var241[22] = 9;
-      var241[23] = 0;
-      var241[24] = 0;
-      var241[25] = -55;
-      var241[26] = -37;
-      var241[27] = 8;
-      var241[28] = 0;
-      var241[29] = 0;
-      var241[30] = -43;
-      var241[31] = 0;
-      var241[32] = 8;
-      var241[33] = 0;
-      var241[34] = 0;
-      val_arr_int_aZ = var241;
-      (var241 = new int[35])[0] = 530;
-      var241[1] = 1000;
-      var241[2] = 64;
-      var241[3] = 16;
-      var241[4] = 350;
-      var241[5] = 33;
-      var241[6] = 0;
-      var241[7] = 0;
-      var241[8] = 0;
-      var241[9] = 0;
-      var241[10] = 17;
-      var241[11] = -1;
-      var241[12] = 4;
-      var241[13] = 0;
-      var241[14] = 0;
-      var241[15] = 78;
-      var241[16] = -48;
-      var241[17] = 3;
-      var241[18] = 0;
-      var241[19] = 3;
-      var241[20] = 62;
-      var241[21] = -38;
-      var241[22] = 3;
-      var241[23] = 0;
-      var241[24] = 3;
-      var241[25] = -26;
-      var241[26] = -132;
-      var241[27] = 3;
-      var241[28] = 0;
-      var241[29] = 2;
-      var241[30] = -76;
-      var241[31] = -52;
-      var241[32] = 8;
-      var241[33] = 0;
-      var241[34] = 0;
-      val_arr_int_ba = var241;
-      (var241 = new int[40])[0] = 580;
-      var241[1] = 1000;
-      var241[2] = 64;
-      var241[3] = 16;
-      var241[4] = 350;
-      var241[5] = 37;
-      var241[6] = 0;
-      var241[7] = 0;
-      var241[8] = 0;
-      var241[9] = 0;
-      var241[10] = 25;
-      var241[11] = 0;
-      var241[12] = 4;
-      var241[13] = 0;
-      var241[14] = 0;
-      var241[15] = 25;
-      var241[16] = -8;
-      var241[17] = 5;
-      var241[18] = 0;
-      var241[19] = 0;
-      var241[20] = 5;
-      var241[21] = -3;
-      var241[22] = 5;
-      var241[23] = 0;
-      var241[24] = 0;
-      var241[25] = 59;
-      var241[26] = -36;
-      var241[27] = 3;
-      var241[28] = 0;
-      var241[29] = 3;
-      var241[30] = -27;
-      var241[31] = -109;
-      var241[32] = 3;
-      var241[33] = 0;
-      var241[34] = 2;
-      var241[35] = -73;
-      var241[36] = -32;
-      var241[37] = 8;
-      var241[38] = 0;
-      var241[39] = 0;
-      val_arr_int_bb = var241;
-      (var241 = new int[35])[0] = 850;
-      var241[1] = 1000;
-      var241[2] = -112;
-      var241[3] = 86;
-      var241[4] = 650;
-      var241[5] = 32;
-      var241[6] = -1;
-      var241[7] = 0;
-      var241[8] = 0;
-      var241[9] = 0;
-      var241[10] = 22;
-      var241[11] = 0;
-      var241[12] = 0;
-      var241[13] = 0;
-      var241[14] = 0;
-      var241[15] = 64;
-      var241[16] = -51;
-      var241[17] = 3;
-      var241[18] = 0;
-      var241[19] = 3;
-      var241[20] = -14;
-      var241[21] = -110;
-      var241[22] = 3;
-      var241[23] = 0;
-      var241[24] = 2;
-      var241[25] = -8;
-      var241[26] = 0;
-      var241[27] = 8;
-      var241[28] = 0;
-      var241[29] = 0;
-      var241[30] = 0;
-      var241[31] = 0;
-      var241[32] = 8;
-      var241[33] = 0;
-      var241[34] = 0;
-      val_arr_int_bc = var241;
-      (var241 = new int[7])[0] = 2;
-      var241[1] = 3;
-      var241[2] = 4;
-      var241[3] = 6;
-      var241[4] = 8;
-      var241[5] = 7;
-      var241[6] = 5;
-      val_arr_int_bd = var241;
-      (var241 = new int[7])[0] = 80;
-      var241[1] = 79;
-      var241[2] = 82;
-      var241[3] = 83;
-      var241[4] = 81;
-      var241[5] = 84;
-      var241[6] = 80;
-      val_arr_int_be = var241;
-      (var241 = new int[7])[0] = 74;
-      var241[1] = 73;
-      var241[2] = 76;
-      var241[3] = 77;
-      var241[4] = 75;
-      var241[5] = 78;
-      var241[6] = 74;
-      val_arr_int_bf = var241;
-      byte[][] var262;
-      (var262 = new byte[8][])[0] = new byte[]{0};
-      byte[] var98;
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var262[1] = var98;
-      var262[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 9;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 0;
-      var262[3] = var98;
-      var262[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var262[5] = var98;
-      var262[6] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 15;
-      var98[2] = 7;
-      var98[3] = 1;
-      var98[4] = 2;
-      var262[7] = var98;
-      val_arr_arr_byte_e = var262;
-      byte[][] var263;
-      (var263 = new byte[8][])[0] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 8;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var263[1] = var98;
-      var263[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 13;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 0;
-      var263[3] = var98;
-      var263[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 8;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var263[5] = var98;
-      var263[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 10;
-      var98[2] = 8;
-      var98[3] = 2;
-      var98[4] = 1;
-      var263[7] = var98;
-      val_arr_arr_byte_f = var263;
-      byte[][] var264 = new byte[12][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 1;
-      var264[0] = var98;
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 8;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var264[1] = var98;
-      var264[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var264[3] = var98;
-      var264[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 21;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var264[5] = var98;
-      var264[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var264[7] = var98;
-      var264[8] = new byte[]{0};
-      (var98 = new byte[5])[0] = 21;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var264[9] = var98;
-      var264[10] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 15;
-      var98[2] = 6;
-      var98[3] = 1;
-      var98[4] = 2;
-      var264[11] = var98;
-      val_arr_arr_byte_g = var264;
-      byte[][] var265;
-      (var265 = new byte[8][])[0] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var265[1] = var98;
-      var265[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 0;
-      var265[3] = var98;
-      var265[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var265[5] = var98;
-      var265[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 17;
-      var98[2] = 7;
-      var98[3] = 2;
-      var98[4] = 1;
-      var265[7] = var98;
-      val_arr_arr_byte_h = var265;
-      byte[][] var266;
-      (var266 = new byte[8][])[0] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var266[1] = var98;
-      var266[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 10;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 0;
-      var266[3] = var98;
-      var266[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 10;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var266[5] = var98;
-      var266[6] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 14;
-      var98[2] = 8;
-      var98[3] = 1;
-      var98[4] = 2;
-      var266[7] = var98;
-      val_arr_arr_byte_i = var266;
-      byte[][] var267 = new byte[12][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 1;
-      var267[0] = var98;
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var267[1] = var98;
-      var267[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 0;
-      var267[3] = var98;
-      var267[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 17;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 0;
-      var267[5] = var98;
-      var267[6] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var267[7] = var98;
-      var267[8] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 14;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var267[9] = var98;
-      var267[10] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 2;
-      var98[4] = 1;
-      var267[11] = var98;
-      val_arr_arr_byte_j = var267;
-      byte[][] var268;
-      (var268 = new byte[8][])[0] = new byte[]{1};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 11;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var268[1] = var98;
-      var268[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var268[3] = var98;
-      var268[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 10;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var268[5] = var98;
-      var268[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 15;
-      var98[2] = 7;
-      var98[3] = 2;
-      var98[4] = 1;
-      var268[7] = var98;
-      val_arr_arr_byte_k = var268;
-      byte[][] var269;
-      (var269 = new byte[8][])[0] = new byte[]{0};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var269[1] = var98;
-      var269[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 11;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var269[3] = var98;
-      var269[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var269[5] = var98;
-      var269[6] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 11;
-      var98[2] = 8;
-      var98[3] = 2;
-      var98[4] = 1;
-      var269[7] = var98;
-      val_arr_arr_byte_l = var269;
-      byte[][] var270 = new byte[12][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 1;
-      var270[0] = var98;
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 11;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var270[1] = var98;
-      var270[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var270[3] = var98;
-      var270[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 16;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var270[5] = var98;
-      var270[6] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 9;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var270[7] = var98;
-      var270[8] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 10;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var270[9] = var98;
-      var270[10] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 12;
-      var98[2] = 6;
-      var98[3] = 1;
-      var98[4] = 2;
-      var270[11] = var98;
-      val_arr_arr_byte_m = var270;
-      byte[][] var271;
-      (var271 = new byte[8][])[0] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 5;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var271[1] = var98;
-      var271[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var271[3] = var98;
-      var271[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 5;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var271[5] = var98;
-      var271[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 16;
-      var98[2] = 7;
-      var98[3] = 2;
-      var98[4] = 1;
-      var271[7] = var98;
-      val_arr_arr_byte_n = var271;
-      byte[][] var272;
-      (var272 = new byte[8][])[0] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var272[1] = var98;
-      var272[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 5;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var272[3] = var98;
-      var272[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var272[5] = var98;
-      var272[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 8;
-      var98[3] = 2;
-      var98[4] = 1;
-      var272[7] = var98;
-      val_arr_arr_byte_o = var272;
-      byte[][] var273 = new byte[12][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 1;
-      var273[0] = var98;
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 5;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var273[1] = var98;
-      var273[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var273[3] = var98;
-      var273[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 16;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var273[5] = var98;
-      var273[6] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 14;
-      var98[2] = 4;
-      var98[3] = 0;
-      var98[4] = 1;
-      var273[7] = var98;
-      var273[8] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var273[9] = var98;
-      var273[10] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 15;
-      var98[2] = 6;
-      var98[3] = 1;
-      var98[4] = 2;
-      var273[11] = var98;
-      val_arr_arr_byte_p = var273;
-      byte[][] var274;
-      (var274 = new byte[6][])[0] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var274[1] = var98;
-      var274[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 9;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var274[3] = var98;
-      var274[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 7;
-      var98[3] = 2;
-      var98[4] = 1;
-      var274[5] = var98;
-      val_arr_arr_byte_q = var274;
-      byte[][] var275;
-      (var275 = new byte[8][])[0] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var275[1] = var98;
-      var275[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var275[3] = var98;
-      var275[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var275[5] = var98;
-      var275[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 16;
-      var98[2] = 9;
-      var98[3] = 2;
-      var98[4] = 1;
-      var275[7] = var98;
-      val_arr_arr_byte_r = var275;
-      byte[][] var276 = new byte[10][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 1;
-      var276[0] = var98;
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var276[1] = var98;
-      var276[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 9;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var276[3] = var98;
-      var276[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 8;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var276[5] = var98;
-      var276[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 16;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var276[7] = var98;
-      var276[8] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 15;
-      var98[2] = 6;
-      var98[3] = 1;
-      var98[4] = 2;
-      var276[9] = var98;
-      val_arr_arr_byte_s = var276;
-      byte[][] var277;
-      (var277 = new byte[6][])[0] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 14;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var277[1] = var98;
-      var277[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var277[3] = var98;
-      var277[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 7;
-      var98[3] = 2;
-      var98[4] = 1;
-      var277[5] = var98;
-      val_arr_arr_byte_t = var277;
-      byte[][] var278;
-      (var278 = new byte[8][])[0] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 8;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var278[1] = var98;
-      var278[2] = new byte[]{1};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var278[3] = var98;
-      var278[4] = new byte[]{1};
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 8;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var278[5] = var98;
-      var278[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 5;
-      var98[3] = 2;
-      var98[4] = 1;
-      var278[7] = var98;
-      val_arr_arr_byte_u = var278;
-      byte[][] var279 = new byte[10][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 1;
-      var279[0] = var98;
-      (var98 = new byte[5])[0] = 24;
-      var98[1] = 9;
-      var98[2] = 7;
-      var98[3] = 0;
-      var98[4] = 1;
-      var279[1] = var98;
-      var279[2] = new byte[]{0};
-      (var98 = new byte[5])[0] = 10;
-      var98[1] = 12;
-      var98[2] = 6;
-      var98[3] = 0;
-      var98[4] = 1;
-      var279[3] = var98;
-      var279[4] = new byte[]{0};
-      (var98 = new byte[5])[0] = 25;
-      var98[1] = 9;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var279[5] = var98;
-      var279[6] = new byte[]{1};
-      (var98 = new byte[5])[0] = 14;
-      var98[1] = 16;
-      var98[2] = 5;
-      var98[3] = 0;
-      var98[4] = 1;
-      var279[7] = var98;
-      var279[8] = new byte[]{0};
-      (var98 = new byte[5])[0] = 15;
-      var98[1] = 15;
-      var98[2] = 6;
-      var98[3] = 1;
-      var98[4] = 2;
-      var279[9] = var98;
-      val_arr_arr_byte_v = var279;
-      byte[][][][] var280 = new byte[7][][][];
-      byte[][][] var184;
-      (var184 = new byte[3][][])[0] = val_arr_arr_byte_g;
-      var184[1] = val_arr_arr_byte_f;
-      var184[2] = val_arr_arr_byte_e;
-      var280[0] = var184;
-      byte[][][] var185;
-      (var185 = new byte[3][][])[0] = val_arr_arr_byte_j;
-      var185[1] = val_arr_arr_byte_i;
-      var185[2] = val_arr_arr_byte_h;
-      var280[1] = var185;
-      byte[][][] var186;
-      (var186 = new byte[3][][])[0] = val_arr_arr_byte_m;
-      var186[1] = val_arr_arr_byte_l;
-      var186[2] = val_arr_arr_byte_k;
-      var280[2] = var186;
-      byte[][][] var187;
-      (var187 = new byte[3][][])[0] = val_arr_arr_byte_p;
-      var187[1] = val_arr_arr_byte_o;
-      var187[2] = val_arr_arr_byte_n;
-      var280[3] = var187;
-      byte[][][] var188;
-      (var188 = new byte[3][][])[0] = val_arr_arr_byte_v;
-      var188[1] = val_arr_arr_byte_u;
-      var188[2] = val_arr_arr_byte_t;
-      var280[4] = var188;
-      byte[][][] var189;
-      (var189 = new byte[3][][])[0] = val_arr_arr_byte_s;
-      var189[1] = val_arr_arr_byte_r;
-      var189[2] = val_arr_arr_byte_q;
-      var280[5] = var189;
-      var280[6] = null;
-      val_arr_arr_arr_arr_byte_a = var280;
-      int[][] var281;
-      (var281 = new int[7][])[0] = val_arr_int_aX;
-      var281[1] = val_arr_int_aY;
-      var281[2] = val_arr_int_aZ;
-      var281[3] = val_arr_int_ba;
-      var281[4] = val_arr_int_bb;
-      var281[5] = val_arr_int_bc;
-      var281[6] = null;
-      val_arr_arr_int_i = var281;
-      byte[][][] var282 = new byte[7][][];
-      byte[][] var190 = new byte[4][];
-      byte[] var2;
-      (var2 = new byte[3])[0] = 9;
-      var2[1] = 9;
-      var2[2] = 0;
-      var190[0] = (byte[])var2;
-      (var2 = new byte[3])[0] = 8;
-      var2[1] = 9;
-      var2[2] = 0;
-      var190[1] = var2;
-      (var2 = new byte[4])[0] = 8;
-      var2[1] = 8;
-      var2[2] = 7;
-      var2[3] = 1;
-      var190[2] = var2;
-      (var2 = new byte[3])[0] = 8;
-      var2[1] = 8;
-      var2[2] = 1;
-      var190[3] = var2;
-      var282[0] = var190;
-      byte[][] var342 = new byte[4][];
-      (var98 = new byte[3])[0] = 8;
-      var98[1] = 7;
-      var98[2] = 0;
-      var342[0] = var98;
-      (var98 = new byte[3])[0] = 9;
-      var98[1] = 9;
-      var98[2] = 1;
-      var342[1] = var98;
-      (var98 = new byte[4])[0] = 9;
-      var98[1] = 9;
-      var98[2] = 9;
-      var98[3] = 0;
-      var342[2] = var98;
-      (var98 = new byte[3])[0] = 8;
-      var98[1] = 8;
-      var98[2] = 1;
-      var342[3] = var98;
-      var282[1] = var342;
-      byte[][] var343 = new byte[4][];
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 0;
-      var343[0] = var98;
-      (var98 = new byte[4])[0] = 9;
-      var98[1] = 9;
-      var98[2] = 9;
-      var98[3] = 0;
-      var343[1] = var98;
-      (var98 = new byte[4])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 7;
-      var98[3] = 1;
-      var343[2] = var98;
-      (var98 = new byte[3])[0] = 8;
-      var98[1] = 8;
-      var98[2] = 1;
-      var343[3] = var98;
-      var282[2] = var343;
-      byte[][] var344 = new byte[4][];
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 0;
-      var344[0] = var98;
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 9;
-      var98[2] = 0;
-      var344[1] = var98;
-      (var98 = new byte[4])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 7;
-      var98[3] = 1;
-      var344[2] = var98;
-      (var98 = new byte[3])[0] = 8;
-      var98[1] = 8;
-      var98[2] = 1;
-      var344[3] = var98;
-      var282[3] = var344;
-      byte[][] var345 = new byte[4][];
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 0;
-      var345[0] = var98;
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 1;
-      var345[1] = var98;
-      (var98 = new byte[4])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 7;
-      var98[3] = 1;
-      var345[2] = var98;
-      (var98 = new byte[3])[0] = 8;
-      var98[1] = 8;
-      var98[2] = 1;
-      var345[3] = var98;
-      var282[4] = var345;
-      byte[][] var346 = new byte[4][];
-      (var98 = new byte[3])[0] = 9;
-      var98[1] = 9;
-      var98[2] = 1;
-      var346[0] = var98;
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 9;
-      var98[2] = 0;
-      var346[1] = var98;
-      (var98 = new byte[4])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 7;
-      var98[3] = 1;
-      var346[2] = var98;
-      (var98 = new byte[3])[0] = 8;
-      var98[1] = 8;
-      var98[2] = 1;
-      var346[3] = var98;
-      var282[5] = var346;
-      byte[][] var347 = new byte[4][];
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 0;
-      var347[0] = var98;
-      (var98 = new byte[3])[0] = 7;
-      var98[1] = 7;
-      var98[2] = 1;
-      var347[1] = var98;
-      var347[2] = null;
-      var347[3] = null;
-      var282[6] = var347;
-      val_arr_arr_arr_byte_b = var282;
-      byte[][] var348;
-      (var348 = new byte[4][])[0] = new byte[]{3};
-      byte[] var283;
-      (var283 = new byte[2])[0] = 9;
-      var283[1] = 3;
-      var348[1] = (byte[])var283;
-      var348[2] = new byte[]{3};
-      (var283 = new byte[2])[0] = 9;
-      var283[1] = 3;
-      var348[3] = var283;
-      val_arr_arr_byte_w = var348;
-      short[][] var349 = new short[7][];
-      (var283 = new short[4])[0] = 0;
-      var283[1] = 16;
-      var283[2] = -86;
-      var283[3] = 50;
-      var349[0] = var283;
-      (var283 = new short[4])[0] = 1;
-      var283[1] = 34;
-      var283[2] = -66;
-      var283[3] = 150;
-      var349[1] = var283;
-      (var283 = new short[4])[0] = 2;
-      var283[1] = 24;
-      var283[2] = -66;
-      var283[3] = 200;
-      var349[2] = var283;
-      (var283 = new short[4])[0] = 5;
-      var283[1] = 42;
-      var283[2] = -69;
-      var283[3] = 100;
-      var349[3] = var283;
-      (var283 = new short[4])[0] = 4;
-      var283[1] = 14;
-      var283[2] = -86;
-      var283[3] = 170;
-      var349[4] = var283;
-      (var283 = new short[4])[0] = 3;
-      var283[1] = 8;
-      var283[2] = -76;
-      var283[3] = 0;
-      var349[5] = var283;
-      (var283 = new short[4])[0] = 6;
-      var283[1] = 16;
-      var283[2] = -96;
-      var283[3] = 280;
-      var349[6] = var283;
-      val_arr_arr_short_g = var349;
-      short[][] var350;
-      (var350 = new short[7][])[0] = null;
-      var350[1] = null;
-      (var283 = new short[4])[0] = 2;
-      var283[1] = 26;
-      var283[2] = -80;
-      var283[3] = 100;
-      var350[2] = var283;
-      var350[3] = null;
-      (var283 = new short[4])[0] = 4;
-      var283[1] = 46;
-      var283[2] = -110;
-      var283[3] = 0;
-      var350[4] = var283;
-      var350[5] = null;
-      var350[6] = null;
-      val_arr_arr_short_h = var350;
-      (var2 = new short[4])[0] = -48;
-      var2[1] = -24;
-      var2[2] = 24;
-      var2[3] = 0;
-      val_arr_short_i = var2;
-      (var2 = new short[4])[0] = -52;
-      var2[1] = -24;
-      var2[2] = 24;
-      var2[3] = 0;
-      (var2 = new short[4])[0] = -48;
-      var2[1] = -48;
-      var2[2] = 32;
-      var2[3] = 0;
-      val_arr_short_j = var2;
-      (var2 = new short[4])[0] = -88;
-      var2[1] = -48;
-      var2[2] = 32;
-      var2[3] = -48;
-      val_arr_short_k = var2;
-      (var2 = new short[4])[0] = -80;
-      var2[1] = -22;
-      var2[2] = 22;
-      var2[3] = 0;
-      val_arr_short_l = var2;
-      (var2 = new short[4])[0] = -94;
-      var2[1] = -24;
-      var2[2] = 24;
-      var2[3] = -49;
-      val_arr_short_m = var2;
-      (var2 = new short[4])[0] = -80;
-      var2[1] = -4;
-      var2[2] = 4;
-      var2[3] = 0;
-      (var2 = new short[4])[0] = -96;
-      var2[1] = -22;
-      var2[2] = 22;
-      var2[3] = 0;
-      val_arr_short_n = var2;
-      (var2 = new short[4])[0] = -75;
-      var2[1] = 10;
-      var2[2] = 59;
-      var2[3] = -55;
-      (var2 = new short[4])[0] = -16;
-      var2[1] = 16;
-      var2[2] = 64;
-      var2[3] = 0;
-      (var2 = new short[4])[0] = -120;
-      var2[1] = 8;
-      var2[2] = 48;
-      var2[3] = -64;
-      val_arr_short_o = var2;
-      (var2 = new short[4])[0] = -50;
-      var2[1] = 12;
-      var2[2] = 45;
-      var2[3] = -10;
-      (var2 = new short[4])[0] = -16;
-      var2[1] = 16;
-      var2[2] = 64;
-      var2[3] = 0;
-      val_arr_short_p = var2;
-      (var2 = new short[4])[0] = -90;
-      var2[1] = 16;
-      var2[2] = 48;
-      var2[3] = -20;
-      val_arr_short_q = var2;
-      (var2 = new short[4])[0] = -100;
-      var2[1] = 32;
-      var2[2] = 70;
-      var2[3] = -70;
-      val_arr_short_r = var2;
-      (var2 = new short[4])[0] = -160;
-      var2[1] = -16;
-      var2[2] = 80;
-      var2[3] = -60;
-      val_arr_short_s = var2;
-      (var2 = new short[4])[0] = -120;
-      var2[1] = 8;
-      var2[2] = 48;
-      var2[3] = -12;
-      val_arr_short_t = var2;
-      (var2 = new short[3])[0] = 32;
-      var2[1] = 32;
-      var2[2] = 400;
-      val_arr_short_u = var2;
-      (var2 = new short[3])[0] = 92;
-      var2[1] = 92;
-      var2[2] = 800;
-      val_arr_short_v = var2;
-      (var2 = new short[3])[0] = 64;
-      var2[1] = 128;
-      var2[2] = 1000;
-      val_arr_short_w = var2;
-      (var2 = new short[3])[0] = 70;
-      var2[1] = 245;
-      var2[2] = 1600;
-      val_arr_short_x = var2;
-      (var2 = new short[3])[0] = 32;
-      var2[1] = 32;
-      var2[2] = 400;
-      val_arr_short_y = var2;
-      (var2 = new short[3])[0] = 64;
-      var2[1] = 92;
-      var2[2] = 700;
-      val_arr_short_z = var2;
-      (var2 = new short[3])[0] = 64;
-      var2[1] = 128;
-      var2[2] = 1000;
-      val_arr_short_A = var2;
-      (var2 = new short[3])[0] = 96;
-      var2[1] = 64;
-      var2[2] = 600;
-      val_arr_short_B = var2;
-      (var2 = new short[3])[0] = 130;
-      var2[1] = 72;
-      var2[2] = 730;
-      val_arr_short_C = var2;
-      (var2 = new short[3])[0] = 64;
-      var2[1] = 32;
-      var2[2] = 400;
-      val_arr_short_D = var2;
-      (var2 = new short[4])[0] = -80;
-      var2[1] = -16;
-      var2[2] = 68;
-      var2[3] = -50;
-      val_arr_short_E = var2;
-      (var2 = new short[4])[0] = -110;
-      var2[1] = 10;
-      var2[2] = 55;
-      var2[3] = -10;
-      val_arr_short_F = var2;
-      byte[][] var380 = new byte[7][];
-      byte[] var294;
-      (var294 = new byte[15])[0] = 2;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 24;
-      var294[6] = 25;
-      var294[7] = 45;
-      var294[8] = 44;
-      var294[9] = 6;
-      var294[10] = -1;
-      var294[11] = 39;
-      var294[12] = 6;
-      var294[13] = 12;
-      var294[14] = 9;
-      var380[0] = (byte[])var294;
-      (var294 = new byte[15])[0] = 2;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 24;
-      var294[6] = 25;
-      var294[7] = 52;
-      var294[8] = -1;
-      var294[9] = -1;
-      var294[10] = 2;
-      var294[11] = 6;
-      var294[12] = -1;
-      var294[13] = 12;
-      var294[14] = 9;
-      var380[1] = var294;
-      (var294 = new byte[15])[0] = 1;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 20;
-      var294[6] = 21;
-      var294[7] = 31;
-      var294[8] = 29;
-      var294[9] = 6;
-      var294[10] = 30;
-      var294[11] = -1;
-      var294[12] = 6;
-      var294[13] = 11;
-      var294[14] = 20;
-      var380[2] = var294;
-      (var294 = new byte[15])[0] = 1;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 20;
-      var294[6] = 21;
-      var294[7] = 50;
-      var294[8] = -1;
-      var294[9] = 6;
-      var294[10] = -1;
-      var294[11] = 34;
-      var294[12] = 6;
-      var294[13] = 11;
-      var294[14] = 20;
-      var380[3] = var294;
-      (var294 = new byte[15])[0] = 3;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 22;
-      var294[6] = 23;
-      var294[7] = 35;
-      var294[8] = 34;
-      var294[9] = 34;
-      var294[10] = 36;
-      var294[11] = -1;
-      var294[12] = -1;
-      var294[13] = 33;
-      var294[14] = 23;
-      var380[4] = var294;
-      (var294 = new byte[15])[0] = 0;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 18;
-      var294[6] = 19;
-      var294[7] = 10;
-      var294[8] = -1;
-      var294[9] = 6;
-      var294[10] = 34;
-      var294[11] = -1;
-      var294[12] = -1;
-      var294[13] = 12;
-      var294[14] = 19;
-      var380[5] = var294;
-      (var294 = new byte[15])[0] = 4;
-      var294[1] = 6;
-      var294[2] = 39;
-      var294[3] = -1;
-      var294[4] = -1;
-      var294[5] = 26;
-      var294[6] = 27;
-      var294[7] = 4;
-      var294[8] = 48;
-      var294[9] = 6;
-      var294[10] = 4;
-      var294[11] = -1;
-      var294[12] = 6;
-      var294[13] = 47;
-      var294[14] = 9;
-      var380[6] = var294;
-      val_arr_arr_byte_x = var380;
-      (var2 = new int[7])[0] = 1500;
-      var2[1] = 1500;
-      var2[2] = 1000;
-      var2[3] = 800;
-      var2[4] = 900;
-      var2[5] = 800;
-      var2[6] = 900;
-      val_arr_int_bg = var2;
-      (var2 = new int[7])[0] = 134217831;
-      var2[1] = 134217828;
-      var2[2] = 134217829;
-      var2[3] = 134217833;
-      var2[4] = 134217830;
-      var2[5] = 134217832;
-      var2[6] = 134217834;
-      val_arr_int_bi = var2;
-      int[][] var383 = new int[7][];
-      (var294 = new int[4])[0] = 134217746;
-      var294[1] = 0;
-      var294[2] = 134217745;
-      var294[3] = 0;
-      var383[0] = var294;
-      (var294 = new int[6])[0] = 134217740;
-      var294[1] = 0;
-      var294[2] = 134217741;
-      var294[3] = 0;
-      var294[4] = 134217742;
-      var294[5] = 0;
-      var383[1] = var294;
-      (var294 = new int[4])[0] = 134217743;
-      var294[1] = 1;
-      var294[2] = 134217743;
-      var294[3] = 1;
-      var383[2] = var294;
-      (var294 = new int[8])[0] = 134217750;
-      var294[1] = 1;
-      var294[2] = 134217751;
-      var294[3] = 0;
-      var294[4] = 134217753;
-      var294[5] = 0;
-      var294[6] = 134217752;
-      var294[7] = 1;
-      var383[3] = var294;
-      (var294 = new int[6])[0] = 134217744;
-      var294[1] = 0;
-      var294[2] = 134217744;
-      var294[3] = 0;
-      var294[4] = 134217744;
-      var294[5] = 0;
-      var383[4] = var294;
-      (var294 = new int[6])[0] = 134217747;
-      var294[1] = 1;
-      var294[2] = 134217748;
-      var294[3] = 0;
-      var294[4] = 134217749;
-      var294[5] = 0;
-      var383[5] = var294;
-      (var294 = new int[4])[0] = 134217754;
-      var294[1] = 1;
-      var294[2] = 134217754;
-      var294[3] = 0;
-      var383[6] = var294;
-      val_arr_arr_int_j = var383;
-      short[][] var384 = new short[7][];
-      short[] var308;
-      (var308 = new short[4])[0] = -5;
-      var308[1] = -32;
-      var308[2] = 0;
-      var308[3] = 5;
-      var384[0] = (short[])var308;
-      (var308 = new short[4])[0] = -11;
-      var308[1] = 15;
-      var308[2] = 64;
-      var308[3] = 11;
-      var384[1] = var308;
-      (var308 = new short[4])[0] = -19;
-      var308[1] = -19;
-      var308[2] = 18;
-      var308[3] = 18;
-      var384[2] = var308;
-      (var308 = new short[4])[0] = -37;
-      var308[1] = 0;
-      var308[2] = 40;
-      var308[3] = 59;
-      var384[3] = var308;
-      (var308 = new short[4])[0] = -9;
-      var308[1] = 0;
-      var308[2] = 88;
-      var308[3] = 9;
-      var384[4] = var308;
-      (var308 = new short[4])[0] = -16;
-      var308[1] = -16;
-      var308[2] = 14;
-      var308[3] = 16;
-      var384[5] = var308;
-      (var308 = new short[4])[0] = -26;
-      var308[1] = -28;
-      var308[2] = 25;
-      var308[3] = 21;
-      var384[6] = var308;
-      val_arr_arr_short_a = var384;
-      short[][] var385 = new short[7][];
-      (var308 = new short[4])[0] = -5;
-      var308[1] = -32;
-      var308[2] = 0;
-      var308[3] = 5;
-      var385[0] = var308;
-      (var308 = new short[4])[0] = -11;
-      var308[1] = 15;
-      var308[2] = 44;
-      var308[3] = 11;
-      var385[1] = var308;
-      (var308 = new short[4])[0] = -19;
-      var308[1] = -19;
-      var308[2] = 18;
-      var308[3] = 18;
-      var385[2] = var308;
-      (var308 = new short[4])[0] = -37;
-      var308[1] = 0;
-      var308[2] = 40;
-      var308[3] = 59;
-      var385[3] = var308;
-      (var308 = new short[4])[0] = -9;
-      var308[1] = 0;
-      var308[2] = 44;
-      var308[3] = 9;
-      var385[4] = var308;
-      (var308 = new short[4])[0] = -16;
-      var308[1] = -16;
-      var308[2] = 14;
-      var308[3] = 16;
-      var385[5] = var308;
-      (var308 = new short[4])[0] = -26;
-      var308[1] = -28;
-      var308[2] = 25;
-      var308[3] = 21;
-      var385[6] = var308;
-      val_arr_arr_short_b = var385;
-      short[] var386;
-      (var386 = new short[4])[0] = -16;
-      var386[1] = -32;
-      var386[2] = 0;
-      var386[3] = 16;
-      (var386 = new short[4])[0] = -40;
-      var386[1] = 4;
-      var386[2] = 24;
-      var386[3] = 40;
-      (var386 = new int[7])[0] = 5;
-      var386[1] = 0;
-      var386[2] = 15;
-      var386[3] = 0;
-      var386[4] = 15;
-      var386[5] = 18;
-      var386[6] = 25;
-      val_arr_int_bj = var386;
-      (var386 = new int[5])[0] = 5;
-      var386[1] = -10;
-      var386[2] = 10;
-      var386[3] = -5;
-      var386[4] = 1;
-      (var386 = new int[5])[0] = 0;
-      var386[1] = 0;
-      var386[2] = 10;
-      var386[3] = -15;
-      var386[4] = 6;
-      (var386 = new int[91])[0] = 65536;
-      var386[1] = 65526;
-      var386[2] = 65496;
-      var386[3] = 65446;
-      var386[4] = 65376;
-      var386[5] = 65286;
-      var386[6] = 65176;
-      var386[7] = 65047;
-      var386[8] = 64898;
-      var386[9] = 64729;
-      var386[10] = 64540;
-      var386[11] = 64332;
-      var386[12] = 64104;
-      var386[13] = 63856;
-      var386[14] = 63589;
-      var386[15] = 63303;
-      var386[16] = 62997;
-      var386[17] = 62672;
-      var386[18] = 62328;
-      var386[19] = 61965;
-      var386[20] = 61583;
-      var386[21] = 61183;
-      var386[22] = 60763;
-      var386[23] = 60325;
-      var386[24] = 59870;
-      var386[25] = 59395;
-      var386[26] = 58903;
-      var386[27] = 58393;
-      var386[28] = 57865;
-      var386[29] = 57319;
-      var386[30] = 56756;
-      var386[31] = 56175;
-      var386[32] = 55577;
-      var386[33] = 54963;
-      var386[34] = 54331;
-      var386[35] = 53683;
-      var386[36] = 53019;
-      var386[37] = 52339;
-      var386[38] = 51643;
-      var386[39] = 50931;
-      var386[40] = 50203;
-      var386[41] = 49460;
-      var386[42] = 48702;
-      var386[43] = 47929;
-      var386[44] = 47142;
-      var386[45] = 46341;
-      var386[46] = 45525;
-      var386[47] = 44695;
-      var386[48] = 43852;
-      var386[49] = 42995;
-      var386[50] = 42125;
-      var386[51] = 41243;
-      var386[52] = 40347;
-      var386[53] = 39440;
-      var386[54] = 38521;
-      var386[55] = 37590;
-      var386[56] = 36647;
-      var386[57] = 35693;
-      var386[58] = 34728;
-      var386[59] = 33753;
-      var386[60] = 32768;
-      var386[61] = 31772;
-      var386[62] = 30767;
-      var386[63] = 29752;
-      var386[64] = 28729;
-      var386[65] = 27696;
-      var386[66] = 26656;
-      var386[67] = 25606;
-      var386[68] = 24550;
-      var386[69] = 23486;
-      var386[70] = 22414;
-      var386[71] = 21336;
-      var386[72] = 20251;
-      var386[73] = 19160;
-      var386[74] = 18064;
-      var386[75] = 16962;
-      var386[76] = 15854;
-      var386[77] = 14742;
-      var386[78] = 13625;
-      var386[79] = 12504;
-      var386[80] = 11380;
-      var386[81] = 10251;
-      var386[82] = 9120;
-      var386[83] = 7986;
-      var386[84] = 6850;
-      var386[85] = 5712;
-      var386[86] = 4571;
-      var386[87] = 3430;
-      var386[88] = 2287;
-      var386[89] = 1143;
-      var386[90] = 0;
-      long[] var392;
-      (var392 = new long[129])[0] = 0L;
-      var392[1] = 1L;
-      var392[2] = 2L;
-      var392[3] = 3L;
-      var392[4] = 4L;
-      var392[5] = 5L;
-      var392[6] = 7L;
-      var392[7] = 8L;
-      var392[8] = 9L;
-      var392[9] = 10L;
-      var392[10] = 11L;
-      var392[11] = 12L;
-      var392[12] = 13L;
-      var392[13] = 14L;
-      var392[14] = 15L;
-      var392[15] = 16L;
-      var392[16] = 17L;
-      var392[17] = 18L;
-      var392[18] = 19L;
-      var392[19] = 20L;
-      var392[20] = 21L;
-      var392[21] = 22L;
-      var392[22] = 23L;
-      var392[23] = 24L;
-      var392[24] = 25L;
-      var392[25] = 26L;
-      var392[26] = 27L;
-      var392[27] = 28L;
-      var392[28] = 28L;
-      var392[29] = 29L;
-      var392[30] = 30L;
-      var392[31] = 31L;
-      var392[32] = 32L;
-      var392[33] = 32L;
-      var392[34] = 33L;
-      var392[35] = 34L;
-      var392[36] = 35L;
-      var392[37] = 35L;
-      var392[38] = 36L;
-      var392[39] = 37L;
-      var392[40] = 37L;
-      var392[41] = 38L;
-      var392[42] = 39L;
-      var392[43] = 39L;
-      var392[44] = 40L;
-      var392[45] = 40L;
-      var392[46] = 41L;
-      var392[47] = 41L;
-      var392[48] = 42L;
-      var392[49] = 42L;
-      var392[50] = 43L;
-      var392[51] = 43L;
-      var392[52] = 44L;
-      var392[53] = 44L;
-      var392[54] = 44L;
-      var392[55] = 45L;
-      var392[56] = 45L;
-      var392[57] = 45L;
-      var392[58] = 45L;
-      var392[59] = 46L;
-      var392[60] = 46L;
-      var392[61] = 46L;
-      var392[62] = 46L;
-      var392[63] = 46L;
-      var392[64] = 46L;
-      var392[65] = 46L;
-      var392[66] = 46L;
-      var392[67] = 46L;
-      var392[68] = 46L;
-      var392[69] = 46L;
-      var392[70] = 46L;
-      var392[71] = 46L;
-      var392[72] = 46L;
-      var392[73] = 46L;
-      var392[74] = 46L;
-      var392[75] = 46L;
-      var392[76] = 45L;
-      var392[77] = 45L;
-      var392[78] = 45L;
-      var392[79] = 44L;
-      var392[80] = 44L;
-      var392[81] = 44L;
-      var392[82] = 43L;
-      var392[83] = 43L;
-      var392[84] = 43L;
-      var392[85] = 42L;
-      var392[86] = 42L;
-      var392[87] = 41L;
-      var392[88] = 41L;
-      var392[89] = 40L;
-      var392[90] = 39L;
-      var392[91] = 39L;
-      var392[92] = 38L;
-      var392[93] = 38L;
-      var392[94] = 37L;
-      var392[95] = 36L;
-      var392[96] = 35L;
-      var392[97] = 35L;
-      var392[98] = 34L;
-      var392[99] = 33L;
-      var392[100] = 32L;
-      var392[101] = 31L;
-      var392[102] = 31L;
-      var392[103] = 30L;
-      var392[104] = 29L;
-      var392[105] = 28L;
-      var392[106] = 27L;
-      var392[107] = 26L;
-      var392[108] = 25L;
-      var392[109] = 24L;
-      var392[110] = 23L;
-      var392[111] = 22L;
-      var392[112] = 21L;
-      var392[113] = 19L;
-      var392[114] = 18L;
-      var392[115] = 17L;
-      var392[116] = 16L;
-      var392[117] = 15L;
-      var392[118] = 14L;
-      var392[119] = 12L;
-      var392[120] = 11L;
-      var392[121] = 10L;
-      var392[122] = 8L;
-      var392[123] = 7L;
-      var392[124] = 6L;
-      var392[125] = 4L;
-      var392[126] = 3L;
-      var392[127] = 1L;
-      var392[128] = 0L;
-      val_arr_long_a = var392;
-      int[][] var393 = new int[4][];
-      (var308 = new int[11])[0] = 20496;
-      var308[1] = 65536;
-      var308[2] = 0;
-      var308[3] = 0;
-      var308[4] = 256;
-      var308[5] = 513;
-      var308[6] = 1024;
-      var308[7] = 8200;
-      var308[8] = 32770;
-      var308[9] = 2052;
-      var308[10] = 0;
-      var393[0] = var308;
-      (var308 = new int[11])[0] = 20496;
-      var308[1] = 65536;
-      var308[2] = 0;
-      var308[3] = 0;
-      var308[4] = 1024;
-      var308[5] = 513;
-      var308[6] = 256;
-      var308[7] = 2052;
-      var308[8] = 32770;
-      var308[9] = 8200;
-      var308[10] = 0;
-      var393[1] = var308;
-      (var308 = new int[11])[0] = 0;
-      var308[1] = 0;
-      var308[2] = 4112;
-      var308[3] = 16384;
-      var308[4] = 256;
-      var308[5] = 513;
-      var308[6] = 1024;
-      var308[7] = 8200;
-      var308[8] = 32770;
-      var308[9] = 2052;
-      var308[10] = 0;
-      var393[2] = var308;
-      (var308 = new int[11])[0] = 0;
-      var308[1] = 0;
-      var308[2] = 4112;
-      var308[3] = 16384;
-      var308[4] = 1024;
-      var308[5] = 513;
-      var308[6] = 256;
-      var308[7] = 2052;
-      var308[8] = 32770;
-      var308[9] = 8200;
-      var308[10] = 0;
-      var393[3] = var308;
-      val_arr_arr_int_k = var393;
-      byte[][][] var394 = new byte[2][][];
-      byte[][] var326 = new byte[6][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 7;
-      var326[0] = var98;
-      var326[1] = new byte[]{0};
-      var326[2] = new byte[]{1};
-      (var98 = new byte[2])[0] = 9;
-      var98[1] = 1;
-      var326[3] = var98;
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 0;
-      var326[4] = var98;
-      (var98 = new byte[3])[0] = 9;
-      var98[1] = 9;
-      var98[2] = 9;
-      var326[5] = var98;
-      var394[0] = var326;
-      byte[][] var327 = new byte[6][];
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 7;
-      var327[0] = var98;
-      var327[1] = new byte[]{2};
-      (var98 = new byte[2])[0] = 7;
-      var98[1] = 2;
-      var327[2] = var98;
-      (var98 = new byte[2])[0] = 9;
-      var98[1] = 2;
-      var327[3] = var98;
-      var327[4] = new byte[]{3};
-      (var98 = new byte[3])[0] = 9;
-      var98[1] = 9;
-      var98[2] = 9;
-      var327[5] = var98;
-      var394[1] = var327;
-      val_arr_arr_arr_byte_c = var394;
-      byte[][] var395 = new byte[11][];
-      byte[] var328;
-      (var328 = new byte[4])[0] = 7;
-      var328[1] = 7;
-      var328[2] = 9;
-      var328[3] = 9;
-      var395[0] = var328;
-      (var328 = new byte[4])[0] = 9;
-      var328[1] = 9;
-      var328[2] = 7;
-      var328[3] = 7;
-      var395[1] = var328;
-      (var328 = new byte[4])[0] = 5;
-      var328[1] = 8;
-      var328[2] = 5;
-      var328[3] = 8;
-      var395[2] = var328;
-      (var328 = new byte[3])[0] = 6;
-      var328[1] = 5;
-      var328[2] = 4;
-      var395[3] = var328;
-      (var328 = new byte[3])[0] = 4;
-      var328[1] = 5;
-      var328[2] = 6;
-      var395[4] = var328;
-      (var328 = new byte[4])[0] = 5;
-      var328[1] = 8;
-      var328[2] = 9;
-      var328[3] = 7;
-      var395[5] = var328;
-      (var328 = new byte[4])[0] = 8;
-      var328[1] = 8;
-      var328[2] = 5;
-      var328[3] = 5;
-      var395[6] = var328;
-      (var328 = new byte[4])[0] = 9;
-      var328[1] = 9;
-      var328[2] = 9;
-      var328[3] = 9;
-      var395[7] = var328;
-      (var328 = new byte[4])[0] = 5;
-      var328[1] = 5;
-      var328[2] = 7;
-      var328[3] = 7;
-      var395[8] = var328;
-      (var328 = new byte[4])[0] = 5;
-      var328[1] = 5;
-      var328[2] = 9;
-      var328[3] = 9;
-      var395[9] = var328;
-      (var328 = new byte[4])[0] = 4;
-      var328[1] = 4;
-      var328[2] = 6;
-      var328[3] = 6;
-      var395[10] = var328;
-      val_arr_arr_byte_z = var395;
-      String[] var396;
-      (var396 = new String[11])[0] = "INSTANT KILL P1";
-      var396[1] = "INSTANT KILL P2";
-      var396[2] = "FINISH EXTENSION";
-      var396[3] = "GODMODE P1";
-      var396[4] = "GODMODE P2";
-      var396[5] = "INSTANT TIMEOVER";
-      var396[6] = "A.I.";
-      var396[7] = "SCORE BONUS";
-      var396[8] = "CHANGE P1";
-      var396[9] = "CHANGE P2";
-      var396[10] = "CHANGE ARENA";
-      val_arr_string_e = var396;
-   }
+
+    private static void initStaticTables1() {
+        val_arr_byte_c = new byte[] {(byte)2, (byte)0, (byte)1, (byte)0, (byte)1, (byte)1, (byte)0};
+        val_arr_int_h = new int[] {0, 167772201, 167772200, 167772199, 167772195, 167772202, 167772198};
+        val_int_b = -1;
+        val_int_c = -1;
+        val_int_d = -1;
+        val_arr_byte_d = new byte[] {(byte)80, (byte)76, (byte)84, (byte)69};
+        val_arr_int_a = new int[] {0, 6, 3, 5, 2, 4, 1, 7};
+        val_arr_int_b = new int[] {0, 6, 4, 2, 5, 3, 1, 7};
+        val_arr_arr_byte_b = new byte[][] {new byte[] {}, new byte[] {}, new byte[] {}};
+        val_arr_byte_e = new byte[] {(byte)0, (byte)0, (byte)0};
+        val_arr_byte_f = new byte[] {(byte)0, (byte)0, (byte)0};
+        val_arr_int_k = new int[] {0, 0, 0};
+        val_arr_int_l = new int[] {0, 0, 0};
+        val_arr_int_m = new int[] {0, 0, 0};
+        val_arr_int_n = new int[] {0, 0, 0};
+        val_arr_int_o = new int[] {0, 0, 0};
+        val_arr_int_p = new int[] {0, 0, 0};
+        val_arr_int_q = new int[] {-1, -1};
+        val_arr_byte_g = new byte[] {(byte)0, (byte)1};
+        val_byte_f = (byte)-1;
+        val_byte_g = (byte)-1;
+        val_arr_int_s = new int[] {0, 0, 0, 0, 0};
+        val_arr_bool_a = new boolean[] {false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false};
+        val_arr_int_v = new int[] {1, 71, 86, 23, 31, 27, 11, 28, 20, 26, 72, 25};
+        val_arr_int_w = new int[] {4, 25, 51};
+    }
+
+    private static void initStaticTables2() {
+        val_arr_int_x = new int[] {6, 20, 74};
+        val_arr_int_y = new int[] {0, 72, 17, 21, 23, 20, 18, 22, 19, 1, 20, 2, 22, 5, 21, 6, 25, 8};
+        val_arr_int_z = new int[] {0, 19, 31, 12, 11, 14, 36, 10, 32, 16, 37, 18, 40, 9};
+        val_arr_int_A = new int[] {3, 36};
+        val_arr_int_B = new int[] {3, 31, 10, 13};
+        val_arr_int_C = new int[] {3, 11, 12, 13};
+        val_arr_int_D = new int[] {2, 31, 10, 13};
+        val_arr_int_E = new int[] {2, 11, 12, 13};
+        val_arr_int_F = new int[] {3, 32, 33, 34, 35};
+        val_arr_int_G = new int[] {3, 37, 38, 39};
+        val_arr_int_H = new int[] {0, 20, 17, 3, 37, 4};
+        val_arr_int_I = new int[] {5, 22, 112};
+        val_arr_int_J = new int[] {5, 20, 41};
+        val_arr_int_K = new int[] {5, 20, 41};
+        val_arr_int_L = new int[] {4, 17, 53};
+        val_arr_int_M = new int[] {4, 25, 50};
+        val_arr_int_N = new int[] {4, 40, 52};
+        val_arr_int_O = new int[] {0, 0, 0, 0};
+        val_arr_int_P = new int[] {0, 0, 0, 0};
+        val_arr_int_Q = new int[] {0, 0, 0, 0};
+        val_arr_int_R = new int[] {167772236, 167772237, 167772239, 167772240};
+        val_arr_int_S = new int[] {167772240, 167772239};
+        val_arr_int_T = new int[] {167772184, 167772189, 167772176, 167772175, 167772178, 167772177, 167772179, 167772164, 167772165, 167772162, 167772163};
+        val_arr_int_U = new int[] {167772179, 167772164, 167772165, 167772162, 167772163};
+        val_arr_int_V = new int[] {0, 1, 1, 1, 1, 1, 3, 2, 2, 2, 2};
+    }
+
+    private static void initStaticTables3() {
+        val_arr_int_W = new int[] {0, 1, 1, 1, 1};
+        val_arr_byte_h = new byte[] {(byte)11, (byte)11, (byte)11};
+        val_arr_byte_i = new byte[] {(byte)0, (byte)0, (byte)0};
+        val_arr_arr_byte_c = new byte[][] {new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}, new byte[] {(byte)0, (byte)0, (byte)0}};
+        val_arr_int_ag = new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        val_arr_encodedtextbuffer_b = new EncodedTextBuffer[] {null, null, null, null, null, null, null, null, null, null};
+        val_arr_encodedtextbuffer_c = new EncodedTextBuffer[] {null, null, null, null, null, null, null, null, null, null};
+        val_arr_encodedtextbuffer_d = new EncodedTextBuffer[] {null, null, null, null, null, null, null, null, null, null};
+        val_int_bt = 167772241;
+        val_arr_int_ah = new int[] {167772188, 167772185, 167772186, 167772187};
+        val_arr_int_aj = new int[] {0, 0, 0, 0};
+        val_arr_int_ak = new int[] {0, 0, 0, 0};
+        val_arr_int_al = new int[] {0, 0, 0, 0};
+        val_arr_int_am = new int[] {0, 0, 0, 0};
+        val_int_bv = 2;
+        val_int_g = -1;
+        val_int_bx = 1;
+        val_int_h = -1;
+        val_arr_object_a = new Object[] {null, null, null, null, null, null, null, null, null};
+        val_bool_g = true;
+        val_bool_i = true;
+        val_bool_j = true;
+        val_bool_V = true;
+        val_arr_int_an = new int[] {167772237, 167772234, 167772236};
+        val_arr_int_ao = new int[] {167772189, 167772167, 167772168, 167772184};
+    }
+
+    private static void initStaticTables4() {
+        val_arr_int_ap = new int[] {0, 1, 1, 2};
+        val_arr_int_ax = new int[] {167772237, 167772234, 167772240, 167772238, 167772238, 167772232, 167772233};
+        val_arr_int_ay = new int[] {167772189, 167772167, 167772167, 167772179, 167772180, 167772182, 167772183, 167772190, 167772191, 167772160, 167772161};
+        val_arr_int_az = new int[] {0, 1, 1, 2, 2, 3, 3, 3, 3, 5, 6};
+        val_arr_int_c = new int[] {0, 0, 0, 0, 0, 0};
+        val_arr_int_d = new int[] {0, 0, 0, 0};
+        val_arr_int_aE = new int[] {28, 29, 30};
+        val_byte_q = (byte)4;
+        val_arr_arr_byte_d = new byte[][] {new byte[] {(byte)28, (byte)19, (byte)21}, new byte[] {(byte)20, (byte)11, (byte)13}, new byte[] {(byte)12, (byte)28, (byte)31}, new byte[] {(byte)11, (byte)28, (byte)15}, new byte[] {(byte)11, (byte)14, (byte)28}, new byte[] {(byte)25, (byte)22, (byte)1}, new byte[] {(byte)15, (byte)14, (byte)25}, new byte[] {(byte)23, (byte)11, (byte)30}, new byte[] {(byte)33, (byte)11, (byte)15}, new byte[] {(byte)29, (byte)25, (byte)16}};
+        val_arr_int_aG = new int[] {0, 0};
+        val_arr_encodedtextbuffer_f = new EncodedTextBuffer[] {null, null};
+        val_arr_encodedtextbuffer_g = new EncodedTextBuffer[] {null, null};
+        val_arr_int_aH = new int[] {0, 0};
+        val_arr_int_aI = new int[] {0, 0};
+        val_arr_int_aJ = new int[] {0, 0};
+        val_arr_int_aK = new int[] {0, 0};
+        val_arr_int_aL = new int[] {0, 0};
+        val_arr_int_aM = new int[] {0, 0};
+        val_arr_int_aN = new int[] {0, 0};
+        val_arr_arr_int_e = new int[][] {new int[] {32, 160, 1200}, new int[] {-32, 160, 1200}, new int[] {64, 128, 1200}, new int[] {-64, 128, 1200}, new int[] {96, 96, 1000}, new int[] {-96, 96, 1000}};
+        val_arr_arr_int_f = new int[][] {new int[] {32, 160, 900}, new int[] {-32, 160, 900}, new int[] {64, 128, 900}, new int[] {-64, 128, 900}, new int[] {96, 96, 900}, new int[] {-96, 96, 900}};
+        val_arr_arr_int_g = new int[][] {new int[] {32, 32, 550}, new int[] {64, 32, 650}, new int[] {96, 32, 620}, new int[] {64, 64, 610}, new int[] {96, 64, 580}, new int[] {64, 96, 590}};
+        val_arr_int_aO = new int[] {17, -18, 0, -5, -17, 0, 6, -24, 0, 16, -35, 0, -4, -32, 0, 7, -44, 0, 13, -59, 100, -2, -56, 100, 26, -51, 100, -14, -50, 100, 21, -72, 200, 4, -73, 200, -11, -69, 200, 14, -86, 200, -3, -88, 200, 5, -101, 200, -18, -36, 200, 30, -36, 200};
+        val_arr_int_aP = new int[] {134217838, 134217759, 1, 134217760, 1, 134217761, 1, 134217762, 1, 134217763, 1, 134217764, 1, 134217765, 1, 134217766, 1};
+        val_arr_int_aQ = new int[] {134217827, 134217731, 1, 134217732, 1, 134217733, 1, 134217734, 1, 134217735, 1, 134217736, 1, 134217736, 1, 134217737, 1, 134217738, 1, 134217738, 1, 134217739, 1};
+    }
+
+    private static void initStaticTables5() {
+        isGlobalPaused = true;
+        frameTimestampMs = 25L;
+        audioChannelCount = (short)1;
+        val_arr_byte_m = new byte[] {};
+        val_int_en = -1;
+        val_int_eo = -1;
+        val_int_ep = -1;
+        val_arr_string_a = new String[] {"a.mbf", "b.mbf", "c.mbf", "d.mbf", "e.mbf", "f.mbf", "g.mbf", "h.mbf", "i.mbf", "j.mbf", "k.mbf"};
+        val_arr_int_e = new int[] {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+        val_arr_string_b = new String[] {};
+        val_arr_byte_o = new byte[] {(byte)43, (byte)51, (byte)28, (byte)49, (byte)32, (byte)8, (byte)46};
+        val_arr_int_aR = new int[] {167772171, 167772174, 167772169, 167772173, 167772170, 167772166, 167772172};
+        val_arr_int_aS = new int[] {39, 16777255, 33554472, 67108903, 50331688, 83886120, 100663317};
+        val_arr_int_aT = new int[] {37, 16777253, 33554470, 67108901, 50331686, 83886118, 100663314};
+        val_arr_int_aU = new int[] {38, 16777254, 33554471, 67108902, 50331687, 83886119, 100663315};
+        val_arr_int_aV = new int[] {40, 16777256, 33554473, 67108904, 50331689, 83886121, -1};
+        val_arr_int_aW = new int[] {32, 16777248, 33554465, 67108896, 50331681, 83886113, -1};
+        val_arr_arr_int_h = new int[][] {new int[] {0, 1, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 1, 7, 1, 8, 0, 9, 0, 10, 0, 11, 0, 12, 0, 13, 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 1, 19, 0, 20, 0, 21, 0, 22, 1, 23, 1, 24, 0, 25, 0, 26, 0, 27, 0, 28, 0, -1, 0, -1, 0, 29, 0, 30, 1, 31, 0}, new int[] {16777217, 1, 16777218, 0, 16777219, 0, 16777220, 0, 16777221, 0, 16777222, 0, 16777223, 1, 16777224, 1, 16777225, 0, 16777226, 0, 16777227, 0, 16777228, 0, 16777229, 0, 16777230, 0, 16777231, 0, 16777232, 0, 16777233, 0, 16777234, 0, 16777235, 1, 16777236, 0, 16777237, 0, 16777238, 0, 16777239, 1, 16777240, 1, 16777241, 0, 16777242, 0, 16777243, 0, -1, 0, 16777244, 0, -1, 0, -1, 0, 16777245, 0, 16777246, 1, 16777247, 0}, new int[] {33554433, 1, 33554434, 0, 33554435, 0, 33554436, 0, 33554437, 0, 33554438, 0, 33554439, 1, 33554440, 1, 33554441, 0, 33554442, 0, 33554443, 0, 33554444, 0, 33554445, 0, 33554446, 0, 33554447, 0, 33554448, 0, 33554449, 0, 33554450, 0, 33554451, 1, 33554452, 0, 33554453, 0, 33554454, 0, 33554455, 1, 33554456, 1, 33554457, 0, 33554458, 0, 33554459, 1, 33554460, 0, 33554461, 0, -1, 0, -1, 0, 33554462, 0, 33554463, 1, 33554464, 0}, new int[] {67108865, 1, 67108866, 0, 67108867, 0, 67108868, 0, 67108869, 0, 67108870, 0, 67108871, 1, 67108872, 1, 67108873, 0, 67108874, 0, 67108875, 0, 67108876, 0, 67108877, 0, 67108878, 0, 67108879, 0, 67108880, 0, 67108881, 0, 67108882, 0, 67108883, 1, 67108884, 0, 67108885, 0, 67108886, 0, 67108887, 1, 67108888, 1, 67108889, 0, 67108890, 0, 67108891, 0, -1, 0, 67108892, 0, -1, 0, -1, 0, 67108893, 0, 67108894, 1, 67108895, 0}, new int[] {50331649, 1, 50331650, 0, 50331651, 0, 50331652, 0, 50331653, 0, 50331654, 0, 50331655, 1, 50331656, 1, 50331657, 0, 50331658, 0, 50331659, 0, 50331660, 0, 50331661, 0, 50331662, 0, 50331663, 0, 50331664, 0, 50331665, 0, 50331666, 0, 50331667, 1, 50331668, 0, 50331669, 0, 50331670, 0, 50331671, 1, 50331672, 1, 50331673, 0, 50331674, 0, 50331675, 0, 50331676, 0, 50331677, 0, -1, 0, -1, 0, 50331678, 0, 50331679, 1, 50331680, 0}, new int[] {83886081, 1, 83886082, 0, 83886083, 0, 83886084, 0, 83886085, 0, 83886086, 0, 83886087, 1, 83886088, 1, 83886089, 0, 83886090, 0, 83886091, 0, 83886092, 0, 83886093, 0, 83886094, 0, 83886095, 0, 83886096, 0, 83886097, 0, 83886098, 0, 83886099, 1, 83886100, 0, 83886101, 0, 83886102, 0, 83886103, 1, 83886104, 1, 83886105, 0, 83886106, 0, 83886107, 0, 83886107, 0, 83886108, 0, 83886109, 1, -1, 0, 83886110, 0, 83886111, 1, 83886112, 0}, new int[] {100663297, 1, 100663298, 0, 100663299, 0, 100663299, 0, 100663297, 1, 100663298, 0, 100663300, 1, 100663300, 1, 100663301, 0, 100663302, 0, 100663303, 0, -1, -1, -1, -1, -1, -1, 100663304, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 100663305, 0, 100663297, 1, 100663306, 1, -1, -1, -1, -1, 100663307, 0, 100663307, 0, -1, -1, -1, -1, -1, 0, 100663308, 0, 100663309, 1, 100663310, 0}};
+        val_arr_arr_short_c = new short[][] {new short[] {(short)-55, (short)3, (short)49, (short)-20}, new short[] {(short)-60, (short)36, (short)74, (short)-27}, new short[] {(short)-70, (short)15, (short)60, (short)-30}, new short[] {(short)-72, (short)13, (short)72, (short)-37}, new short[] {(short)-87, (short)11, (short)53, (short)-45}, new short[] {(short)-80, (short)23, (short)78, (short)-34}, new short[] {(short)-70, (short)-8, (short)45, (short)-10}};
+        val_arr_arr_short_d = new short[][] {new short[] {(short)-20, (short)40, (short)80, (short)0}, new short[] {(short)-15, (short)30, (short)75, (short)0}, new short[] {(short)-18, (short)44, (short)73, (short)0}, new short[] {(short)-22, (short)44, (short)85, (short)0}, new short[] {(short)-14, (short)31, (short)73, (short)0}, new short[] {(short)-17, (short)36, (short)77, (short)0}, new short[] {(short)-50, (short)12, (short)45, (short)-10}};
+        val_arr_arr_short_e = new short[][] {new short[] {(short)-90, (short)10, (short)52, (short)-70}, new short[] {(short)-100, (short)10, (short)58, (short)-80}, new short[] {(short)-90, (short)10, (short)68, (short)-70}, new short[] {(short)-90, (short)10, (short)47, (short)-70}, new short[] {(short)-90, (short)10, (short)47, (short)-70}, new short[] {(short)-90, (short)10, (short)47, (short)-70}, new short[] {(short)-105, (short)10, (short)72, (short)-85}};
+        val_arr_arr_short_f = new short[][] {new short[] {(short)-75, (short)10, (short)47, (short)-55}, new short[] {(short)-75, (short)10, (short)46, (short)-55}, new short[] {(short)-75, (short)10, (short)59, (short)-55}, new short[] {(short)-75, (short)10, (short)62, (short)-55}, new short[] {(short)-75, (short)10, (short)53, (short)-55}, new short[] {(short)-75, (short)10, (short)62, (short)-55}, new short[] {(short)-75, (short)10, (short)77, (short)-55}};
+        val_arr_int_aX = new int[] {750, 1000, 32, 16, 260, 49, 0, 0, 0, 0, 57, 0, 17, 0, 0, 51, 3, 17, 0, 0, 21, -1, 4, 0, 0, 16, -7, 5, 0, 0, 78, -48, 17, 0, 3, -19, -140, 3, 0, 2, -76, -62, 8, 0, 0};
+        val_arr_int_aY = new int[] {600, 1000, 92, 32, 400, 47, 0, 0, 0, 0, 39, -12, 2, 0, 0, 49, -30, 17, 0, 0, 27, -12, 3, 0, 0, -7, -31, 9, 0, 0, -41, -40, 8, 0, 0, -58, -48, 8, 0, 0, -52, -50, 9, 0, 0};
+        val_arr_int_aZ = new int[] {580, 1200, 48, 92, 800, 48, 1, 0, 0, 0, 37, 0, 3, 0, 0, 14, -171, 3, 0, 2, -36, -80, 9, 0, 0, -55, -37, 8, 0, 0, -43, 0, 8, 0, 0};
+    }
+
+    private static void initStaticTables6() {
+        val_arr_int_ba = new int[] {530, 1000, 64, 16, 350, 33, 0, 0, 0, 0, 17, -1, 4, 0, 0, 78, -48, 3, 0, 3, 62, -38, 3, 0, 3, -26, -132, 3, 0, 2, -76, -52, 8, 0, 0};
+        val_arr_int_bb = new int[] {580, 1000, 64, 16, 350, 37, 0, 0, 0, 0, 25, 0, 4, 0, 0, 25, -8, 5, 0, 0, 5, -3, 5, 0, 0, 59, -36, 3, 0, 3, -27, -109, 3, 0, 2, -73, -32, 8, 0, 0};
+        val_arr_int_bc = new int[] {850, 1000, -112, 86, 650, 32, -1, 0, 0, 0, 22, 0, 0, 0, 0, 64, -51, 3, 0, 3, -14, -110, 3, 0, 2, -8, 0, 8, 0, 0, 0, 0, 8, 0, 0};
+        val_arr_int_bd = new int[] {2, 3, 4, 6, 8, 7, 5};
+        val_arr_int_be = new int[] {80, 79, 82, 83, 81, 84, 80};
+        val_arr_int_bf = new int[] {74, 73, 76, 77, 75, 78, 74};
+        val_arr_arr_byte_e = new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)4, (byte)0, (byte)0}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)7, (byte)1, (byte)2}};
+        val_arr_arr_byte_f = new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)13, (byte)5, (byte)0, (byte)0}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)10, (byte)8, (byte)2, (byte)1}};
+        val_arr_arr_byte_g = new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)21, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)21, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}};
+        val_arr_arr_byte_h = new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)4, (byte)0, (byte)0}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)17, (byte)7, (byte)2, (byte)1}};
+        val_arr_arr_byte_i = new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)5, (byte)0, (byte)0}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)10, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)14, (byte)8, (byte)1, (byte)2}};
+        val_arr_arr_byte_j = new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)6, (byte)0, (byte)0}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)17, (byte)4, (byte)0, (byte)0}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)14, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)6, (byte)2, (byte)1}};
+        val_arr_arr_byte_k = new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)25, (byte)11, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)15, (byte)7, (byte)2, (byte)1}};
+        val_arr_arr_byte_l = new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)24, (byte)10, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)11, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)24, (byte)10, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)11, (byte)8, (byte)2, (byte)1}};
+        val_arr_arr_byte_m = new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)25, (byte)11, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)12, (byte)6, (byte)1, (byte)2}};
+        val_arr_arr_byte_n = new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)5, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)5, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)7, (byte)2, (byte)1}};
+        val_arr_arr_byte_o = new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)5, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)8, (byte)2, (byte)1}};
+        val_arr_arr_byte_p = new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)5, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)14, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}};
+        val_arr_arr_byte_q = new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)2, (byte)1}};
+        val_arr_arr_byte_r = new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)9, (byte)2, (byte)1}};
+        val_arr_arr_byte_s = new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}};
+        val_arr_arr_byte_t = new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)10, (byte)14, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)2, (byte)1}};
+        val_arr_arr_byte_u = new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)2, (byte)1}};
+        val_arr_arr_byte_v = new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)12, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}};
+        val_arr_arr_arr_arr_byte_a = new byte[][][][] {new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)21, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)21, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}}, new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)13, (byte)5, (byte)0, (byte)0}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)10, (byte)8, (byte)2, (byte)1}}, new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)4, (byte)0, (byte)0}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)7, (byte)1, (byte)2}}}, new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)6, (byte)0, (byte)0}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)17, (byte)4, (byte)0, (byte)0}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)14, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)6, (byte)2, (byte)1}}, new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)5, (byte)0, (byte)0}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)10, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)14, (byte)8, (byte)1, (byte)2}}, new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)4, (byte)0, (byte)0}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)17, (byte)7, (byte)2, (byte)1}}}, new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)25, (byte)11, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)10, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)12, (byte)6, (byte)1, (byte)2}}, new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)24, (byte)10, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)11, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)24, (byte)10, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)11, (byte)8, (byte)2, (byte)1}}, new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)25, (byte)11, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)10, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)15, (byte)7, (byte)2, (byte)1}}}, new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)5, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)14, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}}, new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)5, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)8, (byte)2, (byte)1}}, new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)5, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)5, (byte)4, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)7, (byte)2, (byte)1}}}, new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)12, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}}, new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)5, (byte)2, (byte)1}}, new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)10, (byte)14, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)25, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)2, (byte)1}}}, new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)15, (byte)15, (byte)6, (byte)1, (byte)2}}, new byte[][] {new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)5, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)14, (byte)16, (byte)9, (byte)2, (byte)1}}, new byte[][] {new byte[] {(byte)0}, new byte[] {(byte)25, (byte)8, (byte)7, (byte)0, (byte)1}, new byte[] {(byte)0}, new byte[] {(byte)10, (byte)9, (byte)6, (byte)0, (byte)1}, new byte[] {(byte)1}, new byte[] {(byte)24, (byte)9, (byte)7, (byte)2, (byte)1}}}, null};
+    }
+
+    private static void initStaticTables7() {
+        val_arr_arr_int_i = new int[][] {new int[] {750, 1000, 32, 16, 260, 49, 0, 0, 0, 0, 57, 0, 17, 0, 0, 51, 3, 17, 0, 0, 21, -1, 4, 0, 0, 16, -7, 5, 0, 0, 78, -48, 17, 0, 3, -19, -140, 3, 0, 2, -76, -62, 8, 0, 0}, new int[] {600, 1000, 92, 32, 400, 47, 0, 0, 0, 0, 39, -12, 2, 0, 0, 49, -30, 17, 0, 0, 27, -12, 3, 0, 0, -7, -31, 9, 0, 0, -41, -40, 8, 0, 0, -58, -48, 8, 0, 0, -52, -50, 9, 0, 0}, new int[] {580, 1200, 48, 92, 800, 48, 1, 0, 0, 0, 37, 0, 3, 0, 0, 14, -171, 3, 0, 2, -36, -80, 9, 0, 0, -55, -37, 8, 0, 0, -43, 0, 8, 0, 0}, new int[] {530, 1000, 64, 16, 350, 33, 0, 0, 0, 0, 17, -1, 4, 0, 0, 78, -48, 3, 0, 3, 62, -38, 3, 0, 3, -26, -132, 3, 0, 2, -76, -52, 8, 0, 0}, new int[] {580, 1000, 64, 16, 350, 37, 0, 0, 0, 0, 25, 0, 4, 0, 0, 25, -8, 5, 0, 0, 5, -3, 5, 0, 0, 59, -36, 3, 0, 3, -27, -109, 3, 0, 2, -73, -32, 8, 0, 0}, new int[] {850, 1000, -112, 86, 650, 32, -1, 0, 0, 0, 22, 0, 0, 0, 0, 64, -51, 3, 0, 3, -14, -110, 3, 0, 2, -8, 0, 8, 0, 0, 0, 0, 8, 0, 0}, null};
+        val_arr_arr_arr_byte_b = new byte[][][] {new byte[][] {new byte[] {(byte)9, (byte)9, (byte)0}, new byte[] {(byte)8, (byte)9, (byte)0}, new byte[] {(byte)8, (byte)8, (byte)7, (byte)1}, new byte[] {(byte)8, (byte)8, (byte)1}}, new byte[][] {new byte[] {(byte)8, (byte)7, (byte)0}, new byte[] {(byte)9, (byte)9, (byte)1}, new byte[] {(byte)9, (byte)9, (byte)9, (byte)0}, new byte[] {(byte)8, (byte)8, (byte)1}}, new byte[][] {new byte[] {(byte)7, (byte)7, (byte)0}, new byte[] {(byte)9, (byte)9, (byte)9, (byte)0}, new byte[] {(byte)7, (byte)7, (byte)7, (byte)1}, new byte[] {(byte)8, (byte)8, (byte)1}}, new byte[][] {new byte[] {(byte)7, (byte)7, (byte)0}, new byte[] {(byte)7, (byte)9, (byte)0}, new byte[] {(byte)7, (byte)7, (byte)7, (byte)1}, new byte[] {(byte)8, (byte)8, (byte)1}}, new byte[][] {new byte[] {(byte)7, (byte)7, (byte)0}, new byte[] {(byte)7, (byte)7, (byte)1}, new byte[] {(byte)7, (byte)7, (byte)7, (byte)1}, new byte[] {(byte)8, (byte)8, (byte)1}}, new byte[][] {new byte[] {(byte)9, (byte)9, (byte)1}, new byte[] {(byte)7, (byte)9, (byte)0}, new byte[] {(byte)7, (byte)7, (byte)7, (byte)1}, new byte[] {(byte)8, (byte)8, (byte)1}}, new byte[][] {new byte[] {(byte)7, (byte)7, (byte)0}, new byte[] {(byte)7, (byte)7, (byte)1}, null, null}};
+        val_arr_arr_byte_w = new byte[][] {new byte[] {(byte)3}, new byte[] {(byte)9, (byte)3}, new byte[] {(byte)3}, new byte[] {(byte)9, (byte)3}};
+        val_arr_arr_short_g = new short[][] {new short[] {(short)0, (short)16, (short)-86, (short)50}, new short[] {(short)1, (short)34, (short)-66, (short)150}, new short[] {(short)2, (short)24, (short)-66, (short)200}, new short[] {(short)5, (short)42, (short)-69, (short)100}, new short[] {(short)4, (short)14, (short)-86, (short)170}, new short[] {(short)3, (short)8, (short)-76, (short)0}, new short[] {(short)6, (short)16, (short)-96, (short)280}};
+        val_arr_arr_short_h = new short[][] {null, null, new short[] {(short)2, (short)26, (short)-80, (short)100}, null, new short[] {(short)4, (short)46, (short)-110, (short)0}, null, null};
+        val_arr_short_i = new short[] {(short)-48, (short)-24, (short)24, (short)0};
+        val_arr_short_j = new short[] {(short)-48, (short)-48, (short)32, (short)0};
+        val_arr_short_k = new short[] {(short)-88, (short)-48, (short)32, (short)-48};
+        val_arr_short_l = new short[] {(short)-80, (short)-22, (short)22, (short)0};
+        val_arr_short_m = new short[] {(short)-94, (short)-24, (short)24, (short)-49};
+        val_arr_short_n = new short[] {(short)-96, (short)-22, (short)22, (short)0};
+        val_arr_short_o = new short[] {(short)-120, (short)8, (short)48, (short)-64};
+        val_arr_short_p = new short[] {(short)-16, (short)16, (short)64, (short)0};
+        val_arr_short_q = new short[] {(short)-90, (short)16, (short)48, (short)-20};
+        val_arr_short_r = new short[] {(short)-100, (short)32, (short)70, (short)-70};
+        val_arr_short_s = new short[] {(short)-160, (short)-16, (short)80, (short)-60};
+        val_arr_short_t = new short[] {(short)-120, (short)8, (short)48, (short)-12};
+        val_arr_short_u = new short[] {(short)32, (short)32, (short)400};
+        val_arr_short_v = new short[] {(short)92, (short)92, (short)800};
+        val_arr_short_w = new short[] {(short)64, (short)128, (short)1000};
+        val_arr_short_x = new short[] {(short)70, (short)245, (short)1600};
+        val_arr_short_y = new short[] {(short)32, (short)32, (short)400};
+        val_arr_short_z = new short[] {(short)64, (short)92, (short)700};
+        val_arr_short_A = new short[] {(short)64, (short)128, (short)1000};
+        val_arr_short_B = new short[] {(short)96, (short)64, (short)600};
+    }
+
+    private static void initStaticTables8() {
+        val_arr_short_C = new short[] {(short)130, (short)72, (short)730};
+        val_arr_short_D = new short[] {(short)64, (short)32, (short)400};
+        val_arr_short_E = new short[] {(short)-80, (short)-16, (short)68, (short)-50};
+        val_arr_short_F = new short[] {(short)-110, (short)10, (short)55, (short)-10};
+        val_arr_arr_byte_x = new byte[][] {new byte[] {(byte)2, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)24, (byte)25, (byte)45, (byte)44, (byte)6, (byte)-1, (byte)39, (byte)6, (byte)12, (byte)9}, new byte[] {(byte)2, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)24, (byte)25, (byte)52, (byte)-1, (byte)-1, (byte)2, (byte)6, (byte)-1, (byte)12, (byte)9}, new byte[] {(byte)1, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)20, (byte)21, (byte)31, (byte)29, (byte)6, (byte)30, (byte)-1, (byte)6, (byte)11, (byte)20}, new byte[] {(byte)1, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)20, (byte)21, (byte)50, (byte)-1, (byte)6, (byte)-1, (byte)34, (byte)6, (byte)11, (byte)20}, new byte[] {(byte)3, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)22, (byte)23, (byte)35, (byte)34, (byte)34, (byte)36, (byte)-1, (byte)-1, (byte)33, (byte)23}, new byte[] {(byte)0, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)18, (byte)19, (byte)10, (byte)-1, (byte)6, (byte)34, (byte)-1, (byte)-1, (byte)12, (byte)19}, new byte[] {(byte)4, (byte)6, (byte)39, (byte)-1, (byte)-1, (byte)26, (byte)27, (byte)4, (byte)48, (byte)6, (byte)4, (byte)-1, (byte)6, (byte)47, (byte)9}};
+        val_arr_int_bg = new int[] {1500, 1500, 1000, 800, 900, 800, 900};
+        val_arr_int_bi = new int[] {134217831, 134217828, 134217829, 134217833, 134217830, 134217832, 134217834};
+        val_arr_arr_int_j = new int[][] {new int[] {134217746, 0, 134217745, 0}, new int[] {134217740, 0, 134217741, 0, 134217742, 0}, new int[] {134217743, 1, 134217743, 1}, new int[] {134217750, 1, 134217751, 0, 134217753, 0, 134217752, 1}, new int[] {134217744, 0, 134217744, 0, 134217744, 0}, new int[] {134217747, 1, 134217748, 0, 134217749, 0}, new int[] {134217754, 1, 134217754, 0}};
+        val_arr_arr_short_a = new short[][] {new short[] {(short)-5, (short)-32, (short)0, (short)5}, new short[] {(short)-11, (short)15, (short)64, (short)11}, new short[] {(short)-19, (short)-19, (short)18, (short)18}, new short[] {(short)-37, (short)0, (short)40, (short)59}, new short[] {(short)-9, (short)0, (short)88, (short)9}, new short[] {(short)-16, (short)-16, (short)14, (short)16}, new short[] {(short)-26, (short)-28, (short)25, (short)21}};
+        val_arr_arr_short_b = new short[][] {new short[] {(short)-5, (short)-32, (short)0, (short)5}, new short[] {(short)-11, (short)15, (short)44, (short)11}, new short[] {(short)-19, (short)-19, (short)18, (short)18}, new short[] {(short)-37, (short)0, (short)40, (short)59}, new short[] {(short)-9, (short)0, (short)44, (short)9}, new short[] {(short)-16, (short)-16, (short)14, (short)16}, new short[] {(short)-26, (short)-28, (short)25, (short)21}};
+        val_arr_int_bj = new int[] {5, 0, 15, 0, 15, 18, 25};
+        val_arr_long_a = new long[] {0L, 1L, 2L, 3L, 4L, 5L, 7L, 8L, 9L, 10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L, 23L, 24L, 25L, 26L, 27L, 28L, 28L, 29L, 30L, 31L, 32L, 32L, 33L, 34L, 35L, 35L, 36L, 37L, 37L, 38L, 39L, 39L, 40L, 40L, 41L, 41L, 42L, 42L, 43L, 43L, 44L, 44L, 44L, 45L, 45L, 45L, 45L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 46L, 45L, 45L, 45L, 44L, 44L, 44L, 43L, 43L, 43L, 42L, 42L, 41L, 41L, 40L, 39L, 39L, 38L, 38L, 37L, 36L, 35L, 35L, 34L, 33L, 32L, 31L, 31L, 30L, 29L, 28L, 27L, 26L, 25L, 24L, 23L, 22L, 21L, 19L, 18L, 17L, 16L, 15L, 14L, 12L, 11L, 10L, 8L, 7L, 6L, 4L, 3L, 1L, 0L};
+        val_int_eB = -1;
+        val_int_eJ = -1;
+        val_arr_int_bs = new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        val_arr_arr_int_k = new int[][] {new int[] {20496, 65536, 0, 0, 256, 513, 1024, 8200, 32770, 2052, 0}, new int[] {20496, 65536, 0, 0, 1024, 513, 256, 2052, 32770, 8200, 0}, new int[] {0, 0, 4112, 16384, 256, 513, 1024, 8200, 32770, 2052, 0}, new int[] {0, 0, 4112, 16384, 1024, 513, 256, 2052, 32770, 8200, 0}};
+        val_arr_arr_arr_byte_c = new byte[][][] {new byte[][] {new byte[] {(byte)7, (byte)7}, new byte[] {(byte)0}, new byte[] {(byte)1}, new byte[] {(byte)9, (byte)1}, new byte[] {(byte)7, (byte)0}, new byte[] {(byte)9, (byte)9, (byte)9}}, new byte[][] {new byte[] {(byte)7, (byte)7}, new byte[] {(byte)2}, new byte[] {(byte)7, (byte)2}, new byte[] {(byte)9, (byte)2}, new byte[] {(byte)3}, new byte[] {(byte)9, (byte)9, (byte)9}}};
+        val_arr_arr_byte_z = new byte[][] {new byte[] {(byte)7, (byte)7, (byte)9, (byte)9}, new byte[] {(byte)9, (byte)9, (byte)7, (byte)7}, new byte[] {(byte)5, (byte)8, (byte)5, (byte)8}, new byte[] {(byte)6, (byte)5, (byte)4}, new byte[] {(byte)4, (byte)5, (byte)6}, new byte[] {(byte)5, (byte)8, (byte)9, (byte)7}, new byte[] {(byte)8, (byte)8, (byte)5, (byte)5}, new byte[] {(byte)9, (byte)9, (byte)9, (byte)9}, new byte[] {(byte)5, (byte)5, (byte)7, (byte)7}, new byte[] {(byte)5, (byte)5, (byte)9, (byte)9}, new byte[] {(byte)4, (byte)4, (byte)6, (byte)6}};
+        val_arr_string_e = new String[] {"INSTANT KILL P1", "INSTANT KILL P2", "FINISH EXTENSION", "GODMODE P1", "GODMODE P2", "INSTANT TIMEOVER", "A.I.", "SCORE BONUS", "CHANGE P1", "CHANGE P2", "CHANGE ARENA"};
+        val_byte_a = (byte)8;
+        val_byte_b = (byte)14;
+        val_arr_byte_a = new byte[] {(byte)0, (byte)0, (byte)0, (byte)0, (byte)0};
+    }
+
+        static {
+        initStaticTables1();
+        initStaticTables2();
+        initStaticTables3();
+        initStaticTables4();
+        initStaticTables5();
+        initStaticTables6();
+        initStaticTables7();
+        initStaticTables8();
+    }
+
 }
