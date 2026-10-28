@@ -14,6 +14,10 @@ vineflower_renamed_test/
 vineflower_test2/
 test_full_clean/
 src_clean/
+cfr_deobf_out/
+cfr_fresh/
+scratch/
+vf_test_options/
 
 # Intermediate jars & scratch scripts
 Ultimate_Mortal_Kombat_3_remapped.jar

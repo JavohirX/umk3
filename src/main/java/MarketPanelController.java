@@ -234,7 +234,7 @@ public final class MarketPanelController {
                         for (int var20 = 0; var20 < this.val_arr_arr_string_a[var6].length; var20++) {
                            if (this.val_arr_arr_string_a[var6][var20].equals(var31) && !var26.contains(var31)) {
                               var26.addElement(var31);
-                              var25.addElement(new Short(this.val_arr_arr_short_c[var6][var20]));
+                              var25.addElement(Short.valueOf(this.val_arr_arr_short_c[var6][var20]));
                            }
                         }
                      } while (var1 != -1);
