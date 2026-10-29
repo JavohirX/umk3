@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/umk3-bot
-ExecStart=/opt/umk3-bot/venv/bin/python3 /opt/umk3-bot/bot.py
+WorkingDirectory=/var/www/umk3
+ExecStart=/var/www/umk3/venv/bin/python3 /var/www/umk3/bot.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

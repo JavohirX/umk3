@@ -19,11 +19,11 @@ from aiogram.types import (
 
 load_dotenv()
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TG_BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://your-domain.com/player/")
 
 if not TOKEN:
-    print("Notice: TELEGRAM_BOT_TOKEN is not set in .env. Configure it before launching bot.py.")
+    print("Notice: TELEGRAM_BOT_TOKEN or TG_BOT_TOKEN is not set in .env. Configure it before launching bot.py.")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
