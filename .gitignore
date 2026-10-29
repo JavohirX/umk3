@@ -32,6 +32,7 @@ tools/*.class
 
 
 # Logs & Environment
+node_modules/
 *.log
 launcher_log.txt
 .env
