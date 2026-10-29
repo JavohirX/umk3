@@ -41,7 +41,15 @@ jobs:
               cd /var/www/umk3
             fi
 
-            echo "=== 3. Setting up Python environment for Telegram Bot ==="
+            echo "=== 3. Setting up Python environment & secrets for Telegram Bot ==="
+            if [ -n "${{ secrets.TG_BOT_TOKEN }}" ]; then
+              echo "TELEGRAM_BOT_TOKEN=${{ secrets.TG_BOT_TOKEN }}" > .env
+              echo "TG_BOT_TOKEN=${{ secrets.TG_BOT_TOKEN }}" >> .env
+              if [ -n "${{ secrets.VPS_HOST }}" ]; then
+                echo "WEBAPP_URL=https://${{ secrets.VPS_HOST }}/player/" >> .env
+              fi
+            fi
+
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
@@ -52,8 +60,9 @@ jobs:
             if [ -f "vps/umk3-bot.service" ]; then
               $SUDO cp vps/umk3-bot.service /etc/systemd/system/umk3-bot.service || true
               $SUDO systemctl daemon-reload || true
+              $SUDO systemctl enable umk3-bot || true
             fi
-            $SUDO systemctl reload nginx || true
+            $SUDO nginx -t && $SUDO systemctl reload nginx || true
             $SUDO systemctl restart umk3-bot || true
 
             echo "=== Deployment to VPS Completed Successfully! ==="
