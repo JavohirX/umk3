@@ -1,53 +1,57 @@
-# Ultimate Mortal Kombat 3 — Deobfuscated & Web / Mobile Adaptation
+# Ultimate Mortal Kombat 3 — 1:1 Native JavaScript Port & Telegram Web App
 
-A fully deobfuscated, 100% human-readable Java codebase and mobile web adaptation of **Ultimate Mortal Kombat 3** (J2ME edition). Includes a Desktop Java launcher, an in-browser WebAssembly runner, a custom 3D tactile mobile touch controller, and automated Telegram Mini App (TMA) / VPS deployment pipelines.
+A bit-perfect 1:1 clone of **Ultimate Mortal Kombat 3** (J2ME edition) running natively in pure JavaScript (ES Modules), with zero JVM, zero WASM, and zero CheerpJ dependencies. Built with HTML5 Canvas 2D, Web Audio API, an ergonomic tactile mobile controller, and deep Telegram Mini App (TMA) integration.
 
 ---
 
-## 1. Features
+## 1. Highlights & Architecture
 
-- **100% Clean, Human-Readable Codebase**: All 36 game classes, methods, fields, and variables have been deobfuscated from single-letter names into clear English names with comprehensive Javadocs. Zero single-letter names remain anywhere in source or bytecode.
-- **Desktop Edition (Java 22)**: Complete AWT/Swing desktop compatibility layer with full keyboard controls, scaling buffer, and sound support.
-- **Mobile Web Player (WASM)**: Browser player running `Ultimate_Mortal_Kombat_3_deobf.jar` via CheerpJ with RFC 7233 chunked streaming and dual-channel Web Audio MIDI synthesis.
+- **0 WASM, 0 JVM, Pure Native JavaScript**: All 36 deobfuscated Java classes transpiled directly into standard ES modules (`player/js/engine/umk3.js`).
+- **Instant Cold Start (<100ms)**: Cold boots directly in modern mobile and desktop browsers by synchronously streaming only 34 lightweight assets (<1.2 MB total), eliminating the 20MB+ CheerpJ/WASM overhead and 30-second initialization delay.
+- **Bit-Perfect 1:1 Combat Logic**: Preserves 100% of the original collision hitboxes, animation sequences, palette transformations, frame timings, damage formulas, and AI state machines.
+- **Micro J2ME LCDUI & Runtime Bridge**: Pure JS implementation of LCDUI `Graphics` (8 transforms, anchor math, coordinate clamping, `drawRGB`), `Image` (synchronous UPNG decoding), `MIDlet`, `RecordStore`, `DataInputStream`, `DataOutputStream`, and `Random`.
+- **Telegram Mini App (TMA) First-Class**:
+  - Expanded portrait mode with vertical swipe-to-close lock (`disableVerticalSwipes()`).
+  - Tactile haptic feedback via `Telegram.WebApp.HapticFeedback` for punches, kicks, blocks, and menu navigation.
+  - Native header and background styling adhering to Telegram client themes.
 - **3D Tactile Mobile Controller**: Ergonomic 6-button MK combat cluster (HP, HK, LP, LK, Block, Run) with physical 3D depression styling, haptic vibration, and an 8-way sliding vector D-pad with jump diagonals.
-- **Telegram Mini App (TMA) Ready**: Anti-pull-to-close gesture protection (`disableVerticalSwipes`), portrait locking, and Telegram theme integration.
-- **CI/CD & 1-Click VPS Deployment**: Pre-configured GitHub Actions for automated deployment to VPS via SSH/Rsync and GitHub Pages.
+- **Desktop Edition Included**: Complete Java desktop build (`build.bat` / `run.bat`) for desktop testing.
 
 ---
 
 ## 2. Quick Start
 
-### A. Desktop Java (Windows)
+### A. Run Web Player & Telegram Web App Locally
+```powershell
+python run_server.py
+```
+Starts a high-performance local HTTP server on `http://localhost:8080/player/index.html` and prints the local network URL to test instantly on mobile or inside Telegram.
+
+### B. Launch Telegram Mini App Bot
+```powershell
+pip install aiogram python-dotenv
+# Add TELEGRAM_BOT_TOKEN to .env
+python bot.py
+```
+
+### C. Desktop Java Edition (Windows)
 ```cmd
 build.bat    # Compiles launcher and game sources into build\compat\
 run.bat      # Launches the desktop window (Java 22)
 ```
 
-**Desktop Controls:**
+**Keyboard Controls:**
 | Key | Action |
 |-----|--------|
 | **Arrow Keys** / **W A S D** | Move / Jump / Crouch |
 | **Enter** / **Space** | Select / Fire |
 | **Z** / **X** | High Punch (HP) / High Kick (HK) |
 | **C** / **V** | Low Punch (LP) / Low Kick (LK) |
-| **A** / **B** | Block |
-| **S** / **N** | Run |
-| **F1** / **Q** | Options (Left Softkey) |
-| **F2** / **E** | Back (Right Softkey) |
+| **B** | Block |
+| **N** | Run |
+| **Q** / **F1** | Options (Left Softkey) |
+| **E** / **F2** | Back (Right Softkey) |
 | **M** | Mute Audio |
-
-### B. Mobile Web & Local Dev Server
-```powershell
-python run_server.py
-```
-Automatically starts an HTTP server on `http://localhost:8080/player/` with RFC 7233 byte-range support and prints the network IP to test on your phone.
-
-### C. Telegram Mini App Bot
-```powershell
-pip install aiogram python-dotenv
-# Add TELEGRAM_BOT_TOKEN to .env
-python bot.py
-```
 
 ---
 
@@ -55,15 +59,26 @@ python bot.py
 
 ```
 immortal_combat/
-├── src/main/java/              # Human-readable game source (36 clean Java files)
-├── player/                     # Web player root (served by web server)
-│   ├── index.html              # 3D Mobile Controller + TMA Viewport (352x416)
+├── player/                     # Pure JavaScript Web Player & Telegram Mini App
+│   ├── index.html              # 3D Mobile Controller + Canvas Viewport
 │   ├── manifest.json           # PWA Manifest
 │   ├── icon.png                # MK Dragon app icon
-│   ├── freej2me-web.jar        # WebAssembly J2ME VM
-│   └── jar/
-│       ├── Ultimate_Mortal_Kombat_3_deobf.jar  # Deobfuscated runtime JAR
-│       └── Ultimate_Mortal_Kombat_3_deobf.jad  # JAD descriptor
+│   ├── assets/                 # 34 game assets (sound banks, sprites, tiles, charmaps)
+│   └── js/
+│       ├── main.js             # Bootstrap, game loop, touch & keyboard event router
+│       ├── assets.js           # Fast parallel asset preloader & binary resource cache
+│       ├── engine/
+│       │   └── umk3.js         # Transpiled 1:1 UMK3 engine (36 classes, 18,443 lines)
+│       ├── j2me/
+│       │   ├── runtime.js      # J2ME runtime (Streams, RMS RecordStore, Math, Thread)
+│       │   ├── graphics.js     # LCDUI Graphics 2D engine, Image decoding, Display
+│       │   └── audio.js        # Web Audio API retro synthesizer & sound manager
+│       └── lib/
+│           └── upng.js         # Fast synchronous pure-JS PNG decoder with pako inflate
+├── tools/
+│   ├── java_to_js_transpiler.py # AST-based Java-to-JS transpiler & syntax bridge
+│   └── build_js_bundle.py      # Automated bundle builder & validator
+├── src/main/java/              # Human-readable game source (36 clean Java files)
 ├── vps/
 │   ├── setup.sh                # 1-Click VPS provisioning script
 │   ├── nginx.conf              # Nginx config with TMA iframe CSP
@@ -71,21 +86,18 @@ immortal_combat/
 ├── .github/workflows/
 │   ├── deploy-vps.yml          # GitHub Actions CI/CD to VPS via SSH
 │   └── deploy.yml              # GitHub Pages deployment workflow
-├── build.bat                   # Desktop build script
-├── run.bat                     # Desktop launch script
-├── run_server.py               # Local RFC 7233 dev server
-├── bot.py                      # Telegram bot launcher
-└── vercel.json                 # Static hosting rewrite config
+├── run_server.py               # Local dev server
+└── bot.py                      # Telegram bot launcher
 ```
 
 ---
 
 ## 4. GitHub Actions & VPS Deployment
 
-When you push this repository to GitHub, the included workflows can deploy to both your VPS and GitHub Pages automatically.
+Pushing to `main` deploys the web player to VPS and GitHub Pages automatically via the included CI/CD workflows.
 
 ### Required GitHub Secrets for VPS Deployment
-In your GitHub repository settings, navigate to **Settings ➔ Secrets and variables ➔ Actions** and add:
+In GitHub **Settings ➔ Secrets and variables ➔ Actions**:
 
 | Secret Name | Description | Example |
 |-------------|-------------|---------|

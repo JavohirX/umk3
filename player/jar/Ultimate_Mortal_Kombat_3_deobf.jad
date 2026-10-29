@@ -1,8 +1,0 @@
-MIDlet-Name: Ultimate Mortal Kombat 3
-MIDlet-Version: 1.0.0
-MIDlet-Vendor: EA Mobile
-MIDlet-1: Ultimate Mortal Kombat 3, /icon.png, com.ea.sdk.SDKMIDlet
-MicroEdition-Profile: MIDP-2.0
-MicroEdition-Configuration: CLDC-1.1
-MIDlet-Jar-URL: Ultimate_Mortal_Kombat_3_deobf.jar
-MIDlet-Jar-Size: 612485

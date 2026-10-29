@@ -9,8 +9,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0a0a0e">
 
-    <!-- CheerpJ WebAssembly JVM Loader -->
-    <script src="https://cjrtnc.leaningtech.com/3.0/cj3loader.js"></script>
     <!-- Telegram Mini App SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
@@ -432,12 +430,12 @@
         <div id="screen-container">
             <div id="splash-screen">
                 <div class="splash-title">Mortal Kombat 3</div>
-                <div id="loading-text">Loading WebAssembly Runtime...</div>
-                <div id="loading-subtext">Initializing CheerpJ JVM...</div>
+                <div id="loading-text">Loading MK Assets...</div>
+                <div id="loading-subtext">Initializing Native JS Engine...</div>
                 <div class="progress-bar-container">
                     <div id="progress-bar-fill"></div>
                 </div>
-                <div id="loading-timer">Booting game...</div>
+                <div id="loading-timer">Native 1:1 Engine</div>
             </div>
             <canvas id="display" tabindex="0"></canvas>
         </div>
@@ -551,7 +549,7 @@
         }, { passive: true });
     </script>
 
-    <!-- App Module Bootstrap -->
-    <script type="module" src="src/main.js"></script>
+    <!-- Native 1:1 JS Engine App Bootstrap -->
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
