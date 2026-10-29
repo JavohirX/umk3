@@ -119,24 +119,46 @@ function triggerButtonActive(code, isActive) {
         if (isActive) b.classList.add('active');
         else b.classList.remove('active');
     });
+
+    // Also visually highlight joystick indicator arrows when keyboard arrow keys are pressed
+    const joyArrowMap = {
+        'ArrowUp': 'up',
+        'ArrowDown': 'down',
+        'ArrowLeft': 'left',
+        'ArrowRight': 'right',
+        'KeyW': 'up',
+        'KeyS': 'down',
+        'KeyA': 'left',
+        'KeyD': 'right'
+    };
+    const joyDir = joyArrowMap[code];
+    if (joyDir) {
+        const ind = document.querySelector(`[data-joy-dir="${joyDir}"]`);
+        if (ind) {
+            if (isActive) ind.classList.add('active');
+            else ind.classList.remove('active');
+        }
+    }
 }
 
 function setupInputControls() {
-    // --- 1. D-PAD SLIDING FINGER CONTROLLER (1:1 from nightmare-b4-xmas) ---
-    const dpadGrid = document.getElementById('dpad-grid') || document.querySelector('.dpad-8way-grid');
-    if (dpadGrid) {
-        let currentDir = null;
-        let dpadPointerId = null;
+    // --- 1. VIRTUAL 360° JOYSTICK CONTROLLER (FREE ROTATION WITH 8-WAY DIRECTIONAL FEEDBACK) ---
+    const joyZone = document.getElementById('joystick-zone');
+    const joyThumb = document.getElementById('joystick-thumb');
+    if (joyZone && joyThumb) {
+        let joyPointerId = null;
+        let currentJoyDir = null;
+        let hasMovedBeyondDeadzone = false;
 
-        const dirButtons = {
-            'up': dpadGrid.querySelector('[data-dir="up"]'),
-            'down': dpadGrid.querySelector('[data-dir="down"]'),
-            'left': dpadGrid.querySelector('[data-dir="left"]'),
-            'right': dpadGrid.querySelector('[data-dir="right"]'),
-            'up-left': dpadGrid.querySelector('[data-dir="up-left"]'),
-            'up-right': dpadGrid.querySelector('[data-dir="up-right"]'),
-            'down-left': dpadGrid.querySelector('[data-dir="down-left"]'),
-            'down-right': dpadGrid.querySelector('[data-dir="down-right"]')
+        const joyIndicators = {
+            'up': joyZone.querySelector('[data-joy-dir="up"]'),
+            'down': joyZone.querySelector('[data-joy-dir="down"]'),
+            'left': joyZone.querySelector('[data-joy-dir="left"]'),
+            'right': joyZone.querySelector('[data-joy-dir="right"]'),
+            'up-left': joyZone.querySelector('[data-joy-dir="up-left"]'),
+            'up-right': joyZone.querySelector('[data-joy-dir="up-right"]'),
+            'down-left': joyZone.querySelector('[data-joy-dir="down-left"]'),
+            'down-right': joyZone.querySelector('[data-joy-dir="down-right"]')
         };
 
         const DIR_KEYS = {
@@ -150,68 +172,37 @@ function setupInputControls() {
             'down-right': [-2, -4]
         };
 
-        function getDirectionAtPoint(clientX, clientY) {
-            const el = document.elementFromPoint(clientX, clientY);
-            if (el) {
-                const btn = el.closest('.dpad-cell[data-dir]');
-                if (btn) return btn.getAttribute('data-dir');
-                if (el.closest('.dpad-center-hub')) return null;
-            }
+        const SECTORS = [
+            'right',       // 0: [337.5°, 22.5°)
+            'down-right',  // 1: [22.5°, 67.5°)
+            'down',        // 2: [67.5°, 112.5°)
+            'down-left',   // 3: [112.5°, 157.5°)
+            'left',        // 4: [157.5°, 202.5°)
+            'up-left',     // 5: [202.5°, 247.5°)
+            'up',          // 6: [247.5°, 292.5°)
+            'up-right'     // 7: [292.5°, 337.5°)
+        ];
 
-            // Fallback: 360-degree radial vector geometry from D-pad center
-            const rect = dpadGrid.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            const halfW = (rect.width / 2) || 1;
-            const halfH = (rect.height / 2) || 1;
-            const nx = (clientX - cx) / halfW;
-            const ny = (clientY - cy) / halfH;
-            const dist = Math.hypot(nx, ny);
-
-            const deadZone = 0.35;
-            const maxRadius = 1.35;
-
-            if (dist < deadZone || dist > maxRadius) {
-                return null;
-            }
-
-            let deg = Math.atan2(ny, nx) * (180 / Math.PI);
-            if (deg < 0) deg += 360;
-
-            const sector = Math.floor(((deg + 22.5) % 360) / 45);
-            const SECTORS = [
-                'right',       // 0: [337.5°, 22.5°)
-                'down-right',  // 1: [22.5°, 67.5°)
-                'down',        // 2: [67.5°, 112.5°)
-                'down-left',   // 3: [112.5°, 157.5°)
-                'left',        // 4: [157.5°, 202.5°)
-                'up-left',     // 5: [202.5°, 247.5°)
-                'up',          // 6: [247.5°, 292.5°)
-                'up-right'     // 7: [292.5°, 337.5°)
-            ];
-            return SECTORS[sector] || null;
-        }
-
-        function setDpadDirection(newDir) {
-            if (newDir === currentDir) return;
+        function setJoyDirection(newDir) {
+            if (newDir === currentJoyDir) return;
 
             // Release previous direction
-            if (currentDir) {
-                const oldBtn = dirButtons[currentDir];
-                if (oldBtn) oldBtn.classList.remove('active');
-                const oldKeys = DIR_KEYS[currentDir];
+            if (currentJoyDir) {
+                const oldInd = joyIndicators[currentJoyDir];
+                if (oldInd) oldInd.classList.remove('active');
+                const oldKeys = DIR_KEYS[currentJoyDir];
                 if (oldKeys) {
                     oldKeys.forEach(k => sendKeyEvent(k, false));
                 }
             }
 
-            currentDir = newDir;
+            currentJoyDir = newDir;
 
             // Press new direction
-            if (currentDir) {
-                const newBtn = dirButtons[currentDir];
-                if (newBtn) newBtn.classList.add('active');
-                const newKeys = DIR_KEYS[currentDir];
+            if (currentJoyDir) {
+                const newInd = joyIndicators[currentJoyDir];
+                if (newInd) newInd.classList.add('active');
+                const newKeys = DIR_KEYS[currentJoyDir];
                 if (newKeys) {
                     newKeys.forEach(k => sendKeyEvent(k, true));
                 }
@@ -220,47 +211,85 @@ function setupInputControls() {
             }
         }
 
-        function releaseDpad() {
-            if (currentDir) {
-                const oldBtn = dirButtons[currentDir];
-                if (oldBtn) oldBtn.classList.remove('active');
-                const oldKeys = DIR_KEYS[currentDir];
-                if (oldKeys) {
-                    oldKeys.forEach(k => sendKeyEvent(k, false));
-                }
-                currentDir = null;
+        function handleJoyMove(clientX, clientY) {
+            const rect = joyZone.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = clientX - cx;
+            const dy = clientY - cy;
+            const dist = Math.hypot(dx, dy);
+
+            // Maximum radius for thumb travel
+            const maxRadius = Math.max(15, (rect.width / 2) - 24);
+            const deadZone = 10;
+
+            let thumbX = dx;
+            let thumbY = dy;
+            if (dist > maxRadius) {
+                thumbX = (dx / dist) * maxRadius;
+                thumbY = (dy / dist) * maxRadius;
             }
+
+            // Smooth 360-degree free rotation visual positioning
+            joyThumb.style.transform = `translate3d(${thumbX}px, ${thumbY}px, 0)`;
+
+            if (dist < deadZone) {
+                setJoyDirection(null);
+                return;
+            }
+
+            hasMovedBeyondDeadzone = true;
+            let deg = Math.atan2(dy, dx) * (180 / Math.PI);
+            if (deg < 0) deg += 360;
+
+            const sector = Math.floor(((deg + 22.5) % 360) / 45);
+            setJoyDirection(SECTORS[sector] || null);
         }
 
-        dpadGrid.addEventListener('pointerdown', (e) => {
+        function releaseJoystick() {
+            joyZone.classList.remove('dragging');
+            joyThumb.style.transform = 'translate3d(0, 0, 0)';
+            setJoyDirection(null);
+        }
+
+        joyZone.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            dpadPointerId = e.pointerId;
-            try { dpadGrid.setPointerCapture(e.pointerId); } catch (_) {}
-            const dir = getDirectionAtPoint(e.clientX, e.clientY);
-            setDpadDirection(dir);
+            joyPointerId = e.pointerId;
+            hasMovedBeyondDeadzone = false;
+            joyZone.classList.add('dragging');
+            try { joyZone.setPointerCapture(e.pointerId); } catch (_) {}
+            handleJoyMove(e.clientX, e.clientY);
         });
 
-        dpadGrid.addEventListener('pointermove', (e) => {
-            if (dpadPointerId === null || e.pointerId !== dpadPointerId) return;
+        joyZone.addEventListener('pointermove', (e) => {
+            if (joyPointerId === null || e.pointerId !== joyPointerId) return;
             e.preventDefault();
-            const dir = getDirectionAtPoint(e.clientX, e.clientY);
-            setDpadDirection(dir);
+            handleJoyMove(e.clientX, e.clientY);
         });
 
-        const onPointerEnd = (e) => {
-            if (dpadPointerId === null || e.pointerId !== dpadPointerId) return;
+        const onJoyEnd = (e) => {
+            if (joyPointerId === null || e.pointerId !== joyPointerId) return;
             e.preventDefault();
-            try { dpadGrid.releasePointerCapture(e.pointerId); } catch (_) {}
-            dpadPointerId = null;
-            releaseDpad();
+            try { joyZone.releasePointerCapture(e.pointerId); } catch (_) {}
+            joyPointerId = null;
+
+            // Center tap detection (< 10px deadzone movement): dispatch Fire / OK (-5)
+            if (!hasMovedBeyondDeadzone) {
+                sendKeyEvent(-5, true);
+                setTimeout(() => sendKeyEvent(-5, false), 90);
+                triggerHaptic(14);
+                unlockAudio();
+            }
+
+            releaseJoystick();
         };
 
-        dpadGrid.addEventListener('pointerup', onPointerEnd);
-        dpadGrid.addEventListener('pointercancel', onPointerEnd);
+        joyZone.addEventListener('pointerup', onJoyEnd);
+        joyZone.addEventListener('pointercancel', onJoyEnd);
     }
 
-    // --- 2. INDEPENDENT ACTION BUTTONS (OK, LSK, RSK, *, 0, #) ---
-    const actionButtons = document.querySelectorAll('.ctrl-btn:not(.dpad-cell)');
+    // --- 2. INDEPENDENT ACTION BUTTONS (OPTNS, BACK, COMBAT KEYS 1 TO 9) ---
+    const actionButtons = document.querySelectorAll('.ctrl-btn');
     actionButtons.forEach((btn) => {
         const keyData = btn.getAttribute('data-key');
         if (!keyData) return;
