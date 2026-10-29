@@ -1,4 +1,5 @@
 import { ResourceManager } from './j2me/runtime.js';
+import { Manager } from './j2me/audio.js';
 
 export const ASSETS_LIST = [
     "a.mbf",
@@ -62,4 +63,7 @@ export async function loadAllAssets(basePath = 'assets/', onProgress = null) {
             onProgress(loaded, total, filename);
         }
     }));
+
+    // Preload SFX audio bank in background
+    Manager.preloadSoundBank(basePath + 'sfx/').catch(() => {});
 }

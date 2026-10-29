@@ -407,6 +407,7 @@ async function bootstrap() {
         midlet.startApp();
         window.CoreEngine = CoreEngine;
         window.midlet = midlet;
+        window.Manager = Manager;
 
         console.log("[UMK3] Native Engine Booted Successfully!");
 
