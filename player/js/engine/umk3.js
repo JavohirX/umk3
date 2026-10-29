@@ -1106,10 +1106,10 @@ export class AudioClipNode {
         if (args.length === 1) {
             this._init_0(args[0]);
         }
-        else if (args.length === 2) {
+        else if (args.length === 2 && args[0] instanceof AudioClipNode) {
             this._init_1(args[0], args[1]);
         }
-        else if (args.length === 2 && typeof args[0] === 'number') {
+        else if (args.length === 2) {
             this._init_2(args[0], args[1]);
         }
     }
@@ -1125,17 +1125,22 @@ export class AudioClipNode {
     }
     _init_1(var1, var2) {
         (this.nextClip = new AudioClipNode(2));
-        (this.nextClip = new AudioClipNode(2));
         (this.nextClip.clipName = var2);
         (this.nextClip.prevClip = var1);
+        if (var1 && var1.clipSoundId !== undefined) {
+            (this.nextClip.clipSoundId = var1.clipSoundId);
+        }
     }
     _init_2(var1, var2) {
         (this.clipSoundId = var2);
         let var4 = null;
         (var4 = new AudioClipNode(0));
         (var4.rawAudioData = var1);
+        (var4.clipSoundId = var2);
         let var3 = makeString("Undefined");
-        switch (var1[0]) {
+        const firstByte = (var1 && var1.length > 0) ? (var1[0] < 0 ? var1[0] + 256 : var1[0]) : 0;
+        switch (firstByte) {
+            case 255:
             case -1:
             case 73:
                 (var3 = "audio/mpeg");
@@ -14371,7 +14376,18 @@ export class CoreEngine {
         }
     }
     static pauseAudioChannel(param0) {
-
+        let var0 = param0;
+        while (var0 && (var0.channelId) !== (2)) {
+            (var0 = var0.nextContext);
+        }
+        if (!var0) return;
+        let var1 = var0.val_audioclipnode_b;
+        if (var1 && var1.mediaPlayer) {
+            try {
+                var1.mediaPlayer.stop();
+            } catch (_) {}
+            var0.isPaused = true;
+        }
     }
     static exec_a_encodedtextbuffer_arr_short_int_int_int_int_int_to_void(var0, var1, var2, var3, var4, var5, var6) {
         let var7 = CoreEngine.exec_a_to_fontcharmap();
@@ -15975,7 +15991,8 @@ export class CoreEngine {
             let var1 = null;
 
             try {
-                (var0.mediaPlayer = Manager.createPlayer(new ByteArrayInputStream(var0.prevClip.rawAudioData), var0.clipName));
+                const soundId = var0.clipSoundId || (var0.prevClip ? var0.prevClip.clipSoundId : 0);
+                (var0.mediaPlayer = Manager.createPlayer(new ByteArrayInputStream(var0.prevClip.rawAudioData), var0.clipName, soundId));
                 var0.mediaPlayer.realize();
             } catch (var4) {
                 let var2 = var4;
