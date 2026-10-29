@@ -45,8 +45,10 @@ jobs:
             if [ -n "${{ secrets.TG_BOT_TOKEN }}" ]; then
               echo "TELEGRAM_BOT_TOKEN=${{ secrets.TG_BOT_TOKEN }}" > .env
               echo "TG_BOT_TOKEN=${{ secrets.TG_BOT_TOKEN }}" >> .env
-              if [ -n "${{ secrets.VPS_HOST }}" ]; then
+              if [[ "${{ secrets.VPS_HOST }}" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ && ! "${{ secrets.VPS_HOST }}" =~ ^[0-9.]+$ ]]; then
                 echo "WEBAPP_URL=https://${{ secrets.VPS_HOST }}/player/" >> .env
+              else
+                echo "WEBAPP_URL=https://javohirx.github.io/umk3/player/" >> .env
               fi
             fi
 
