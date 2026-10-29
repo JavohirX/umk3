@@ -15,15 +15,15 @@ export class Graphics {
     static BOTTOM = 32;
     static BASELINE = 64;
 
-    // LCDUI Sprite Transform Constants
+    // LCDUI Sprite Transform Constants (Authentic MIDP 2.0 J2ME Specification)
     static TRANS_NONE = 0;
-    static TRANS_ROT90 = 1;
-    static TRANS_ROT180 = 2;
-    static TRANS_ROT270 = 3;
-    static TRANS_MIRROR = 4;
-    static TRANS_MIRROR_ROT90 = 5;
-    static TRANS_MIRROR_ROT180 = 6;
-    static TRANS_MIRROR_ROT270 = 7;
+    static TRANS_MIRROR_ROT180 = 1;
+    static TRANS_MIRROR = 2;
+    static TRANS_ROT180 = 3;
+    static TRANS_MIRROR_ROT270 = 4;
+    static TRANS_ROT90 = 5;
+    static TRANS_ROT270 = 6;
+    static TRANS_MIRROR_ROT90 = 7;
 
     constructor(ctx, image = null) {
         this.ctx = ctx;

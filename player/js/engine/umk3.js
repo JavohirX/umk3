@@ -14107,36 +14107,38 @@ export class CoreEngine {
         (var1.val_contextservicenode_a.val_object_b = var0);
     }
     static copyByteArray(var0, var1, var2, var3) {
-        (var1 = CoreEngine.readIntWithLength(var0, var1, var2));
+        var1 = CoreEngine.readIntWithLength(var0, var1, var2);
         let var6 = (CoreEngine.readIntAtOffset(var0, var1) - var1);
-        if ((var3.length < var6)) {
-            (var6 = var3.length);
+        if (var3.length < var6) {
+            var6 = var3.length;
         }
-        for (let var9 = 0; (var9 < var6); var9++) {
-            (var0[(var9 + var1)] = var3[var9]);
+        for (let var9 = 0; var9 < var6; var9++) {
+            var0[var9 + var1] = var3[var9];
         }
-        (var6 = (((((var0[(var1 - 8)] & 255) << 24) | ((var0[(var1 - 7)] & 255) << 16)) | ((var0[(var1 - 6)] & 255) << 8)) | (var0[(var1 - 5)] & 255)));
-        let var10 = createArray(256, 0);
-        for (let var11 = 0; (var11 < 256); var11++) {
-            let var4 = var11;
-            for (let var7 = 0; (var7 < 8); var7++) {
-                if (((var4 & 1)) !== (0)) {
-                    (var4 = (3988292384 ^ (var4 >> 1)));
-                } else {
-                    (var4 >>= 1);
+        var6 = (((var0[var1 - 8] & 255) << 24) | ((var0[var1 - 7] & 255) << 16) | ((var0[var1 - 6] & 255) << 8) | (var0[var1 - 5] & 255)) >>> 0;
+        if (!CoreEngine._crcTable) {
+            CoreEngine._crcTable = new BigInt64Array(256);
+            const poly = 3988292384n;
+            for (let i = 0n; i < 256n; i++) {
+                let c = i;
+                for (let k = 0n; k < 8n; k++) {
+                    c = (c & 1n) ? (poly ^ (c >> 1n)) : (c >> 1n);
                 }
+                CoreEngine._crcTable[Number(i)] = c;
             }
-            (var10[var11] = var4);
         }
-        let var13 = 4294967295;
-        for (let var12 = 0; (var12 < (var6 + 4)); var12++) {
-            (var13 = (var10[((((var13 ^ (var0[((var1 - 4) + var12)] & 255))) | 0) & 0xFF)] ^ (var13 >> 8)));
+        const crcTable = CoreEngine._crcTable;
+        let crc = 4294967295n;
+        for (let var12 = 0; var12 < var6 + 4; var12++) {
+            const b = BigInt(var0[var1 - 4 + var12] & 255);
+            const idx = Number((crc ^ b) & 0xFFn);
+            crc = crcTable[idx] ^ (crc >> 8n);
         }
-        (var13 ^= 4294967295);
-        (var0[(var1 + var6)] = (((((var13 >> 24) & 255)) << 24) >> 24));
-        (var0[((var1 + var6) + 1)] = (((((var13 >> 16) & 255)) << 24) >> 24));
-        (var0[((var1 + var6) + 2)] = (((((var13 >> 8) & 255)) << 24) >> 24));
-        (var0[((var1 + var6) + 3)] = ((((var13 & 255)) << 24) >> 24));
+        crc ^= 4294967295n;
+        var0[var1 + var6] = Number((crc >> 24n) & 0xFFn);
+        var0[var1 + var6 + 1] = Number((crc >> 16n) & 0xFFn);
+        var0[var1 + var6 + 2] = Number((crc >> 8n) & 0xFFn);
+        var0[var1 + var6 + 3] = Number(crc & 0xFFn);
     }
     static exec_H_to_void() {
         CoreEngine.exec_a_byte_to_void((((1) << 24) >> 24));
@@ -15264,7 +15266,7 @@ export class CoreEngine {
         }
     }
     static exec_a_arr_byte_byte_to_void(var0, var1) {
-        for (let var2 = 0; (var2 < (var0.length - 3)); (var2 += 3)) {
+        for (let var2 = 0; (var2 <= (var0.length - 3)); (var2 += 3)) {
             let var3 = (var0[var2] & 255);
             let var4 = (var0[(var2 + 1)] & 255);
             let var5 = (var0[(var2 + 2)] & 255);

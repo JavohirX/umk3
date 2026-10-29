@@ -24,62 +24,84 @@ const KEY_MAP = {
     // Center Action (Fire / Enter / Space)
     'Enter': -5,
     'Space': -5,
+    'KeyX': -5,
 
-    // Softkeys
+    // Softkeys: Left (OPTNS) & Right (BACK)
     'F1': -6,
     'KeyQ': -6,
+    'Escape': -6,
+
     'F2': -7,
     'KeyE': -7,
-    'Escape': -7,
+    'Backspace': -7,
 
-    // 6-Button Combat Cluster (J2ME NumPad 1..7)
-    'Digit1': 49, // '1' - High Punch (HP)
+    // Dialpad / Special Keys (*, 0, #)
+    'Digit0': 48,
+    'Numpad0': 48,
+    'NumpadAsterisk': 42,
+    'Minus': 42,
+    'NumpadDivide': 35,
+    'Equal': 35,
+
+    // 6-Button Combat Cluster (J2ME NumPad 1..9)
+    'Digit1': 49, // High Punch (HP)
+    'Numpad1': 49,
     'KeyZ': 49,
     'KeyU': 49,
 
-    'Digit2': 50, // '2' - Jump / Up
-    'Digit3': 51, // '3' - High Kick (HK)
-    'KeyX': 51,
-    'KeyI': 51,
+    'Digit2': 50, // Jump / Up
+    'Numpad2': 50,
+    'KeyI': 50,
 
-    'Digit4': 52, // '4' - Low Punch (LP)
+    'Digit3': 51, // High Kick (HK)
+    'Numpad3': 51,
+    'KeyO': 51,
+
+    'Digit4': 52, // Low Punch (LP)
+    'Numpad4': 52,
     'KeyC': 52,
     'KeyJ': 52,
 
-    'Digit5': 53, // '5' - Block (BL)
+    'Digit5': 53, // Block (BL)
+    'Numpad5': 53,
     'KeyB': 53,
     'KeyL': 53,
 
-    'Digit6': 54, // '6' - Low Kick (LK)
+    'Digit6': 54, // Low Kick (LK)
+    'Numpad6': 54,
     'KeyV': 54,
     'KeyK': 54,
 
-    'Digit7': 55, // '7' - Run (RN)
+    'Digit7': 55, // Run (RN)
+    'Numpad7': 55,
     'KeyN': 55,
-    'KeyO': 55,
     'ShiftLeft': 55,
     'ShiftRight': 55,
 
-    'Digit8': 56, // '8' - Crouch / Down
-    'Digit9': 57, // '9' - Special / Fatality
-    'Digit0': 48  // '0'
+    'Digit8': 56, // Crouch / Down
+    'Numpad8': 56,
+
+    'Digit9': 57, // Special
+    'Numpad9': 57
 };
 
-function triggerHaptic() {
+function triggerHaptic(duration = 10) {
     try {
         if (window.Telegram?.WebApp?.HapticFeedback) {
             window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
         } else if (navigator.vibrate) {
-            navigator.vibrate(10);
+            navigator.vibrate(duration);
         }
     } catch (_) {}
 }
 
 function unlockAudio() {
-    const actx = Manager.getAudioContext();
-    if (actx && actx.state === 'suspended') {
-        actx.resume().catch(() => {});
-    }
+    try {
+        const actx = Manager.getAudioContext();
+        if (actx && actx.state === 'suspended') {
+            actx.resume().catch(() => {});
+        }
+    } catch (_) {}
 }
 
 function sendKeyEvent(keyCode, isDown) {
@@ -91,155 +113,208 @@ function sendKeyEvent(keyCode, isDown) {
     }
 }
 
-function setupTouchControls() {
-    const touchKeyMap = new Map();
+function triggerButtonActive(code, isActive) {
+    const btns = document.querySelectorAll(`[data-key*="${code}"]`);
+    btns.forEach(b => {
+        if (isActive) b.classList.add('active');
+        else b.classList.remove('active');
+    });
+}
 
-    function getKeyAtPoint(x, y) {
-        const el = document.elementFromPoint(x, y);
-        return el ? el.closest('.ctrl-btn, .key') : null;
-    }
+function setupInputControls() {
+    // --- 1. D-PAD SLIDING FINGER CONTROLLER (1:1 from nightmare-b4-xmas) ---
+    const dpadGrid = document.getElementById('dpad-grid') || document.querySelector('.dpad-8way-grid');
+    if (dpadGrid) {
+        let currentDir = null;
+        let dpadPointerId = null;
 
-    function activateKey(keyEl) {
-        if (!keyEl || keyEl.classList.contains('active')) return;
-        keyEl.classList.add('active');
-        triggerHaptic();
-        unlockAudio();
+        const dirButtons = {
+            'up': dpadGrid.querySelector('[data-dir="up"]'),
+            'down': dpadGrid.querySelector('[data-dir="down"]'),
+            'left': dpadGrid.querySelector('[data-dir="left"]'),
+            'right': dpadGrid.querySelector('[data-dir="right"]'),
+            'up-left': dpadGrid.querySelector('[data-dir="up-left"]'),
+            'up-right': dpadGrid.querySelector('[data-dir="up-right"]'),
+            'down-left': dpadGrid.querySelector('[data-dir="down-left"]'),
+            'down-right': dpadGrid.querySelector('[data-dir="down-right"]')
+        };
 
-        if (keyEl.dataset.key) {
-            const keys = keyEl.dataset.key.split(',');
-            for (const k of keys) {
-                const trimmed = k.trim();
-                const code = KEY_MAP[trimmed] || (trimmed.startsWith('Digit') ? trimmed.charCodeAt(5) : null);
-                if (code !== null) sendKeyEvent(code, true);
+        const DIR_KEYS = {
+            'up': [-1],
+            'down': [-2],
+            'left': [-3],
+            'right': [-4],
+            'up-left': [-1, -3],
+            'up-right': [-1, -4],
+            'down-left': [-2, -3],
+            'down-right': [-2, -4]
+        };
+
+        function getDirectionAtPoint(clientX, clientY) {
+            const el = document.elementFromPoint(clientX, clientY);
+            if (el) {
+                const btn = el.closest('.dpad-cell[data-dir]');
+                if (btn) return btn.getAttribute('data-dir');
+                if (el.closest('.dpad-center-hub')) return null;
             }
-        }
-    }
 
-    function deactivateKey(keyEl) {
-        if (!keyEl || !keyEl.classList.contains('active')) return;
-        keyEl.classList.remove('active');
+            // Fallback: 360-degree radial vector geometry from D-pad center
+            const rect = dpadGrid.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const halfW = (rect.width / 2) || 1;
+            const halfH = (rect.height / 2) || 1;
+            const nx = (clientX - cx) / halfW;
+            const ny = (clientY - cy) / halfH;
+            const dist = Math.hypot(nx, ny);
 
-        if (keyEl.dataset.key) {
-            const keys = keyEl.dataset.key.split(',');
-            for (const k of keys) {
-                const trimmed = k.trim();
-                const code = KEY_MAP[trimmed] || (trimmed.startsWith('Digit') ? trimmed.charCodeAt(5) : null);
-                if (code !== null) sendKeyEvent(code, false);
+            const deadZone = 0.35;
+            const maxRadius = 1.35;
+
+            if (dist < deadZone || dist > maxRadius) {
+                return null;
             }
+
+            let deg = Math.atan2(ny, nx) * (180 / Math.PI);
+            if (deg < 0) deg += 360;
+
+            const sector = Math.floor(((deg + 22.5) % 360) / 45);
+            const SECTORS = [
+                'right',       // 0: [337.5°, 22.5°)
+                'down-right',  // 1: [22.5°, 67.5°)
+                'down',        // 2: [67.5°, 112.5°)
+                'down-left',   // 3: [112.5°, 157.5°)
+                'left',        // 4: [157.5°, 202.5°)
+                'up-left',     // 5: [202.5°, 247.5°)
+                'up',          // 6: [247.5°, 292.5°)
+                'up-right'     // 7: [292.5°, 337.5°)
+            ];
+            return SECTORS[sector] || null;
         }
-    }
 
-    const panel = document.querySelector('.mobile-controls-panel') || document.body;
+        function setDpadDirection(newDir) {
+            if (newDir === currentDir) return;
 
-    panel.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            const touch = e.changedTouches[i];
-            const keyEl = getKeyAtPoint(touch.clientX, touch.clientY);
-            if (keyEl) {
-                touchKeyMap.set(touch.identifier, keyEl);
-                activateKey(keyEl);
-            }
-        }
-    }, { passive: false });
-
-    panel.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            const touch = e.changedTouches[i];
-            const currentKeyEl = getKeyAtPoint(touch.clientX, touch.clientY);
-            const prevKeyEl = touchKeyMap.get(touch.identifier);
-
-            if (currentKeyEl !== prevKeyEl) {
-                if (prevKeyEl) deactivateKey(prevKeyEl);
-                if (currentKeyEl) {
-                    activateKey(currentKeyEl);
-                    touchKeyMap.set(touch.identifier, currentKeyEl);
-                } else {
-                    touchKeyMap.delete(touch.identifier);
+            // Release previous direction
+            if (currentDir) {
+                const oldBtn = dirButtons[currentDir];
+                if (oldBtn) oldBtn.classList.remove('active');
+                const oldKeys = DIR_KEYS[currentDir];
+                if (oldKeys) {
+                    oldKeys.forEach(k => sendKeyEvent(k, false));
                 }
             }
-        }
-    }, { passive: false });
 
-    const endTouchHandler = (e) => {
-        e.preventDefault();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            const touch = e.changedTouches[i];
-            const keyEl = touchKeyMap.get(touch.identifier);
-            if (keyEl) {
-                deactivateKey(keyEl);
-                touchKeyMap.delete(touch.identifier);
+            currentDir = newDir;
+
+            // Press new direction
+            if (currentDir) {
+                const newBtn = dirButtons[currentDir];
+                if (newBtn) newBtn.classList.add('active');
+                const newKeys = DIR_KEYS[currentDir];
+                if (newKeys) {
+                    newKeys.forEach(k => sendKeyEvent(k, true));
+                }
+                triggerHaptic(8);
+                unlockAudio();
             }
         }
-    };
 
-    panel.addEventListener('touchend', endTouchHandler, { passive: false });
-    panel.addEventListener('touchcancel', endTouchHandler, { passive: false });
-
-    // Mouse fallback for desktop clicks
-    panel.addEventListener('mousedown', (e) => {
-        const keyEl = e.target.closest('.ctrl-btn, .key');
-        if (keyEl) {
-            activateKey(keyEl);
-            const upHandler = () => {
-                deactivateKey(keyEl);
-                window.removeEventListener('mouseup', upHandler);
-            };
-            window.addEventListener('mouseup', upHandler);
+        function releaseDpad() {
+            if (currentDir) {
+                const oldBtn = dirButtons[currentDir];
+                if (oldBtn) oldBtn.classList.remove('active');
+                const oldKeys = DIR_KEYS[currentDir];
+                if (oldKeys) {
+                    oldKeys.forEach(k => sendKeyEvent(k, false));
+                }
+                currentDir = null;
+            }
         }
+
+        dpadGrid.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            dpadPointerId = e.pointerId;
+            try { dpadGrid.setPointerCapture(e.pointerId); } catch (_) {}
+            const dir = getDirectionAtPoint(e.clientX, e.clientY);
+            setDpadDirection(dir);
+        });
+
+        dpadGrid.addEventListener('pointermove', (e) => {
+            if (dpadPointerId === null || e.pointerId !== dpadPointerId) return;
+            e.preventDefault();
+            const dir = getDirectionAtPoint(e.clientX, e.clientY);
+            setDpadDirection(dir);
+        });
+
+        const onPointerEnd = (e) => {
+            if (dpadPointerId === null || e.pointerId !== dpadPointerId) return;
+            e.preventDefault();
+            try { dpadGrid.releasePointerCapture(e.pointerId); } catch (_) {}
+            dpadPointerId = null;
+            releaseDpad();
+        };
+
+        dpadGrid.addEventListener('pointerup', onPointerEnd);
+        dpadGrid.addEventListener('pointercancel', onPointerEnd);
+    }
+
+    // --- 2. INDEPENDENT ACTION BUTTONS (OK, LSK, RSK, *, 0, #) ---
+    const actionButtons = document.querySelectorAll('.ctrl-btn:not(.dpad-cell)');
+    actionButtons.forEach((btn) => {
+        const keyData = btn.getAttribute('data-key');
+        if (!keyData) return;
+
+        const keys = keyData.split(',');
+
+        const handlePress = (e) => {
+            e.preventDefault();
+            btn.classList.add('active');
+            try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+            triggerHaptic(12);
+            unlockAudio();
+
+            keys.forEach((k) => {
+                const j2meKey = KEY_MAP[k.trim()];
+                if (j2meKey !== undefined) sendKeyEvent(j2meKey, true);
+            });
+        };
+
+        const handleRelease = (e) => {
+            e.preventDefault();
+            btn.classList.remove('active');
+            try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
+
+            keys.forEach((k) => {
+                const j2meKey = KEY_MAP[k.trim()];
+                if (j2meKey !== undefined) sendKeyEvent(j2meKey, false);
+            });
+        };
+
+        btn.addEventListener('pointerdown', handlePress);
+        btn.addEventListener('pointerup', handleRelease);
+        btn.addEventListener('pointercancel', handleRelease);
     });
 
-    // Toolbar buttons: Options, Back, Sound, Reset, Fullscreen
-    const btnLsk = document.getElementById('btn-lsk');
-    if (btnLsk) {
-        btnLsk.addEventListener('click', () => {
-            sendKeyEvent(-6, true);
-            setTimeout(() => sendKeyEvent(-6, false), 100);
-        });
-    }
-
-    const btnRsk = document.getElementById('btn-rsk');
-    if (btnRsk) {
-        btnRsk.addEventListener('click', () => {
-            sendKeyEvent(-7, true);
-            setTimeout(() => sendKeyEvent(-7, false), 100);
-        });
-    }
-
-    const btnMute = document.getElementById('btn-mute');
-    if (btnMute) {
-        btnMute.addEventListener('click', () => {
-            isAudioMuted = !isAudioMuted;
-            btnMute.textContent = isAudioMuted ? 'UNMUTE' : 'SOUND';
-            btnMute.style.color = isAudioMuted ? '#c91818' : '#99aab5';
-            const actx = Manager.getAudioContext();
-            if (actx) {
-                if (isAudioMuted) actx.suspend().catch(() => {});
-                else actx.resume().catch(() => {});
+    // Global fail-safe release on blur or pointerup outside
+    const releaseAllActionButtons = () => {
+        actionButtons.forEach((btn) => {
+            if (btn.classList.contains('active')) {
+                btn.classList.remove('active');
+                const keyData = btn.getAttribute('data-key');
+                if (keyData) {
+                    keyData.split(',').forEach(k => {
+                        const j2meKey = KEY_MAP[k.trim()];
+                        if (j2meKey !== undefined) sendKeyEvent(j2meKey, false);
+                    });
+                }
             }
         });
-    }
+    };
 
-    const btnReset = document.getElementById('btn-reset');
-    if (btnReset) {
-        btnReset.addEventListener('click', () => {
-            if (confirm("Reset game?")) {
-                location.reload();
-            }
-        });
-    }
-
-    const btnFullscreen = document.getElementById('btn-fullscreen');
-    if (btnFullscreen) {
-        btnFullscreen.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(() => {});
-            } else {
-                document.exitFullscreen().catch(() => {});
-            }
-        });
-    }
+    window.addEventListener('blur', () => {
+        releaseAllActionButtons();
+    });
 }
 
 function setupKeyboardControls() {
@@ -248,8 +323,12 @@ function setupKeyboardControls() {
         unlockAudio();
 
         if (e.code === 'KeyM') {
-            const btnMute = document.getElementById('btn-mute');
-            if (btnMute) btnMute.click();
+            isAudioMuted = !isAudioMuted;
+            const actx = Manager.getAudioContext();
+            if (actx) {
+                if (isAudioMuted) actx.suspend().catch(() => {});
+                else actx.resume().catch(() => {});
+            }
             e.preventDefault();
             return;
         }
@@ -257,6 +336,7 @@ function setupKeyboardControls() {
         const keyCode = KEY_MAP[e.code];
         if (keyCode !== undefined) {
             sendKeyEvent(keyCode, true);
+            triggerButtonActive(e.code, true);
             e.preventDefault();
         }
     });
@@ -265,6 +345,7 @@ function setupKeyboardControls() {
         const keyCode = KEY_MAP[e.code];
         if (keyCode !== undefined) {
             sendKeyEvent(keyCode, false);
+            triggerButtonActive(e.code, false);
             e.preventDefault();
         }
     });
@@ -274,7 +355,7 @@ function setupCanvas() {
     canvas = document.getElementById('display');
     canvas.width = 352;
     canvas.height = 416;
-    ctx = canvas.getContext('2d', { alpha: false });
+    ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     ctx.imageSmoothingEnabled = false;
 
     const g = new Graphics(ctx);
@@ -296,34 +377,26 @@ function startAnimationLoop() {
 }
 
 async function bootstrap() {
-    console.log("[UMK3] Bootstrapping Native JavaScript Engine...");
+    console.log("[UMK3] Bootstrapping Pure Native JavaScript Engine...");
 
     const progressBar = document.getElementById('progress-bar-fill');
-    const loadingText = document.getElementById('loading-text');
-    const loadingSubtext = document.getElementById('loading-subtext');
     const splashScreen = document.getElementById('splash-screen');
     const canvasEl = document.getElementById('display');
 
     try {
-        if (loadingText) loadingText.textContent = "Loading MK Assets...";
-        if (loadingSubtext) loadingSubtext.textContent = "Fetching 34 game resources...";
-
         // 1. Fetch & register assets
         await loadAllAssets('assets/', (loaded, total, filename) => {
             const pct = Math.round((loaded / total) * 100);
             if (progressBar) progressBar.style.width = `${pct}%`;
-            if (loadingSubtext) loadingSubtext.textContent = `${loaded}/${total}: ${filename}`;
         });
 
-        if (loadingText) loadingText.textContent = "Initializing Engine...";
-        if (loadingSubtext) loadingSubtext.textContent = "Compiling tables & states...";
-        if (progressBar) progressBar.style.width = `100%`;
+        if (progressBar) progressBar.style.width = '100%';
 
         // 2. Setup canvas & LCDUI graphics bridge
         setupCanvas();
 
-        // 3. Setup input listeners
-        setupTouchControls();
+        // 3. Setup input listeners (D-pad vector sliding & 3D button controls)
+        setupInputControls();
         setupKeyboardControls();
 
         // 4. Initialize engine static tables
@@ -337,16 +410,15 @@ async function bootstrap() {
 
         console.log("[UMK3] Native Engine Booted Successfully!");
 
-        // 6. Hide splash screen, show game canvas
+        // 6. Smoothly dismiss full-screen splash veil (exact nightmare-b4-xmas timing)
         if (splashScreen) {
-            splashScreen.style.opacity = '0';
-            splashScreen.style.transition = 'opacity 0.2s ease';
+            splashScreen.classList.add('fade-out');
             setTimeout(() => {
-                splashScreen.style.display = 'none';
-                if (canvasEl) canvasEl.style.display = 'block';
-            }, 200);
-        } else if (canvasEl) {
-            canvasEl.style.display = 'block';
+                try { splashScreen.remove(); } catch (_) {}
+            }, 360);
+        }
+        if (canvasEl) {
+            canvasEl.focus();
         }
 
         // 7. Start requestAnimationFrame loop
@@ -354,13 +426,6 @@ async function bootstrap() {
 
     } catch (err) {
         console.error("[UMK3 Bootstrap Failed]:", err);
-        if (loadingText) {
-            loadingText.textContent = "Load Failed";
-            loadingText.style.color = "#ff4d4d";
-        }
-        if (loadingSubtext) {
-            loadingSubtext.textContent = err.message || String(err);
-        }
     }
 }
 
