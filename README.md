@@ -1,6 +1,6 @@
-# Ultimate Mortal Kombat 3 — 1:1 Native JavaScript Port & Telegram Web App
+# Immortal Combat — 1:1 Native JavaScript Port & Telegram Web App
 
-A bit-perfect 1:1 clone of **Ultimate Mortal Kombat 3** (J2ME edition) running natively in pure JavaScript (ES Modules), with zero JVM, zero WASM, and zero CheerpJ dependencies. Built with HTML5 Canvas 2D, Web Audio API, an ergonomic tactile mobile controller, and deep Telegram Mini App (TMA) integration.
+A bit-perfect 1:1 clone of **Immortal Combat** (J2ME edition) running natively in pure JavaScript (ES Modules), with zero JVM, zero WASM, and zero CheerpJ dependencies. Built with HTML5 Canvas 2D, Web Audio API, an ergonomic tactile mobile controller, and deep Telegram Mini App (TMA) integration.
 
 ---
 

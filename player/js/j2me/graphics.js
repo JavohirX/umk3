@@ -491,7 +491,7 @@ export class MIDlet {
 
     getAppProperty(key) {
         const props = {
-            "MIDlet-Name": "Ultimate Mortal Kombat 3",
+            "MIDlet-Name": "Immortal Combat",
             "MIDlet-Version": "1.0.0",
             "Blood": "red",
             "Fatality": "on",
