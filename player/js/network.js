@@ -29,9 +29,12 @@ export class MultiplayerClient {
     parseEnvironment() {
         // 1. Extract from Telegram WebApp initData if running inside Telegram
         const tg = window.Telegram?.WebApp;
+        let authenticatedUser = null;
         if (tg?.initDataUnsafe?.user) {
-            this.userId = String(tg.initDataUnsafe.user.id);
-            this.userName = tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username || "Fighter";
+            authenticatedUser = {
+                id: String(tg.initDataUnsafe.user.id),
+                name: tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username || "Fighter"
+            };
         }
 
         // 2. Extract from URL params
@@ -49,9 +52,17 @@ export class MultiplayerClient {
         if (params.get('match_id')) this.matchId = params.get('match_id');
         if (params.get('chat')) this.chatId = String(params.get('chat'));
         if (params.get('chat_id')) this.chatId = String(params.get('chat_id'));
-        if (params.get('user')) this.userId = String(params.get('user'));
-        if (params.get('user_id')) this.userId = String(params.get('user_id'));
-        if (params.get('name')) this.userName = params.get('name');
+
+        const urlUser = params.get('user') || params.get('user_id');
+        const urlName = params.get('name');
+
+        if (authenticatedUser) {
+            this.userId = authenticatedUser.id;
+            this.userName = authenticatedUser.name;
+        } else if (urlUser) {
+            this.userId = String(urlUser);
+            this.userName = urlName || "Fighter";
+        }
 
         // Fallback guest credentials for testing outside Telegram
         if (!this.userId) {
@@ -421,8 +432,10 @@ export class MultiplayerClient {
     connect() {
         if (!this.matchId) return;
 
+        const params = new URLSearchParams(window.location.search);
+        const serverOverride = params.get('server') || params.get('ws');
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host;
+        const host = serverOverride || window.location.host;
         const wsUrl = `${protocol}//${host}/ws/match/${this.matchId}`;
 
         console.log(`[Multiplayer] Connecting to ${wsUrl}...`);
