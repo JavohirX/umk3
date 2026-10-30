@@ -1167,6 +1167,8 @@ export class AudioManager {
     isAudioEnabled = false;
     currentSoundId = 0;
     loopCount = 0;
+    currentBgmId = -1;
+    bgmPlayer = null;
     playbackContext = CoreEngine.exec_a_audioplaybackcontext_to_audioplaybackcontext(CoreEngine.getGlobalAudioContext());
     constructor() {
         (this.audioClipNodes = new JVector());
@@ -1187,31 +1189,73 @@ export class AudioManager {
         } else {
             (var2 = false);
         }
+        this.loopCount = (var2 ? -1 : 1);
+        if (this.bgmPlayer) {
+            this.bgmPlayer.setLoopCount(this.loopCount);
+        }
         CoreEngine.exec_a_bool_audioplaybackcontext_to_void(var2, this.playbackContext);
     }
     playSound(var1) {
-        if (this.isAudioEnabled) {
-            if (((this.currentSoundId) !== (1) || !CoreEngine.isChannelActive(this.playbackContext))) {
-                this.stopSound();
-                if ((this.findClipIndex(var1)) === (-1)) {
-                    let var2 = null;
-                    (var2 = new AudioClipNode(CoreEngine.exec_a_int_to_arr_byte(var1), var1));
-                    this.audioClipNodes.addElement(var2);
-                }
-                if ((var1) !== (this.loopCount)) {
-                    let var3 = this.findClipIndex(var1);
-                    CoreEngine.assignClipToChannel((this.audioClipNodes.elementAt(var3)).parentClip, this.playbackContext);
-                    (this.loopCount = var1);
-                }
-                CoreEngine.resumeAudioChannel(this.playbackContext);
-            }
+        if (!this.isAudioEnabled || CoreEngine.val_int_bv === 1) {
+            return;
         }
+
+        // 1. Character Speech & SFX (IDs 31 to 85) - Fast polyphonic Web Audio playback
+        if (var1 >= 31 && var1 <= 85) {
+            Manager.playSfx(var1);
+            return;
+        }
+
+        // 2. Standard MIDI Background Music (IDs 15 to 30) - Dedicated BGM synthesizer
+        if (var1 >= 15 && var1 <= 30) {
+            if (this.currentBgmId === var1 && this.bgmPlayer && this.bgmPlayer.getState() === Player.STARTED) {
+                return;
+            }
+            this.stopBgm();
+            this.currentBgmId = var1;
+            try {
+                const rawBytes = CoreEngine.exec_a_int_to_arr_byte(var1);
+                if (rawBytes) {
+                    this.bgmPlayer = Manager.createPlayer(rawBytes, "audio/midi", var1);
+                    this.bgmPlayer.realize();
+                    this.bgmPlayer.setLoopCount(this.loopCount);
+                    this.bgmPlayer.start();
+                    Manager.activeBgmPlayer = this.bgmPlayer;
+                }
+            } catch (err) {
+                console.warn("[AudioManager] Failed to play BGM track", var1, err);
+            }
+            return;
+        }
+
+        // Fallback for any other audio clip
+        this.stopSound();
+        if ((this.findClipIndex(var1)) === (-1)) {
+            let var2 = null;
+            (var2 = new AudioClipNode(CoreEngine.exec_a_int_to_arr_byte(var1), var1));
+            this.audioClipNodes.addElement(var2);
+        }
+        if ((var1) !== (this.loopCount)) {
+            let var3 = this.findClipIndex(var1);
+            CoreEngine.assignClipToChannel((this.audioClipNodes.elementAt(var3)).parentClip, this.playbackContext);
+            (this.loopCount = var1);
+        }
+        CoreEngine.resumeAudioChannel(this.playbackContext);
+    }
+    stopBgm() {
+        if (this.bgmPlayer) {
+            try {
+                this.bgmPlayer.stop();
+                this.bgmPlayer.close();
+            } catch (_) {}
+            this.bgmPlayer = null;
+        }
+        this.currentBgmId = -1;
     }
     stopSound() {
+        this.stopBgm();
         if ((this.loopCount) !== (-1)) {
-            if ((this.loopCount) === (this.loopCount)) {
-                CoreEngine.pauseAudioChannel(this.playbackContext);
-            }
+            CoreEngine.pauseAudioChannel(this.playbackContext);
         }
     }
     findClipIndex(var1) {
@@ -4157,7 +4201,7 @@ export class CoreEngine {
     static val_int_f = 0;
     static val_long_a = 0;
     static val_int_bu = 0;
-    static val_int_bv = 2;
+    static val_int_bv = 0;
     static val_int_g = -1;
     static val_int_bw = 1;
     static val_int_bx = 1;
@@ -15342,7 +15386,7 @@ export class CoreEngine {
         if ((var0) !== (-1)) {
             if (((var0 = AudioMetaTable.val_arr_byte_a[var0])) !== (-1)) {
                 if ((AudioMetaTable.val_arr_int_a[var0]) !== (-1)) {
-                    if (((CoreEngine.val_int_bv) === (2) || (var1 && (CoreEngine.val_int_bv) === (0)))) {
+                    if (CoreEngine.val_int_bv !== 1) {
                         if ((CoreEngine.val_thread_a) !== (null)) {
                             if (CoreEngine.val_thread_a.isAlive()) {
                                 if ((AudioMetaTable.val_arr_byte_c[var0]) === (1)) {
@@ -15426,7 +15470,7 @@ export class CoreEngine {
         if ((var0) !== (-1)) {
             if (((var0 = AudioMetaTable.val_arr_byte_d[var0])) !== (-1)) {
                 if ((AudioMetaTable.val_arr_int_c[var0]) !== (-1)) {
-                    if (((CoreEngine.val_int_bv) === (0) || (var1 && (CoreEngine.val_int_bv) === (2)))) {
+                    if (CoreEngine.val_int_bv !== 1) {
                         if (((var0) !== (CoreEngine.val_byte_f) || (AudioMetaTable.val_arr_byte_e[var0]) !== (0))) {
                             CoreEngine.exec_l_to_void();
                             (CoreEngine.val_byte_f = var0);
@@ -17982,7 +18026,7 @@ export class CoreEngine {
         (CoreEngine.val_arr_int_ak = [0, 0, 0, 0]);
         (CoreEngine.val_arr_int_al = [0, 0, 0, 0]);
         (CoreEngine.val_arr_int_am = [0, 0, 0, 0]);
-        (CoreEngine.val_int_bv = 2);
+        (CoreEngine.val_int_bv = 0);
         (CoreEngine.val_int_g = -1);
         (CoreEngine.val_int_bx = 1);
         (CoreEngine.val_int_h = -1);

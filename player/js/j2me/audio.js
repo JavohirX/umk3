@@ -28,10 +28,10 @@ export class RetroMidiSynthesizer {
         this.ctx = audioCtx;
         this.destinationGain = destinationGain;
 
-        // Warm retro filter: rolls off harsh high-frequency buzz > 2800 Hz
+        // Warm retro filter: rolls off harsh high-frequency buzz > 3200 Hz
         this.filterNode = this.ctx.createBiquadFilter();
         this.filterNode.type = "lowpass";
-        this.filterNode.frequency.setValueAtTime(2800, this.ctx.currentTime);
+        this.filterNode.frequency.setValueAtTime(3200, this.ctx.currentTime);
         this.filterNode.Q.setValueAtTime(0.7, this.ctx.currentTime);
 
         // Dynamics Compressor: keeps polyphonic voices smooth without clipping
@@ -50,6 +50,7 @@ export class RetroMidiSynthesizer {
         }
 
         this.noiseBuffer = this._buildNoiseBuffer();
+        this.distortionCurve = this._buildDistortionCurve(18);
         this.schedulerTimer = null;
         this.activeVoices = new Set();
         this.isPlaying = false;
@@ -69,6 +70,18 @@ export class RetroMidiSynthesizer {
             data[i] = Math.random() * 2 - 1;
         }
         return buffer;
+    }
+
+    _buildDistortionCurve(amount = 20) {
+        const k = amount;
+        const n_samples = 44100;
+        const curve = new Float32Array(n_samples);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < n_samples; ++i) {
+            const x = (i * 2) / n_samples - 1;
+            curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+        }
+        return curve;
     }
 
     static parseMidi(rawBytes) {
@@ -338,11 +351,26 @@ export class RetroMidiSynthesizer {
 
         try {
             const duration = Math.min(4.0, Math.max(0.04, note.duration));
-            const baseVol = (note.vel / 127) * 0.12;
+            const baseVol = (note.vel / 127) * 0.13;
             const stopTime = startTime + duration;
 
             if (note.isDrum) {
                 this._synthesizeDrum(note.note, startTime, baseVol);
+                return;
+            }
+
+            const p = note.program || 0;
+            const freq = 440 * Math.pow(2, (note.note - 69) / 12);
+
+            // Orchestra Hit (55)
+            if (p === 55) {
+                this._synthesizeOrchestraHit(freq, startTime, baseVol * 1.3);
+                return;
+            }
+
+            // Distortion Guitar (30)
+            if (p === 30) {
+                this._synthesizeDistortionGuitar(freq, startTime, duration, baseVol);
                 return;
             }
 
@@ -351,47 +379,54 @@ export class RetroMidiSynthesizer {
             voiceFilter.type = "lowpass";
             const gain = this.ctx.createGain();
 
-            const freq = 440 * Math.pow(2, (note.note - 69) / 12);
             osc.frequency.setValueAtTime(freq, startTime);
 
-            const p = note.program || 0;
             if (p >= 16 && p <= 23) {
                 // Organ: warm sine tone
                 osc.type = "sine";
-                voiceFilter.frequency.setValueAtTime(2400, startTime);
+                voiceFilter.frequency.setValueAtTime(2600, startTime);
             } else if (p >= 32 && p <= 39) {
-                // Bass: deep round triangle
+                // Bass (finger, pick, synth bass): punchy deep triangle
                 osc.type = "triangle";
-                voiceFilter.frequency.setValueAtTime(900, startTime);
-            } else if ((p >= 40 && p <= 55) || (p >= 88 && p <= 95)) {
-                // Strings & Pads: authentic Mortal Kombat rich synthesizer pad
+                voiceFilter.frequency.setValueAtTime(950, startTime);
+                voiceFilter.Q.setValueAtTime(1.2, startTime);
+            } else if ((p >= 40 && p <= 51) || (p >= 88 && p <= 95)) {
+                // Strings & Synth Pads: rich sawtooth with smooth cutoff
                 osc.type = "sawtooth";
-                voiceFilter.frequency.setValueAtTime(1600, startTime);
-                voiceFilter.Q.setValueAtTime(0.9, startTime);
+                voiceFilter.frequency.setValueAtTime(1800, startTime);
+                voiceFilter.Q.setValueAtTime(0.8, startTime);
             } else if (p >= 56 && p <= 71) {
-                // Brass: filtered square wave
+                // Brass: filtered square wave with resonant bite
                 osc.type = "square";
-                voiceFilter.frequency.setValueAtTime(1300, startTime);
-                voiceFilter.Q.setValueAtTime(0.7, startTime);
+                voiceFilter.frequency.setValueAtTime(1600, startTime);
+                voiceFilter.Q.setValueAtTime(1.0, startTime);
             } else if (p >= 72 && p <= 79) {
                 // Flute / Whistle
                 osc.type = "sine";
-                voiceFilter.frequency.setValueAtTime(2600, startTime);
-            } else if (p >= 112 && p <= 119) {
-                // Taiko / Tinker / Reverse Cymbal
+                voiceFilter.frequency.setValueAtTime(2800, startTime);
+            } else if (p >= 80 && p <= 87) {
+                // Synth Lead: warm saw lead
+                osc.type = "sawtooth";
+                voiceFilter.frequency.setValueAtTime(2200, startTime);
+            } else if (p === 112) {
+                // Tinkle Bell
+                osc.type = "sine";
+                voiceFilter.frequency.setValueAtTime(3200, startTime);
+            } else if (p === 116) {
+                // Taiko: low resonant hit
                 osc.type = "triangle";
                 voiceFilter.frequency.setValueAtTime(1200, startTime);
-                osc.frequency.exponentialRampToValueAtTime(Math.max(30, freq * 0.4), stopTime);
+                osc.frequency.exponentialRampToValueAtTime(Math.max(35, freq * 0.4), stopTime);
             } else {
-                // Default melodic voice: mellow triangle
+                // Default melodic: warm triangle
                 osc.type = "triangle";
-                voiceFilter.frequency.setValueAtTime(1800, startTime);
+                voiceFilter.frequency.setValueAtTime(2000, startTime);
             }
 
-            const attackTime = Math.min(0.025, duration * 0.25);
+            const attackTime = Math.min(0.02, duration * 0.2);
             gain.gain.setValueAtTime(0.0001, startTime);
             gain.gain.linearRampToValueAtTime(baseVol, startTime + attackTime);
-            gain.gain.setValueAtTime(baseVol * 0.75, startTime + Math.max(attackTime + 0.01, duration * 0.65));
+            gain.gain.setValueAtTime(baseVol * 0.8, startTime + Math.max(attackTime + 0.01, duration * 0.65));
             gain.gain.exponentialRampToValueAtTime(0.0001, stopTime + 0.04);
 
             osc.connect(voiceFilter);
@@ -414,6 +449,75 @@ export class RetroMidiSynthesizer {
         } catch (_) {}
     }
 
+    _synthesizeOrchestraHit(freq, startTime, baseVol) {
+        // Authentic 90s Mortal Kombat Orchestra Hit: stacked fifths chord punch
+        const intervals = [1.0, 1.4983, 2.0]; // Root, 5th, Octave
+        intervals.forEach((mult, idx) => {
+            try {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = (idx === 0) ? "sawtooth" : "square";
+                osc.frequency.setValueAtTime(freq * mult, startTime);
+
+                const dur = 0.22;
+                gain.gain.setValueAtTime(baseVol * 0.45, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+
+                osc.connect(gain);
+                gain.connect(this.filterNode);
+                osc.start(startTime);
+                osc.stop(startTime + dur + 0.02);
+
+                const v = { osc, gain };
+                this.activeVoices.add(v);
+                osc.onended = () => {
+                    this.activeVoices.delete(v);
+                    try { osc.disconnect(); gain.disconnect(); } catch (_) {}
+                };
+            } catch (_) {}
+        });
+    }
+
+    _synthesizeDistortionGuitar(freq, startTime, duration, baseVol) {
+        try {
+            const osc = this.ctx.createOscillator();
+            const shaper = this.ctx.createWaveShaper();
+            const filter = this.ctx.createBiquadFilter();
+            const gain = this.ctx.createGain();
+
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(freq, startTime);
+
+            if (this.distortionCurve) {
+                shaper.curve = this.distortionCurve;
+            }
+
+            filter.type = "lowpass";
+            filter.frequency.setValueAtTime(2000, startTime);
+            filter.Q.setValueAtTime(1.5, startTime);
+
+            const attackTime = 0.015;
+            gain.gain.setValueAtTime(0.0001, startTime);
+            gain.gain.linearRampToValueAtTime(baseVol * 0.9, startTime + attackTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration + 0.05);
+
+            osc.connect(shaper);
+            shaper.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.filterNode);
+
+            osc.start(startTime);
+            osc.stop(startTime + duration + 0.06);
+
+            const v = { osc, filter, gain };
+            this.activeVoices.add(v);
+            osc.onended = () => {
+                this.activeVoices.delete(v);
+                try { osc.disconnect(); filter.disconnect(); gain.disconnect(); } catch (_) {}
+            };
+        } catch (_) {}
+    }
+
     _synthesizeDrum(drumNote, startTime, baseVol) {
         if (!this.ctx) return;
 
@@ -423,16 +527,16 @@ export class RetroMidiSynthesizer {
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
                 osc.type = "sine";
-                osc.frequency.setValueAtTime(120, startTime);
-                osc.frequency.exponentialRampToValueAtTime(35, startTime + 0.07);
+                osc.frequency.setValueAtTime(135, startTime);
+                osc.frequency.exponentialRampToValueAtTime(35, startTime + 0.075);
 
-                gain.gain.setValueAtTime(baseVol * 1.1, startTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.08);
+                gain.gain.setValueAtTime(baseVol * 1.2, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.09);
 
                 osc.connect(gain);
                 gain.connect(this.filterNode);
                 osc.start(startTime);
-                osc.stop(startTime + 0.09);
+                osc.stop(startTime + 0.10);
 
                 const v = { osc, gain };
                 this.activeVoices.add(v);
@@ -443,22 +547,62 @@ export class RetroMidiSynthesizer {
                 return;
             }
 
-            // Toms / Taiko (41, 43, 45, 47, 48, 50, 116)
+            // Snare Drum (38, 40) - punch sine + snappy bandpass noise
+            if (drumNote === 38 || drumNote === 40) {
+                // 1. Tone punch
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(200, startTime);
+                osc.frequency.exponentialRampToValueAtTime(65, startTime + 0.05);
+
+                gain.gain.setValueAtTime(baseVol * 0.8, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.06);
+
+                osc.connect(gain);
+                gain.connect(this.filterNode);
+                osc.start(startTime);
+                osc.stop(startTime + 0.07);
+
+                // 2. Snare noise rattle
+                if (this.noiseBuffer) {
+                    const noise = this.ctx.createBufferSource();
+                    noise.buffer = this.noiseBuffer;
+                    const nFilter = this.ctx.createBiquadFilter();
+                    nFilter.type = "bandpass";
+                    nFilter.frequency.setValueAtTime(1600, startTime);
+                    nFilter.Q.setValueAtTime(1.4, startTime);
+
+                    const nGain = this.ctx.createGain();
+                    nGain.gain.setValueAtTime(baseVol * 0.85, startTime);
+                    nGain.gain.exponentialRampToValueAtTime(0.0005, startTime + 0.12);
+
+                    noise.connect(nFilter);
+                    nFilter.connect(nGain);
+                    nGain.connect(this.filterNode);
+
+                    noise.start(startTime);
+                    noise.stop(startTime + 0.13);
+                }
+                return;
+            }
+
+            // Toms (41, 43, 45, 47, 48, 50, 116)
             if (drumNote === 41 || drumNote === 43 || drumNote === 45 || drumNote === 47 || drumNote === 48 || drumNote === 50 || drumNote === 116) {
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
                 osc.type = "sine";
-                const startFreq = drumNote > 45 ? 180 : 130;
+                const startFreq = drumNote === 116 ? 90 : (drumNote > 46 ? 190 : 130);
                 osc.frequency.setValueAtTime(startFreq, startTime);
-                osc.frequency.exponentialRampToValueAtTime(45, startTime + 0.12);
+                osc.frequency.exponentialRampToValueAtTime(drumNote === 116 ? 35 : 45, startTime + 0.13);
 
-                gain.gain.setValueAtTime(baseVol * 0.9, startTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.13);
+                gain.gain.setValueAtTime(baseVol * 1.0, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.14);
 
                 osc.connect(gain);
                 gain.connect(this.filterNode);
                 osc.start(startTime);
-                osc.stop(startTime + 0.14);
+                osc.stop(startTime + 0.15);
 
                 const v = { osc, gain };
                 this.activeVoices.add(v);
@@ -469,7 +613,22 @@ export class RetroMidiSynthesizer {
                 return;
             }
 
-            // Snare / Hi-Hat / Cymbal noise
+            // Claves / Click (33, 75)
+            if (drumNote === 33 || drumNote === 75) {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(2100, startTime);
+                gain.gain.setValueAtTime(baseVol * 0.6, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.025);
+                osc.connect(gain);
+                gain.connect(this.filterNode);
+                osc.start(startTime);
+                osc.stop(startTime + 0.03);
+                return;
+            }
+
+            // Hi-Hat / Cymbals noise
             if (this.noiseBuffer) {
                 const noise = this.ctx.createBufferSource();
                 noise.buffer = this.noiseBuffer;
@@ -477,14 +636,15 @@ export class RetroMidiSynthesizer {
                 const filter = this.ctx.createBiquadFilter();
                 const gain = this.ctx.createGain();
 
-                const isHiHat = (drumNote === 42 || drumNote === 44 || drumNote === 46 || drumNote === 49);
-                const dur = isHiHat ? 0.035 : 0.07;
+                const isHiHat = (drumNote === 42 || drumNote === 44 || drumNote === 46);
+                const isCrash = (drumNote === 49 || drumNote === 51 || drumNote === 52 || drumNote === 53 || drumNote === 55 || drumNote === 57 || drumNote === 59);
+                const dur = isHiHat ? (drumNote === 46 ? 0.12 : 0.035) : (isCrash ? 0.32 : 0.08);
 
-                filter.type = "bandpass";
-                filter.frequency.setValueAtTime(isHiHat ? 4500 : 1200, startTime);
-                filter.Q.setValueAtTime(isHiHat ? 2.0 : 1.4, startTime);
+                filter.type = isCrash ? "highpass" : "bandpass";
+                filter.frequency.setValueAtTime(isHiHat ? 6500 : (isCrash ? 4800 : 1400), startTime);
+                filter.Q.setValueAtTime(isHiHat ? 2.2 : 1.2, startTime);
 
-                const drumVol = baseVol * (isHiHat ? 0.25 : 0.50);
+                const drumVol = baseVol * (isHiHat ? 0.3 : (isCrash ? 0.7 : 0.5));
                 gain.gain.setValueAtTime(drumVol, startTime);
                 gain.gain.exponentialRampToValueAtTime(0.0005, startTime + dur);
 
@@ -523,6 +683,7 @@ export class Player {
         this.parsedMidi = null;
         this.audioBuffer = null;
         this.currentSource = null;
+        this._pendingStart = false;
 
         this.volumeControl = new VolumeControl(this);
         this.gainNode = audioCtx ? audioCtx.createGain() : null;
@@ -574,6 +735,17 @@ export class Player {
         if (this.state === Player.CLOSED || !this.audioCtx) return;
         Manager.unlockAudio();
 
+        if (this.audioCtx.state === 'suspended') {
+            this._pendingStart = true;
+            Manager.onUnlocked(() => {
+                if (this._pendingStart && this.state !== Player.CLOSED) {
+                    this._pendingStart = false;
+                    this.start();
+                }
+            });
+            return;
+        }
+
         this.stop();
 
         if (this.parsedMidi && this.synth) {
@@ -616,6 +788,7 @@ export class Player {
 
     stop() {
         if (this.state === Player.CLOSED) return;
+        this._pendingStart = false;
         if (this.synth) {
             this.synth.stop();
         }
@@ -675,6 +848,8 @@ export class Manager {
     static audioCtx = null;
     static sfxBuffers = new Map();
     static sfxPreloadPromise = null;
+    static unlockCallbacks = [];
+    static activeBgmPlayer = null;
 
     static getAudioContext() {
         if (!Manager.audioCtx && typeof AudioContext !== 'undefined') {
@@ -684,12 +859,23 @@ export class Manager {
         return Manager.audioCtx;
     }
 
+    static onUnlocked(cb) {
+        if (Manager.audioCtx && Manager.audioCtx.state === 'running') {
+            cb();
+        } else {
+            Manager.unlockCallbacks.push(cb);
+        }
+    }
+
     static setupAutoUnlock(ctx) {
         if (typeof window === 'undefined' || !ctx) return;
         const unlock = () => {
             if (ctx.state === 'suspended') {
                 ctx.resume().then(() => {
                     console.log('[Audio] Web Audio context resumed successfully');
+                    const cbs = Manager.unlockCallbacks.slice();
+                    Manager.unlockCallbacks.length = 0;
+                    cbs.forEach(cb => { try { cb(); } catch (_) {} });
                 }).catch(() => {});
             }
             ['pointerdown', 'keydown', 'touchstart', 'mousedown', 'click'].forEach(e => {
@@ -713,7 +899,35 @@ export class Manager {
     static unlockAudio() {
         const ctx = Manager.getAudioContext();
         if (ctx && ctx.state === 'suspended') {
-            ctx.resume().catch(() => {});
+            ctx.resume().then(() => {
+                const cbs = Manager.unlockCallbacks.slice();
+                Manager.unlockCallbacks.length = 0;
+                cbs.forEach(cb => { try { cb(); } catch (_) {} });
+            }).catch(() => {});
+        }
+    }
+
+    static playSfx(soundId, volume = 1.0) {
+        const ctx = Manager.getAudioContext();
+        if (!ctx) return null;
+        if (!Manager.sfxBuffers.has(soundId)) return null;
+
+        if (ctx.state === 'suspended') {
+            Manager.unlockAudio();
+        }
+
+        try {
+            const buf = Manager.sfxBuffers.get(soundId);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(volume, ctx.currentTime);
+            src.connect(gain);
+            gain.connect(ctx.destination);
+            src.start(0);
+            return src;
+        } catch (_) {
+            return null;
         }
     }
 
@@ -738,7 +952,7 @@ export class Manager {
     }
 
     /**
-     * Preloads all 55 converted MP3 sound effects into native Web Audio AudioBuffers
+     * Preloads all 55 authentic sound effects into native Web Audio AudioBuffers
      */
     static async preloadSoundBank(basePath = 'assets/sfx/') {
         if (Manager.sfxPreloadPromise) return Manager.sfxPreloadPromise;
@@ -752,11 +966,15 @@ export class Manager {
 
             await Promise.all(soundIds.map(async (id) => {
                 try {
-                    const url = `${basePath}${id}.mp3`;
-                    const res = await fetch(url);
+                    let res = await fetch(`${basePath}${id}.wav`);
+                    if (!res.ok) {
+                        res = await fetch(`${basePath}${id}.mp3`);
+                    }
                     if (!res.ok) return;
                     const arrayBuf = await res.arrayBuffer();
-                    const audioBuf = await ctx.decodeAudioData(arrayBuf);
+                    const audioBuf = await new Promise((resolve, reject) => {
+                        ctx.decodeAudioData(arrayBuf, resolve, reject);
+                    });
                     Manager.sfxBuffers.set(id, audioBuf);
                 } catch (_) {}
             }));

@@ -20,6 +20,7 @@ scratch/
 vf_test_options/
 
 # Intermediate jars & scratch scripts
+audio_extract/
 Ultimate_Mortal_Kombat_3_remapped.jar
 scratch_s.java
 fix_vf.py

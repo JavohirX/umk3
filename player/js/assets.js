@@ -64,6 +64,8 @@ export async function loadAllAssets(basePath = 'assets/', onProgress = null) {
         }
     }));
 
-    // Preload SFX audio bank in background
-    Manager.preloadSoundBank(basePath + 'sfx/').catch(() => {});
+    // Preload SFX audio bank into memory
+    await Manager.preloadSoundBank(basePath + 'sfx/').catch((err) => {
+        console.warn("[Assets] SFX preload warning:", err);
+    });
 }
