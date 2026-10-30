@@ -33,6 +33,7 @@ load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TG_BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL") or "https://javohirx.github.io/umk3/player/"
+BOT_USERNAME = os.getenv("BOT_USERNAME") or "ImmortalCombatBot"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] %(message)s")
 
@@ -100,10 +101,102 @@ async def handle_start(message: types.Message, command: CommandObject):
         match_id = args.split("_", 1)[1]
         match = db.get_match(match_id)
 
-        if match:
+        if match and match.get("status") == "WAITING":
             creator_name = match["creator_name"]
+            creator_id = match["creator_id"]
             play_url = get_player_url(f"match={match_id}&chat={match['chat_id']}&user={user_id}&name={user_name}")
 
+            if user_id == creator_id:
+                # Creator re-opening their own challenge link
+                share_url = f"https://t.me/share/url?url=https://t.me/{BOT_USERNAME}?start=challenge_{match_id}&text=⚔️%20I%20challenge%20you%20to%20Immortal%20Combat!%20Tap%20Play%20to%20fight%20me!"
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="Play",
+                                web_app=WebAppInfo(url=play_url)
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="⚔️ Send to a Friend",
+                                switch_inline_query=f"challenge_{match_id}"
+                            ),
+                            InlineKeyboardButton(
+                                text="📲 Share Link",
+                                url=share_url
+                            )
+                        ]
+                    ]
+                )
+                text = (
+                    f"⚔️ <b>YOUR CHALLENGE IS LIVE!</b>\n\n"
+                    f"🥋 Match <code>#{match_id}</code> is waiting for an opponent.\n\n"
+                    f"⏱️ <b>Join Window:</b> Opponents have 60 seconds to join.\n"
+                    f"🛡️ <b>Forfeit Rule:</b> If an opponent disconnects during battle, you win by Autowin after 1 minute.\n\n"
+                    f"Tap below to enter your arena lobby or invite friends:"
+                )
+            else:
+                # Opponent accepting challenge
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="Play",
+                                web_app=WebAppInfo(url=play_url)
+                            )
+                        ]
+                    ]
+                )
+                text = (
+                    f"⚔️ <b>CHALLENGE DETECTED!</b>\n\n"
+                    f"🥋 <b>{creator_name}</b> has challenged you in Immortal Combat!\n\n"
+                    f"⏱️ <b>Rules of Engagement:</b>\n"
+                    f"• 1-minute lobby countdown: If neither joins, match cancels.\n"
+                    f"• If a player exits during match, the remaining player waits 1 minute for an <b>AUTOWIN</b>.\n"
+                    f"• If both players exit, match is abandoned without a win.\n\n"
+                    f"Tap below to accept and fight:"
+                )
+
+            await message.answer(text, parse_mode="HTML", reply_markup=kb)
+            return
+
+        elif match and match.get("status") in ("ACTIVE", "COMPLETED", "CANCELLED", "ABANDONED"):
+            status_desc = match.get("status").lower()
+            reason_desc = match.get("finish_reason") or "expired"
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="⚔️ Issue a New Challenge",
+                            callback_data="cmd_challenge"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="Play",
+                            web_app=WebAppInfo(url=get_player_url(f"user={user_id}&name={user_name}&chat={chat_id}"))
+                        )
+                    ]
+                ]
+            )
+            text = (
+                f"⚠️ <b>CHALLENGE NO LONGER AVAILABLE</b>\n\n"
+                f"Match <code>#{match_id}</code> is already <b>{status_desc}</b> ({reason_desc}).\n\n"
+                f"Start a new battle below:"
+            )
+            await message.answer(text, parse_mode="HTML", reply_markup=kb)
+            return
+        else:
+            # Match not found in DB - create on the fly
+            db.create_match(
+                match_id=match_id,
+                chat_id="inline",
+                creator_id="unknown",
+                creator_name="Challenger",
+                timeout_seconds=60
+            )
+            play_url = get_player_url(f"match={match_id}&chat=inline&user={user_id}&name={user_name}")
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -114,17 +207,14 @@ async def handle_start(message: types.Message, command: CommandObject):
                     ]
                 ]
             )
-
             text = (
                 f"⚔️ <b>CHALLENGE DETECTED!</b>\n\n"
-                f"🥋 <b>{creator_name}</b> has challenged you in Immortal Combat!\n\n"
+                f"🥋 Match <code>#{match_id}</code> is ready.\n\n"
                 f"⏱️ <b>Rules of Engagement:</b>\n"
-                f"• 1-minute lobby countdown: If neither joins, match cancels.\n"
-                f"• If a player exits during match, the remaining player waits 1 minute for an <b>AUTOWIN</b>.\n"
-                f"• If both players exit, match is abandoned without a win.\n\n"
-                f"Tap below to accept and fight:"
+                f"• 1-minute lobby countdown: If nobody joins, match cancels.\n"
+                f"• Disconnect during battle grants an <b>AUTOWIN</b> after 60s.\n\n"
+                f"Tap below to enter and fight:"
             )
-
             await message.answer(text, parse_mode="HTML", reply_markup=kb)
             return
 
@@ -140,8 +230,8 @@ async def handle_start(message: types.Message, command: CommandObject):
             ],
             [
                 InlineKeyboardButton(
-                    text="⚔️ Challenge a Friend (Inline)",
-                    switch_inline_query="challenge"
+                    text="⚔️ Issue a Challenge",
+                    callback_data="cmd_challenge"
                 ),
                 InlineKeyboardButton(
                     text="🏆 View Leaderboard",
@@ -191,27 +281,59 @@ async def handle_challenge(message: types.Message):
         timeout_seconds=60
     )
 
-    play_url = get_player_url(f"match={match_id}&chat={chat_id}")
+    play_url = get_player_url(f"match={match_id}&chat={chat_id}&user={user_id}&name={user_name}")
+    share_url = f"https://t.me/share/url?url=https://t.me/{BOT_USERNAME}?start=challenge_{match_id}&text=⚔️%20I%20challenge%20you%20to%20Immortal%20Combat!%20Tap%20Play%20to%20fight%20me!"
 
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Play",
-                    web_app=WebAppInfo(url=play_url)
-                )
+    if message.chat.type == "private":
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="⚔️ Send to a Friend",
+                        switch_inline_query=f"challenge_{match_id}"
+                    ),
+                    InlineKeyboardButton(
+                        text="📲 Share Link",
+                        url=share_url
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Play",
+                        web_app=WebAppInfo(url=play_url)
+                    )
+                ]
             ]
-        ]
-    )
-
-    chat_type_desc = "group" if message.chat.type in ("group", "supergroup") else "arena"
-    text = (
-        f"⚔️ <b>NEW CHALLENGE ISSUED!</b>\n\n"
-        f"🥋 <b>{user_name}</b> has placed an open challenge in this {chat_type_desc}!\n\n"
-        f"⏱️ <b>Timer:</b> 1 minute to accept before cancellation.\n"
-        f"⚠️ <b>Disconnect Rule:</b> Exiting during match grants an Autowin to the opponent after 60s.\n\n"
-        f"Who dares to step up? Tap below to fight:"
-    )
+        )
+        text = (
+            f"⚔️ <b>CHALLENGE CREATED!</b>\n\n"
+            f"🥋 Match <code>#{match_id}</code> has been prepared.\n\n"
+            f"Send this challenge to a friend in any chat, or tap <b>Play</b> to enter the lobby and wait for your opponent (60s timer):"
+        )
+    else:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Play",
+                        web_app=WebAppInfo(url=play_url)
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="⚔️ Forward Challenge",
+                        switch_inline_query=f"challenge_{match_id}"
+                    )
+                ]
+            ]
+        )
+        text = (
+            f"⚔️ <b>NEW CHALLENGE ISSUED!</b>\n\n"
+            f"🥋 <b>{user_name}</b> has placed an open challenge in this group!\n\n"
+            f"⏱️ <b>Timer:</b> 1 minute to accept before cancellation.\n"
+            f"⚠️ <b>Disconnect Rule:</b> Exiting during match grants an Autowin to the opponent after 60s.\n\n"
+            f"Who dares to step up? Tap below to fight:"
+        )
 
     await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
@@ -260,24 +382,59 @@ async def handle_callback_challenge(callback: types.CallbackQuery):
     match_id = str(uuid.uuid4())[:8]
 
     db.create_match(match_id, chat_id, user_id, user_name, timeout_seconds=60)
-    play_url = get_player_url(f"match={match_id}&chat={chat_id}")
+    play_url = get_player_url(f"match={match_id}&chat={chat_id}&user={user_id}&name={user_name}")
+    share_url = f"https://t.me/share/url?url=https://t.me/{BOT_USERNAME}?start=challenge_{match_id}&text=⚔️%20I%20challenge%20you%20to%20Immortal%20Combat!%20Tap%20Play%20to%20fight%20me!"
 
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Play",
-                    web_app=WebAppInfo(url=play_url)
-                )
+    if callback.message.chat.type == "private":
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="⚔️ Send to a Friend",
+                        switch_inline_query=f"challenge_{match_id}"
+                    ),
+                    InlineKeyboardButton(
+                        text="📲 Share Link",
+                        url=share_url
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Play",
+                        web_app=WebAppInfo(url=play_url)
+                    )
+                ]
             ]
-        ]
-    )
+        )
+        text = (
+            f"⚔️ <b>CHALLENGE CREATED!</b>\n\n"
+            f"🥋 Match <code>#{match_id}</code> is ready.\n\n"
+            f"Send this challenge to a friend or tap <b>Play</b> to enter the lobby:"
+        )
+    else:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Play",
+                        web_app=WebAppInfo(url=play_url)
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="⚔️ Forward Challenge",
+                        switch_inline_query=f"challenge_{match_id}"
+                    )
+                ]
+            ]
+        )
+        text = (
+            f"⚔️ <b>{user_name}</b> has issued a new challenge!\n\n"
+            f"⏱️ 60s join timer. Disconnect grants Autowin after 60s.\n"
+            f"Tap below to fight:"
+        )
 
-    await callback.message.answer(
-        f"⚔️ <b>{user_name}</b> has issued a new challenge!\nTap below to fight (60s timer):",
-        parse_mode="HTML",
-        reply_markup=kb
-    )
+    await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
     await callback.answer()
 
 
@@ -293,28 +450,38 @@ async def handle_inline_query(inline_query: InlineQuery):
     """
     user_id = str(inline_query.from_user.id)
     user_name = inline_query.from_user.first_name or "Fighter"
-    query_text = inline_query.query.strip().lower()
+    query_text = inline_query.query.strip()
 
-    # Generate a unique match session for this inline challenge
-    match_id = str(uuid.uuid4())[:8]
+    # If query contains an existing match id (e.g. challenge_1a2b3c4d), reuse it
+    match_id = None
+    if query_text.startswith("challenge_") or query_text.startswith("match_"):
+        candidate_id = query_text.split("_", 1)[1].strip()
+        if candidate_id:
+            existing = db.get_match(candidate_id)
+            if existing:
+                match_id = candidate_id
 
-    # Pre-create match session (chat_id will update when opened or fallback to 'inline')
-    db.create_match(
-        match_id=match_id,
-        chat_id="inline",
-        creator_id=user_id,
-        creator_name=user_name,
-        timeout_seconds=60
-    )
+    if not match_id:
+        match_id = str(uuid.uuid4())[:8]
+        db.create_match(
+            match_id=match_id,
+            chat_id="inline",
+            creator_id=user_id,
+            creator_name=user_name,
+            timeout_seconds=60
+        )
 
-    play_url = get_player_url(f"match={match_id}&creator={user_id}&name={user_name}")
+    # CRITICAL: InlineKeyboardMarkup inside InlineQueryResultArticle CANNOT have web_app buttons!
+    # Telegram Bot API throws BUTTON_TYPE_INVALID.
+    # It must be a standard deep link URL button pointing to the bot.
+    challenge_deep_link = f"https://t.me/{BOT_USERNAME}?start=challenge_{match_id}"
 
     kb_challenge = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="Play",
-                    web_app=WebAppInfo(url=play_url)
+                    url=challenge_deep_link
                 )
             ]
         ]
@@ -332,7 +499,7 @@ async def handle_inline_query(inline_query: InlineQuery):
         # Option 1: 1v1 Challenge
         InlineQueryResultArticle(
             id=f"challenge_{match_id}",
-            title="⚔️ Challenge a Friend to Immortal Combat",
+            title="⚔️ Challenge to Immortal Combat",
             description="Send a 1v1 challenge (60s to accept, 60s forfeit autowin)",
             input_message_content=InputTextMessageContent(
                 message_text=msg_challenge,
@@ -379,6 +546,15 @@ async def main():
 
     # 2. Initialize Telegram Bot
     bot = Bot(token=TOKEN)
+
+    try:
+        me = await bot.get_me()
+        global BOT_USERNAME
+        if me.username:
+            BOT_USERNAME = me.username
+        logging.info(f"Connected as Telegram Bot: @{BOT_USERNAME} ({me.first_name})")
+    except Exception as e:
+        logging.warning(f"Could not fetch bot identity: {e}")
 
     try:
         play_url = get_player_url()
