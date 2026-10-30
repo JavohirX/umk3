@@ -683,10 +683,33 @@ function setupCanvas() {
         unlockAudio();
 
         if (mpClient && mpClient.isMultiplayer) {
-            // In multiplayer mode, hero selection and fight progression are managed
-            // through the synchronized MK UI overlay. Tapping the canvas directly
-            // must NOT trigger single-player menus, avoiding clone hero matches.
-            return;
+            if (mpClient.status === "HERO_SELECT") {
+                if (mpClient._heroSelected) return; // Already locked in
+
+                const startX = CoreEngine.val_int_bT || 0;
+                const startY = CoreEngine.val_int_bU || 0;
+                const size = CoreEngine.val_int_bQ || 40;
+
+                if (typeof PatternTable !== 'undefined' && PatternTable.val_arr_arr_byte_a) {
+                    for (let i = 0; i < PatternTable.val_arr_arr_byte_a.length; i++) {
+                        const entry = PatternTable.val_arr_arr_byte_a[i];
+                        const px = (entry[2] || 0) + startX;
+                        const py = (entry[3] || 0) + startY;
+                        if (cx >= px - 6 && cx <= px + size + 6 && cy >= py - 6 && cy <= py + size + 6) {
+                            CoreEngine.val_byte_n = i;
+                            sendKeyEvent(-5, true);
+                            setTimeout(() => sendKeyEvent(-5, false), 90);
+                            return;
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (mpClient.status === "ACTIVE") {
+                // In active combat, canvas pointer events do not trigger menus
+                return;
+            }
         }
 
         // 1. Initial screens & Title Screen (val_int_h < 9):
@@ -749,43 +772,76 @@ function startAnimationLoop() {
             try {
                 midlet.stepFrame();
 
-                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") {
-                    const fighterB = CoreEngine.val_coreengine_b;
-                    const fighterC = CoreEngine.val_coreengine_c;
+                if (mpClient && mpClient.isMultiplayer) {
+                    // 1. Hero Selection Phase on Native Canvas
+                    if (mpClient.status === "HERO_SELECT") {
+                        if (CoreEngine.val_bool_W && !mpClient._heroSelected) {
+                            mpClient._heroSelected = true;
+                            let hero = CoreEngine.exec_n_to_int();
+                            if (hero < 0 || hero > 6) {
+                                hero = Math.floor(Math.random() * 7);
+                            }
+                            mpClient._heroId = hero;
+                            console.log(`[Multiplayer] Local player locked hero: ${hero}`);
+                            mpClient.sendHeroLock(hero);
 
-                    if (fighterB && fighterC) {
-                        const p1Hp = fighterB.currentHealth;
-                        const p2Hp = fighterC.currentHealth;
-
-                        // Tick round timer down in multiplayer (val_int_e is frame delta in ms)
-                        if (CoreEngine.val_int_dS > 0) {
-                            CoreEngine.val_int_dS = Math.max(0, CoreEngine.val_int_dS - (CoreEngine.val_int_e || 33));
-                        }
-                        const timerSec = Math.max(0, Math.floor(CoreEngine.val_int_dS / 1000));
-
-                        // Real-time Top Combat HUD updates
-                        if (mpClient.ui) {
-                            mpClient.ui.updateHealthBars(p1Hp, p2Hp);
-                            mpClient.ui.setRoundClock(timerSec);
+                            // Hold selection state so single-player tower does not load
+                            CoreEngine.val_bool_W = false;
+                            CoreEngine.val_int_aA = CoreEngine.val_int_bF;
                         }
 
-                        // Best-of-3 Round Win Arbiter (P1 is authoritative to maintain 100% sync)
-                        if (mpClient.role === "p1" && mpClient._roundActive) {
-                            // Ensure stage is in live combat phase (val_int_dN === 2)
-                            if (CoreEngine.val_int_dN === 2) {
-                                if (p1Hp <= 0 && p2Hp > 0) {
-                                    mpClient._roundActive = false;
-                                    console.log("[Multiplayer] P1 knocked out! Round won by P2.");
-                                    mpClient.sendRoundWin("p2");
-                                } else if (p2Hp <= 0 && p1Hp > 0) {
-                                    mpClient._roundActive = false;
-                                    console.log("[Multiplayer] P2 knocked out! Round won by P1.");
-                                    mpClient.sendRoundWin("p1");
-                                } else if (CoreEngine.val_int_dS <= 0) {
-                                    mpClient._roundActive = false;
-                                    const winnerRole = (p1Hp >= p2Hp) ? "p1" : "p2";
-                                    console.log(`[Multiplayer] Round timeout! Round won by ${winnerRole} (P1: ${p1Hp}, P2: ${p2Hp})`);
-                                    mpClient.sendRoundWin(winnerRole);
+                        // Draw native waiting banner on canvas if local player has selected
+                        if (mpClient._heroSelected && canvas && ctx) {
+                            ctx.save();
+                            const bH = 34;
+                            const bY = canvas.height - bH - 18;
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                            ctx.fillRect(0, bY, canvas.width, bH);
+                            ctx.strokeStyle = '#dcb450';
+                            ctx.lineWidth = 1.5;
+                            ctx.strokeRect(0, bY, canvas.width, bH);
+
+                            ctx.fillStyle = '#ffeedd';
+                            ctx.font = 'bold 12px monospace';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('WAITING FOR OPPONENT...', canvas.width / 2, bY + bH / 2);
+                            ctx.restore();
+                        }
+                    }
+
+                    // 2. Active Combat Phase
+                    if (mpClient.status === "ACTIVE") {
+                        const fighterB = CoreEngine.val_coreengine_b;
+                        const fighterC = CoreEngine.val_coreengine_c;
+
+                        if (fighterB && fighterC) {
+                            const p1Hp = fighterB.currentHealth;
+                            const p2Hp = fighterC.currentHealth;
+
+                            // Tick round timer down in multiplayer (val_int_e is frame delta in ms)
+                            if (CoreEngine.val_int_dS > 0) {
+                                CoreEngine.val_int_dS = Math.max(0, CoreEngine.val_int_dS - (CoreEngine.val_int_e || 33));
+                            }
+
+                            // Best-of-3 Round Win Arbiter (P1 is authoritative to maintain 100% sync)
+                            if (mpClient.role === "p1" && mpClient._roundActive) {
+                                // Ensure stage is in live combat phase (val_int_dN === 2)
+                                if (CoreEngine.val_int_dN === 2) {
+                                    if (p1Hp <= 0 && p2Hp > 0) {
+                                        mpClient._roundActive = false;
+                                        console.log("[Multiplayer] P1 knocked out! Round won by P2.");
+                                        mpClient.sendRoundWin("p2");
+                                    } else if (p2Hp <= 0 && p1Hp > 0) {
+                                        mpClient._roundActive = false;
+                                        console.log("[Multiplayer] P2 knocked out! Round won by P1.");
+                                        mpClient.sendRoundWin("p1");
+                                    } else if (CoreEngine.val_int_dS <= 0) {
+                                        mpClient._roundActive = false;
+                                        const winnerRole = (p1Hp >= p2Hp) ? "p1" : "p2";
+                                        console.log(`[Multiplayer] Round timeout! Round won by ${winnerRole} (P1: ${p1Hp}, P2: ${p2Hp})`);
+                                        mpClient.sendRoundWin(winnerRole);
+                                    }
                                 }
                             }
                         }
@@ -847,6 +903,14 @@ async function bootstrap() {
         }
 
         // 7. Initialize Multiplayer Subsystem
+        mpClient.onHeroSelectStartCallback = (data) => {
+            console.log("[Multiplayer] Entering native hero select grid...");
+            mpClient._heroSelected = false;
+            mpClient._heroId = null;
+            // Switch engine to gameState 11 which opens the native character select grid
+            CoreEngine.setGameState(11);
+        };
+
         mpClient.onVersusStartCallback = (p1Hero, p2Hero, data) => {
             console.log(`[Multiplayer] Spawning fighters: P1=${p1Hero}, P2=${p2Hero}`);
             mpClient._roundActive = true;
@@ -861,11 +925,6 @@ async function bootstrap() {
 
             // Transition engine to active combat
             CoreEngine.setGameState(11);
-
-            // Show top battle HUD with dragon win medallions
-            mpClient.ui.showCombatHud(p1Hero, p2Hero, data.p1?.name, data.p2?.name);
-            mpClient.ui.setRoundNumber(1);
-            mpClient.ui.showRoundAnnounceBanner("ROUND 1", "FIGHT!");
         };
 
         mpClient.onRoundNextCallback = (data) => {
@@ -886,28 +945,34 @@ async function bootstrap() {
 
             // Reset 99s timer
             CoreEngine.val_int_dS = 99000;
-
-            // Update HUD
-            mpClient.ui.updateHealthBars(100, 100);
-            mpClient.ui.updateRoundCoins(data.p1_rounds, data.p2_rounds);
-            mpClient.ui.setRoundNumber(data.round_num);
         };
 
         mpClient.onPeerInputCallback = (keyCode, isDown) => {
-            const targetFighter = (mpClient.role === 'p1') ? CoreEngine.val_coreengine_c : CoreEngine.val_coreengine_b;
-            if (!targetFighter) return;
+            if (mpClient.role === 'p1') {
+                // Local is P1 -> Peer is P2 (drive Fighter C directly)
+                const targetFighter = CoreEngine.val_coreengine_c;
+                if (!targetFighter) return;
 
-            if (isDown) {
-                if (keyCode === 53 || keyCode === -5) targetFighter.updateActor(4);
-                else if (keyCode === 55) targetFighter.updateActor(5);
-                else if (keyCode === 57) targetFighter.updateActor(27);
-                else if (keyCode === -1 || keyCode === 49 || keyCode === 51) targetFighter.updateActor(12);
-                else if (keyCode === -2 || keyCode === 56) targetFighter.updateActor(3);
-                else if (keyCode === -3) targetFighter.setActorAnimation(-1);
-                else if (keyCode === -4) targetFighter.setActorAnimation(1);
+                if (isDown) {
+                    if (keyCode === 53 || keyCode === -5) targetFighter.updateActor(4);
+                    else if (keyCode === 55) targetFighter.updateActor(5);
+                    else if (keyCode === 57) targetFighter.updateActor(27);
+                    else if (keyCode === -1 || keyCode === 49 || keyCode === 51) targetFighter.updateActor(12);
+                    else if (keyCode === -2 || keyCode === 56) targetFighter.updateActor(3);
+                    else if (keyCode === -3) targetFighter.setActorAnimation(-1);
+                    else if (keyCode === -4) targetFighter.setActorAnimation(1);
+                } else {
+                    if (keyCode === -2 || keyCode === 57 || keyCode === -3 || keyCode === -4) {
+                        targetFighter.updateActor(0);
+                    }
+                }
             } else {
-                if (keyCode === -2 || keyCode === 57 || keyCode === -3 || keyCode === -4) {
-                    targetFighter.updateActor(0);
+                // Local is P2 -> Peer is P1 (drive Fighter B via MainCanvasBridge)
+                if (!CoreEngine.val_maincanvasbridge_a) return;
+                if (isDown) {
+                    CoreEngine.val_maincanvasbridge_a.keyPressed(keyCode);
+                } else {
+                    CoreEngine.val_maincanvasbridge_a.keyReleased(keyCode);
                 }
             }
         };
