@@ -42,14 +42,15 @@ jobs:
             fi
 
             echo "=== 3. Setting up Python environment & secrets for Telegram Bot ==="
+            DOMAIN="${{ secrets.VPS_HOST }}"
+            if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              DOMAIN="${DOMAIN}.sslip.io"
+            fi
+
             if [ -n "${{ secrets.TG_BOT_TOKEN }}" ]; then
               echo "TELEGRAM_BOT_TOKEN=${{ secrets.TG_BOT_TOKEN }}" > .env
               echo "TG_BOT_TOKEN=${{ secrets.TG_BOT_TOKEN }}" >> .env
-              if [[ "${{ secrets.VPS_HOST }}" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ && ! "${{ secrets.VPS_HOST }}" =~ ^[0-9.]+$ ]]; then
-                echo "WEBAPP_URL=https://${{ secrets.VPS_HOST }}/player/" >> .env
-              else
-                echo "WEBAPP_URL=https://javohirx.github.io/umk3/player/" >> .env
-              fi
+              echo "WEBAPP_URL=https://${DOMAIN}/player/" >> .env
             fi
 
             if [ ! -d "venv" ]; then
@@ -58,13 +59,26 @@ jobs:
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install aiogram python-dotenv aiohttp
 
-            echo "=== 4. Reloading Nginx & Restarting Bot Service ==="
+            echo "=== 4. Updating Nginx configuration for ${DOMAIN} ==="
+            if [ -f "vps/nginx.conf" ]; then
+              sed "s/YOUR_DOMAIN/${DOMAIN}/g" vps/nginx.conf > /tmp/umk3_nginx.conf
+              $SUDO cp /tmp/umk3_nginx.conf /etc/nginx/sites-available/umk3.conf
+              $SUDO ln -sf /etc/nginx/sites-available/umk3.conf /etc/nginx/sites-enabled/umk3.conf
+              $SUDO rm -f /etc/nginx/sites-enabled/default
+              if $SUDO nginx -t; then
+                $SUDO systemctl reload nginx
+                echo "Nginx reloaded successfully with WebSocket & REST proxy."
+              else
+                echo "Warning: Nginx test failed, keeping previous configuration."
+              fi
+            fi
+
+            echo "=== 5. Restarting Bot Service ==="
             if [ -f "vps/umk3-bot.service" ]; then
               $SUDO cp vps/umk3-bot.service /etc/systemd/system/umk3-bot.service || true
               $SUDO systemctl daemon-reload || true
               $SUDO systemctl enable umk3-bot || true
             fi
-            $SUDO nginx -t && $SUDO systemctl reload nginx || true
             $SUDO systemctl restart umk3-bot || true
 
             echo "=== Deployment to VPS Completed Successfully! ==="
