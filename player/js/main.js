@@ -728,69 +728,16 @@ function setupCanvas() {
         const cx = (e.clientX - rect.left) * scaleX;
         const cy = (e.clientY - rect.top) * scaleY;
 
-        triggerHaptic(12);
-        unlockAudio();
-
-        if (mpClient && mpClient.isMultiplayer) {
-            if (mpClient.status === "ACTIVE") {
-                // In active combat, canvas pointer events do not trigger menus
-                return;
-            }
-
-            if (mpClient.status === "HERO_SELECT") {
-                if (mpClient._heroSelected) return; // Already locked in
-
-                // Allow softkeys (e.g. Back/Info) during hero select
-                if (cy >= 355) {
-                    if (cx <= 105) {
-                        const lskBtn = document.getElementById('screen-btn-lsk');
-                        if (lskBtn) {
-                            lskBtn.classList.add('active');
-                            setTimeout(() => lskBtn.classList.remove('active'), 120);
-                        }
-                        sendKeyEvent(-6, true);
-                        setTimeout(() => sendKeyEvent(-6, false), 90);
-                        return;
-                    }
-                    if (cx >= 247) {
-                        const rskBtn = document.getElementById('screen-btn-rsk');
-                        if (rskBtn) {
-                            rskBtn.classList.add('active');
-                            setTimeout(() => rskBtn.classList.remove('active'), 120);
-                        }
-                        sendKeyEvent(-7, true);
-                        setTimeout(() => sendKeyEvent(-7, false), 90);
-                        return;
-                    }
-                }
-
-                const startX = CoreEngine.val_int_bT || 0;
-                const startY = CoreEngine.val_int_bU || 0;
-                const size = CoreEngine.val_int_bQ || 40;
-
-                if (typeof PatternTable !== 'undefined' && PatternTable.val_arr_arr_byte_a) {
-                    for (let i = 0; i < PatternTable.val_arr_arr_byte_a.length; i++) {
-                        const entry = PatternTable.val_arr_arr_byte_a[i];
-                        const px = (entry[2] || 0) + startX;
-                        const py = (entry[3] || 0) + startY;
-                        if (cx >= px - 6 && cx <= px + size + 6 && cy >= py - 6 && cy <= py + size + 6) {
-                            CoreEngine.val_byte_n = i;
-                            sendKeyEvent(-5, true);
-                            setTimeout(() => sendKeyEvent(-5, false), 90);
-                            return;
-                        }
-                    }
-                }
-                return;
-            }
-        }
-
         // 1. Softkey zone at the bottom of the screen (OPTNS / BACK / PAUSE)
         // Canvas is 352 x 416. The bottom softkey bar occupies cy >= 355.
         // LSK is on the left (cx <= 105), RSK is on the right (cx >= 247).
         if (cy >= 355) {
             if (cx <= 105) {
-                // Left Softkey (LSK / Options / Info / Select) -> keycode -6
+                // In active multiplayer combat, ignore menu softkeys
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") return;
+
+                triggerHaptic(12);
+                unlockAudio();
                 const lskBtn = document.getElementById('screen-btn-lsk');
                 if (lskBtn) {
                     lskBtn.classList.add('active');
@@ -801,7 +748,11 @@ function setupCanvas() {
                 return;
             }
             if (cx >= 247) {
-                // Right Softkey (RSK / Back / Pause / Exit) -> keycode -7
+                // In active multiplayer combat, ignore pause
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") return;
+
+                triggerHaptic(12);
+                unlockAudio();
                 const rskBtn = document.getElementById('screen-btn-rsk');
                 if (rskBtn) {
                     rskBtn.classList.add('active');
@@ -813,7 +764,45 @@ function setupCanvas() {
             }
         }
 
-        // 1. Initial screens & Title Screen (val_int_h < 9):
+        // 2. Active combat check:
+        // When fighters are spawned and fighting (single-player or multiplayer), touches on the arena
+        // must NEVER trigger combat actions (like Punch / -5). Combat is controlled by the keypad.
+        const isCombat = Boolean(
+            CoreEngine.val_coreengine_b !== null ||
+            (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE")
+        );
+        if (isCombat) {
+            return;
+        }
+
+        triggerHaptic(12);
+        unlockAudio();
+
+        // 3. Hero Select Grid (single player or multiplayer):
+        if (CoreEngine.val_int_cw === 1 || (mpClient && mpClient.isMultiplayer && mpClient.status === "HERO_SELECT")) {
+            if (mpClient && mpClient.isMultiplayer && mpClient._heroSelected) return; // Already locked in
+
+            const startX = CoreEngine.val_int_bT || 0;
+            const startY = CoreEngine.val_int_bU || 0;
+            const size = CoreEngine.val_int_bQ || 40;
+
+            if (typeof PatternTable !== 'undefined' && PatternTable.val_arr_arr_byte_a) {
+                for (let i = 0; i < PatternTable.val_arr_arr_byte_a.length; i++) {
+                    const entry = PatternTable.val_arr_arr_byte_a[i];
+                    const px = (entry[2] || 0) + startX;
+                    const py = (entry[3] || 0) + startY;
+                    if (cx >= px - 6 && cx <= px + size + 6 && cy >= py - 6 && cy <= py + size + 6) {
+                        CoreEngine.val_byte_n = i;
+                        sendKeyEvent(-5, true);
+                        setTimeout(() => sendKeyEvent(-5, false), 90);
+                        return;
+                    }
+                }
+            }
+            return;
+        }
+
+        // 4. Initial screens & Title Screen (val_int_h < 9):
         // "TOUCH THE SCREEN TO START" or language/sound selections
         if (CoreEngine.val_int_h < 9) {
             sendKeyEvent(-5, true);
@@ -821,7 +810,7 @@ function setupCanvas() {
             return;
         }
 
-        // 2. Main Menu (val_int_h === 9):
+        // 5. Main Menu (val_int_h === 9):
         if (CoreEngine.val_int_h === 9 && Array.isArray(CoreEngine.val_arr_int_t)) {
             // Up scroll arrow
             if (cy < 135 && cy > 40) {
@@ -852,10 +841,11 @@ function setupCanvas() {
                     return;
                 }
             }
+            return;
         }
 
-        // 3. Selection Screens (e.g. Choose Destiny / Difficulty / Character Select):
-        if (CoreEngine.val_int_h < 12) {
+        // 6. Choose Destiny / Difficulty Tower (val_int_h === 10):
+        if (CoreEngine.val_int_h === 10) {
             sendKeyEvent(-5, true);
             setTimeout(() => sendKeyEvent(-5, false), 90);
         }
