@@ -346,8 +346,8 @@ function setupInputControls() {
             'right': [-4],
             'up-left': [49],     // Key 1: Native J2ME Up-Left Diagonal Jump
             'up-right': [51],    // Key 3: Native J2ME Up-Right Diagonal Jump
-            'down-left': [-2, -3],
-            'down-right': [-2, -4]
+            'down-left': [-2],   // Same function as simple 8 (Down / Crouch)
+            'down-right': [-2]   // Same function as simple 8 (Down / Crouch)
         };
 
         const joystick = new AdvancedMovementJoystick({
