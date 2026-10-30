@@ -310,18 +310,18 @@ def run_joystick_tests():
         print("[CHECK 6 PASSED] Diagonal Jump Key Dispatch: Key 51 (Up-Right) & Key 49 (Up-Left) dispatched cleanly without vertical override.")
 
         # -------------------------------------------------------------
-        # CHECKLIST 7: Combat Action Buttons A, B, C, D Verification
+        # CHECKLIST 7: Combat Action Buttons A, B, D & Down Diagonals Verification
         # -------------------------------------------------------------
-        print("\n--- Testing Checklist 7: Combat Action Buttons A, B, C, D ---")
+        print("\n--- Testing Checklist 7: Combat Action Buttons A, B, D & Down Diagonals ---")
         btn_labels = page.evaluate('''() => {
             const btns = Array.from(document.querySelectorAll('.combat-btn .combat-digit')).map(e => e.innerText.trim());
             return btns;
         }''')
         print(f"Combat button labels: {btn_labels}")
-        assert btn_labels == ['A', 'B', 'C', 'D'], f"[FAIL] Expected buttons A, B, C, D, got {btn_labels}"
+        assert btn_labels == ['A', 'B', 'D'], f"[FAIL] Expected buttons A, B, D, got {btn_labels}"
 
         # Test clicking each button
-        for label, expected_code in [('A', 53), ('B', 55), ('C', 56), ('D', 57)]:
+        for label, expected_code in [('A', 53), ('B', 55), ('D', 57)]:
             page.evaluate('() => window.__keyHistory = []')
             btn_selector = f'.combat-btn:has(.combat-digit:text-is("{label}"))'
             page.click(btn_selector)
@@ -332,7 +332,34 @@ def run_joystick_tests():
             print(f"Button {label} click -> downs: {down_codes}, ups: {up_codes}")
             assert expected_code in down_codes, f"[FAIL] Button {label} did not dispatch Key {expected_code} down! Got: {down_codes}"
             assert expected_code in up_codes, f"[FAIL] Button {label} did not dispatch Key {expected_code} up! Got: {up_codes}"
-        print("[CHECK 7 PASSED] Combat Buttons A, B, C, D dispatch correct J2ME keys (53, 55, 56, 57).")
+        print("[CHECK 7.1 PASSED] Combat Buttons A, B, D dispatch correct J2ME keys (53, 55, 57).")
+
+        # Test Down-Left and Down-Right mapping to Key -2 (Down / Crouch)
+        for diag_dir in ['down-left', 'down-right']:
+            page.evaluate('() => window.__keyHistory = []')
+            page.evaluate(f'''() => {{
+                const dpad = document.getElementById("dpad-grid");
+                const rect = dpad.getBoundingClientRect();
+                const btn = dpad.querySelector('[data-dir="{diag_dir}"]');
+                const bRect = btn.getBoundingClientRect();
+                dpad.dispatchEvent(new PointerEvent("pointerdown", {{
+                    clientX: bRect.left + bRect.width / 2,
+                    clientY: bRect.top + bRect.height / 2,
+                    pointerId: 10,
+                    bubbles: true
+                }}));
+            }}''')
+            time.sleep(0.05)
+            keys = page.evaluate('() => window.__keyHistory')
+            down_codes = [h['code'] for h in keys if h['type'] == 'down']
+            print(f"D-Pad {diag_dir} dispatched: {down_codes}")
+            assert -2 in down_codes, f"[FAIL] {diag_dir} did not dispatch Key -2 (Down)! Got: {down_codes}"
+            assert -3 not in down_codes and -4 not in down_codes, f"[FAIL] {diag_dir} dispatched unwanted horizontal keys! Got: {down_codes}"
+            page.evaluate('''() => {
+                const dpad = document.getElementById("dpad-grid");
+                dpad.dispatchEvent(new PointerEvent("pointerup", { pointerId: 10, bubbles: true }));
+            }''')
+        print("[CHECK 7.2 PASSED] Down-Left and Down-Right cleanly dispatch Key -2 (Down / Crouch) without horizontal drift.")
 
         # -------------------------------------------------------------
         # CHECKLIST 8: Pitch Black Lower Panel & MK Antique Design Code
@@ -342,7 +369,7 @@ def run_joystick_tests():
         print(f"Controls panel computed background: {panel_bg}")
         assert panel_bg in ['rgb(0, 0, 0)', 'rgba(0, 0, 0, 1)'], f"[FAIL] Controls panel is not pitch black! Got: {panel_bg}"
         
-        has_mk_class = page.evaluate('() => document.querySelectorAll(".btn-mk").length >= 12')
+        has_mk_class = page.evaluate('() => document.querySelectorAll(".btn-mk").length >= 11')
         assert has_mk_class, "[FAIL] Buttons missing .btn-mk Mortal Kombat design styling!"
         print("[CHECK 8 PASSED] Controls panel is pitch black (#000000) and buttons use MK stone/bronze design code.")
 
@@ -376,8 +403,8 @@ def run_joystick_tests():
         print(f"Tutorial String 42: {tut_check['str42'][:80]}...")
         print(f"Tutorial String 43: {tut_check['str43'][:80]}...")
         assert "8-WAY D-PAD" in tut_check['str42'] or "8-WAY D-PAD" in tut_check['str43'], "[FAIL] Tutorial does not reference 8-WAY D-PAD!"
-        assert "A/B/C/D" in tut_check['str42'] or "A/B/C/D" in tut_check['str43'], "[FAIL] Tutorial does not reference A/B/C/D!"
-        print("[CHECK 9 PASSED] In-game tutorial fully updated under new 8-WAY D-PAD and A/B/C/D system.")
+        assert "A/B/D" in tut_check['str42'] or "A/B/D" in tut_check['str43'], "[FAIL] Tutorial does not reference A/B/D!"
+        print("[CHECK 9 PASSED] In-game tutorial fully updated under new 8-WAY D-PAD and A/B/D system.")
 
         # -------------------------------------------------------------
         # NAVIGATION & VISUAL SCREENSHOT VERIFICATION

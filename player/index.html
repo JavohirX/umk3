@@ -325,8 +325,9 @@
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
         }
 
-        /* --- 2. RIGHT SIDE: 2x2 COMBAT KEYPAD (BUTTONS A, B, C, D) --- */
-        .combat-4-grid {
+        /* --- 2. RIGHT SIDE: COMBAT KEYPAD (BUTTONS A, B, D) --- */
+        .combat-4-grid,
+        .combat-grid {
             width: var(--main-pad-height, 160px);
             height: var(--main-pad-height, 160px);
             aspect-ratio: 1 / 1;
@@ -355,6 +356,10 @@
             align-items: center;
             justify-content: center;
             box-sizing: border-box;
+        }
+
+        .combat-btn-d {
+            grid-column: 1 / -1;
         }
 
         .combat-digit {
@@ -397,7 +402,8 @@
             .dpad-diag {
                 font-size: 0.95em;
             }
-            .combat-4-grid {
+            .combat-4-grid,
+            .combat-grid {
                 width: 144px;
                 height: 144px;
                 gap: 6px;
@@ -434,7 +440,8 @@
                 width: 18px;
                 height: 18px;
             }
-            .combat-4-grid {
+            .combat-4-grid,
+            .combat-grid {
                 width: 144px;
                 height: 144px;
                 gap: 7px;
@@ -663,26 +670,23 @@
                     <button class="dpad-btn btn-mk dpad-card" data-dir="right" aria-label="Move Right">►</button>
 
                     <!-- Row 3: Down-Left, Down, Down-Right -->
-                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-left" aria-label="Crouch-Left">↙</button>
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-left" aria-label="Crouch Down">↙</button>
                     <button class="dpad-btn btn-mk dpad-card" data-dir="down" aria-label="Crouch Down">▼</button>
-                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-right" aria-label="Crouch-Right">↘</button>
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-right" aria-label="Crouch Down">↘</button>
                 </div>
 
-                <!-- Right: 2x2 Combat Action Keypad (Buttons A, B, C, D) -->
-                <div class="combat-4-grid" id="combat-grid" aria-label="Combat Attack Keypad">
-                    <!-- Row 1: Button A (Punch / Select) and Button B (Kick / Run) -->
+                <!-- Right: Combat Action Keypad (Buttons A, B, D) -->
+                <div class="combat-grid" id="combat-grid" aria-label="Combat Attack Keypad">
+                    <!-- Row 1: Button A (Punch / Select) and Button B (Kick) -->
                     <button class="ctrl-btn btn-mk combat-btn" data-key="Digit5,Numpad5,KeyJ" aria-label="Button A (Punch)">
                         <span class="combat-digit">A</span>
                     </button>
-                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit7,Numpad7,KeyK" aria-label="Button B (Kick / Run)">
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit7,Numpad7,KeyK" aria-label="Button B (Kick)">
                         <span class="combat-digit">B</span>
                     </button>
 
-                    <!-- Row 2: Button C (Duck / Crouch) and Button D (Block / Special) -->
-                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit8,Numpad8,KeyI" aria-label="Button C (Crouch)">
-                        <span class="combat-digit">C</span>
-                    </button>
-                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit9,Numpad9,KeyU,KeyO" aria-label="Button D (Block)">
+                    <!-- Row 2: Button D (Block / Special) spanning full width -->
+                    <button class="ctrl-btn btn-mk combat-btn combat-btn-d" data-key="Digit9,Numpad9,KeyU,KeyO" aria-label="Button D (Block)">
                         <span class="combat-digit">D</span>
                     </button>
                 </div>
@@ -707,9 +711,8 @@
         <ul class="kh-list">
             <li><kbd class="wide">Space</kbd><kbd>Enter</kbd><span>OK / Button A</span></li>
             <li><kbd>Q</kbd><span>OPTNS</span><kbd>E</kbd><span>PAUSE</span></li>
-            <li><kbd>5</kbd><span>A (Punch)</span><kbd>7</kbd><span>B (Kick / Run)</span></li>
-            <li><kbd>8</kbd><span>C (Duck)</span><kbd>9</kbd><span>D (Block / Special)</span></li>
-            <li><kbd>M</kbd><span>Mute</span></li>
+            <li><kbd>5</kbd><span>A (Punch)</span><kbd>7</kbd><span>B (Kick)</span></li>
+            <li><kbd>9</kbd><span>D (Block / Special)</span><kbd>M</kbd><span>Mute</span></li>
         </ul>
     </aside>
 
