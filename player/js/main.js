@@ -120,7 +120,7 @@ function triggerButtonActive(code, isActive) {
         else b.classList.remove('active');
     });
 
-    // Also visually highlight joystick indicator arrows when keyboard arrow keys are pressed
+    // Also visually highlight D-pad arrow buttons when keyboard arrow keys are pressed
     const joyArrowMap = {
         'ArrowUp': 'up',
         'ArrowDown': 'down',
@@ -133,7 +133,7 @@ function triggerButtonActive(code, isActive) {
     };
     const joyDir = joyArrowMap[code];
     if (joyDir) {
-        const ind = document.querySelector(`[data-joy-dir="${joyDir}"]`);
+        const ind = document.querySelector(`[data-dir="${joyDir}"]`) || document.querySelector(`[data-joy-dir="${joyDir}"]`);
         if (ind) {
             if (isActive) ind.classList.add('active');
             else ind.classList.remove('active');
@@ -323,23 +323,23 @@ class AdvancedMovementJoystick {
 window.AdvancedMovementJoystick = AdvancedMovementJoystick;
 
 function setupInputControls() {
-    // --- 1. VIRTUAL 360° JOYSTICK CONTROLLER (ADVANCED MOVEMENT & TRANSITION SYSTEM) ---
-    const joyZone = document.getElementById('joystick-zone');
-    const joyThumb = document.getElementById('joystick-thumb');
-    if (joyZone && joyThumb) {
-        let joyPointerId = null;
-        let currentJoyDir = null;
-        let activeJoyKeys = [];
+    // --- 1. 8-DIRECTIONAL TACTILE D-PAD (TOUCH & FLUID SLIDING/GLIDE ENGINE) ---
+    const dpadGrid = document.getElementById('dpad-grid');
+    if (dpadGrid) {
+        let dpadPointerId = null;
+        let currentDpadDir = null;
+        let activeDpadKeys = [];
+        let touchStartInCenter = false;
 
-        const joyIndicators = {
-            'up': joyZone.querySelector('[data-joy-dir="up"]'),
-            'down': joyZone.querySelector('[data-joy-dir="down"]'),
-            'left': joyZone.querySelector('[data-joy-dir="left"]'),
-            'right': joyZone.querySelector('[data-joy-dir="right"]'),
-            'up-left': joyZone.querySelector('[data-joy-dir="up-left"]'),
-            'up-right': joyZone.querySelector('[data-joy-dir="up-right"]'),
-            'down-left': joyZone.querySelector('[data-joy-dir="down-left"]'),
-            'down-right': joyZone.querySelector('[data-joy-dir="down-right"]')
+        const dpadButtons = {
+            'up-left': dpadGrid.querySelector('[data-dir="up-left"]'),
+            'up': dpadGrid.querySelector('[data-dir="up"]'),
+            'up-right': dpadGrid.querySelector('[data-dir="up-right"]'),
+            'left': dpadGrid.querySelector('[data-dir="left"]'),
+            'right': dpadGrid.querySelector('[data-dir="right"]'),
+            'down-left': dpadGrid.querySelector('[data-dir="down-left"]'),
+            'down': dpadGrid.querySelector('[data-dir="down"]'),
+            'down-right': dpadGrid.querySelector('[data-dir="down-right"]')
         };
 
         const DIR_KEYS = {
@@ -354,35 +354,36 @@ function setupInputControls() {
         };
 
         const joystick = new AdvancedMovementJoystick({
-            deadZoneRadius: 14,
+            deadZoneRadius: 16,
             maxRadius: 50,
             hysteresisAngleDeg: 6,
             cardinalHalfWidthDeg: 26
         });
         window.__joystick = joystick;
+        window.__dpad = joystick;
 
         // Layer 6: Event Dispatch & Clean Key Sync (Diff previous keys vs new keys)
-        function syncJoyDirection(newDir) {
-            if (newDir === currentJoyDir) return;
+        function syncDirection(newDir) {
+            if (newDir === currentDpadDir) return;
 
-            // Visual indicators
-            if (currentJoyDir && joyIndicators[currentJoyDir]) {
-                joyIndicators[currentJoyDir].classList.remove('active');
+            // Visual feedback on the physical buttons
+            if (currentDpadDir && dpadButtons[currentDpadDir]) {
+                dpadButtons[currentDpadDir].classList.remove('active');
             }
-            if (newDir && joyIndicators[newDir]) {
-                joyIndicators[newDir].classList.add('active');
+            if (newDir && dpadButtons[newDir]) {
+                dpadButtons[newDir].classList.add('active');
             }
 
             // Diff previous keys vs new keys -> KeyUp obsolete, KeyDown new
             const newKeys = newDir ? (DIR_KEYS[newDir] || []) : [];
-            const keysToRelease = activeJoyKeys.filter(k => !newKeys.includes(k));
-            const keysToPress = newKeys.filter(k => !activeJoyKeys.includes(k));
+            const keysToRelease = activeDpadKeys.filter(k => !newKeys.includes(k));
+            const keysToPress = newKeys.filter(k => !activeDpadKeys.includes(k));
 
             keysToRelease.forEach(k => sendKeyEvent(k, false));
             keysToPress.forEach(k => sendKeyEvent(k, true));
 
-            activeJoyKeys = newKeys;
-            currentJoyDir = newDir;
+            activeDpadKeys = newKeys;
+            currentDpadDir = newDir;
 
             if (newDir) {
                 triggerHaptic(8);
@@ -390,61 +391,52 @@ function setupInputControls() {
             }
         }
 
-        function handleJoyMove(clientX, clientY) {
-            const rect = joyZone.getBoundingClientRect();
+        function handleDpadMove(clientX, clientY) {
+            const rect = dpadGrid.getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
             const dx = clientX - cx;
             const dy = clientY - cy;
 
             const res = joystick.processMove(dx, dy);
-
-            // Layer 1: Smooth 360-degree free rotation visual positioning (analog 360 clamp)
-            joyThumb.style.transform = `translate3d(${res.thumbX}px, ${res.thumbY}px, 0)`;
-
-            // Layer 6: Sync key states with diff-based transition
-            syncJoyDirection(res.direction);
+            syncDirection(res.direction);
         }
 
-        function releaseJoystick() {
-            joyZone.classList.remove('dragging');
-            joyThumb.style.transform = 'translate3d(0, 0, 0)';
+        function releaseDpad() {
             const { centerTapped } = joystick.handleRelease();
-            syncJoyDirection(null);
+            syncDirection(null);
             return centerTapped;
         }
 
-        joyZone.addEventListener('pointerdown', (e) => {
+        dpadGrid.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            joyPointerId = e.pointerId;
-            joyZone.classList.add('dragging');
-            try { joyZone.setPointerCapture(e.pointerId); } catch (_) {}
+            dpadPointerId = e.pointerId;
+            try { dpadGrid.setPointerCapture(e.pointerId); } catch (_) {}
 
-            // Dynamically adjust radius to bounding box
-            const rect = joyZone.getBoundingClientRect();
-            const padRadius = rect.width / 2;
-            const thumbRadius = (joyThumb.offsetWidth / 2) || 27;
-            joystick.config.maxRadius = Math.max(15, padRadius - thumbRadius);
-            joystick.config.deadZoneRadius = Math.max(10, Math.round(padRadius * 0.18));
+            const rect = dpadGrid.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+            touchStartInCenter = (dist < 18);
 
-            handleJoyMove(e.clientX, e.clientY);
+            handleDpadMove(e.clientX, e.clientY);
         });
 
-        joyZone.addEventListener('pointermove', (e) => {
-            if (joyPointerId === null || e.pointerId !== joyPointerId) return;
+        dpadGrid.addEventListener('pointermove', (e) => {
+            if (dpadPointerId === null || e.pointerId !== dpadPointerId) return;
             e.preventDefault();
-            handleJoyMove(e.clientX, e.clientY);
+            handleDpadMove(e.clientX, e.clientY);
         });
 
-        const onJoyEnd = (e) => {
-            if (joyPointerId === null || e.pointerId !== joyPointerId) return;
+        const onDpadEnd = (e) => {
+            if (dpadPointerId === null || e.pointerId !== dpadPointerId) return;
             e.preventDefault();
-            try { joyZone.releasePointerCapture(e.pointerId); } catch (_) {}
-            joyPointerId = null;
+            try { dpadGrid.releasePointerCapture(e.pointerId); } catch (_) {}
+            dpadPointerId = null;
 
-            const centerTapped = releaseJoystick();
+            const centerTapped = releaseDpad();
 
-            // Center tap detection (< innerDeadzone movement): dispatch Fire / OK (-5)
+            // Center tap detection (< inner center core): dispatch Fire / OK (-5)
             if (centerTapped) {
                 sendKeyEvent(-5, true);
                 setTimeout(() => sendKeyEvent(-5, false), 90);
@@ -453,11 +445,11 @@ function setupInputControls() {
             }
         };
 
-        joyZone.addEventListener('pointerup', onJoyEnd);
-        joyZone.addEventListener('pointercancel', onJoyEnd);
+        dpadGrid.addEventListener('pointerup', onDpadEnd);
+        dpadGrid.addEventListener('pointercancel', onDpadEnd);
     }
 
-    // --- 2. INDEPENDENT ACTION BUTTONS (OPTNS, BACK, COMBAT KEYS 1 TO 9) ---
+    // --- 2. INDEPENDENT ACTION BUTTONS (A, B, C, D, OPTNS, PAUSE) ---
     const actionButtons = document.querySelectorAll('.ctrl-btn');
     actionButtons.forEach((btn) => {
         const keyData = btn.getAttribute('data-key');
@@ -561,8 +553,8 @@ function setupKeyboardControls() {
             }
 
             // Sync visual indicators for diagonal arrows
-            const urInd = document.querySelector('[data-joy-dir="up-right"]');
-            const ulInd = document.querySelector('[data-joy-dir="up-left"]');
+            const urInd = document.querySelector('[data-dir="up-right"]');
+            const ulInd = document.querySelector('[data-dir="up-left"]');
             if (urInd) urInd.classList.toggle('active', currentDiagonalChord === 'up-right');
             if (ulInd) ulInd.classList.toggle('active', currentDiagonalChord === 'up-left');
         }

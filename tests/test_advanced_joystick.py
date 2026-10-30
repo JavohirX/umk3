@@ -42,16 +42,16 @@ def run_joystick_tests():
         assert has_class, "AdvancedMovementJoystick class not found on window!"
         print("[CHECK 0] AdvancedMovementJoystick class loaded successfully.")
 
-        # Inspect joystick element
+        # Inspect D-pad element
         joy_box = page.evaluate('''() => {
-            const el = document.getElementById('joystick-zone');
+            const el = document.getElementById('dpad-grid') || document.getElementById('joystick-zone');
             if (!el) return null;
             const r = el.getBoundingClientRect();
             return { x: r.left, y: r.top, width: r.width, height: r.height, cx: r.left + r.width/2, cy: r.top + r.height/2 };
         }''')
-        assert joy_box is not None, "joystick-zone element not found!"
+        assert joy_box is not None, "dpad-grid element not found!"
         cx, cy = joy_box['cx'], joy_box['cy']
-        print(f"Joystick center at ({cx:.1f}, {cy:.1f}), size: {joy_box['width']:.1f}x{joy_box['height']:.1f}")
+        print(f"D-Pad center at ({cx:.1f}, {cy:.1f}), size: {joy_box['width']:.1f}x{joy_box['height']:.1f}")
 
         # Set up a tracker for dispatched key events to verify key sync
         page.evaluate('''() => {
@@ -82,9 +82,9 @@ def run_joystick_tests():
         time.sleep(0.05)
 
         st1 = page.evaluate('''() => {
-            const j = window.__joystick;
-            const rInd = document.querySelector('[data-joy-dir="right"]').classList.contains('active');
-            const urInd = document.querySelector('[data-joy-dir="up-right"]').classList.contains('active');
+            const j = window.__joystick || window.__dpad;
+            const rInd = (document.querySelector('[data-dir="right"]') || document.querySelector('[data-joy-dir="right"]')).classList.contains('active');
+            const urInd = (document.querySelector('[data-dir="up-right"]') || document.querySelector('[data-joy-dir="up-right"]')).classList.contains('active');
             return { dir: j.currentDirection, rActive: rInd, urActive: urInd };
         }''')
         assert st1['dir'] == 'right' and st1['rActive'] and not st1['urActive'], f"Initial Right failed: {st1}"
@@ -95,9 +95,9 @@ def run_joystick_tests():
         time.sleep(0.05)
 
         st1_drift = page.evaluate('''() => {
-            const j = window.__joystick;
-            const rInd = document.querySelector('[data-joy-dir="right"]').classList.contains('active');
-            const urInd = document.querySelector('[data-joy-dir="up-right"]').classList.contains('active');
+            const j = window.__joystick || window.__dpad;
+            const rInd = (document.querySelector('[data-dir="right"]') || document.querySelector('[data-joy-dir="right"]')).classList.contains('active');
+            const urInd = (document.querySelector('[data-dir="up-right"]') || document.querySelector('[data-joy-dir="up-right"]')).classList.contains('active');
             return { dir: j.currentDirection, rActive: rInd, urActive: urInd };
         }''')
         print(f"25 deg drift state: dir={st1_drift['dir']}, rightActive={st1_drift['rActive']}, upRightActive={st1_drift['urActive']}")
@@ -251,8 +251,8 @@ def run_joystick_tests():
         time.sleep(0.05)
 
         st6_ur = page.evaluate('''() => {
-            const j = window.__joystick;
-            const urInd = document.querySelector('[data-joy-dir="up-right"]').classList.contains('active');
+            const j = window.__joystick || window.__dpad;
+            const urInd = (document.querySelector('[data-dir="up-right"]') || document.querySelector('[data-joy-dir="up-right"]')).classList.contains('active');
             const downKeys = window.__keyHistory.filter(h => h.type === 'down').map(h => h.code);
             return { dir: j.currentDirection, urActive: urInd, downKeys };
         }''')
@@ -274,8 +274,8 @@ def run_joystick_tests():
         time.sleep(0.05)
 
         st6_ul = page.evaluate('''() => {
-            const j = window.__joystick;
-            const ulInd = document.querySelector('[data-joy-dir="up-left"]').classList.contains('active');
+            const j = window.__joystick || window.__dpad;
+            const ulInd = (document.querySelector('[data-dir="up-left"]') || document.querySelector('[data-joy-dir="up-left"]')).classList.contains('active');
             const downKeys = window.__keyHistory.filter(h => h.type === 'down').map(h => h.code);
             return { dir: j.currentDirection, ulActive: ulInd, downKeys };
         }''')
@@ -297,7 +297,7 @@ def run_joystick_tests():
 
         st6_chord = page.evaluate('''() => {
             const downKeys = window.__keyHistory.filter(h => h.type === 'down').map(h => h.code);
-            const urInd = document.querySelector('[data-joy-dir="up-right"]').classList.contains('active');
+            const urInd = (document.querySelector('[data-dir="up-right"]') || document.querySelector('[data-joy-dir="up-right"]')).classList.contains('active');
             return { downKeys, urInd };
         }''')
         print(f"Keyboard chord result: downKeys={st6_chord['downKeys']}, urIndicator={st6_chord['urInd']}")
@@ -308,6 +308,76 @@ def run_joystick_tests():
         time.sleep(0.05)
 
         print("[CHECK 6 PASSED] Diagonal Jump Key Dispatch: Key 51 (Up-Right) & Key 49 (Up-Left) dispatched cleanly without vertical override.")
+
+        # -------------------------------------------------------------
+        # CHECKLIST 7: Combat Action Buttons A, B, C, D Verification
+        # -------------------------------------------------------------
+        print("\n--- Testing Checklist 7: Combat Action Buttons A, B, C, D ---")
+        btn_labels = page.evaluate('''() => {
+            const btns = Array.from(document.querySelectorAll('.combat-btn .combat-digit')).map(e => e.innerText.trim());
+            return btns;
+        }''')
+        print(f"Combat button labels: {btn_labels}")
+        assert btn_labels == ['A', 'B', 'C', 'D'], f"[FAIL] Expected buttons A, B, C, D, got {btn_labels}"
+
+        # Test clicking each button
+        for label, expected_code in [('A', 53), ('B', 55), ('C', 56), ('D', 57)]:
+            page.evaluate('() => window.__keyHistory = []')
+            btn_selector = f'.combat-btn:has(.combat-digit:text-is("{label}"))'
+            page.click(btn_selector)
+            time.sleep(0.05)
+            keys = page.evaluate('() => window.__keyHistory')
+            down_codes = [h['code'] for h in keys if h['type'] == 'down']
+            up_codes = [h['code'] for h in keys if h['type'] == 'up']
+            print(f"Button {label} click -> downs: {down_codes}, ups: {up_codes}")
+            assert expected_code in down_codes, f"[FAIL] Button {label} did not dispatch Key {expected_code} down! Got: {down_codes}"
+            assert expected_code in up_codes, f"[FAIL] Button {label} did not dispatch Key {expected_code} up! Got: {up_codes}"
+        print("[CHECK 7 PASSED] Combat Buttons A, B, C, D dispatch correct J2ME keys (53, 55, 56, 57).")
+
+        # -------------------------------------------------------------
+        # CHECKLIST 8: Pitch Black Lower Panel & MK Antique Design Code
+        # -------------------------------------------------------------
+        print("\n--- Testing Checklist 8: MK Design Code & Pitch Black Styling ---")
+        panel_bg = page.evaluate('() => window.getComputedStyle(document.querySelector(".mobile-controls-panel")).backgroundColor')
+        print(f"Controls panel computed background: {panel_bg}")
+        assert panel_bg in ['rgb(0, 0, 0)', 'rgba(0, 0, 0, 1)'], f"[FAIL] Controls panel is not pitch black! Got: {panel_bg}"
+        
+        has_mk_class = page.evaluate('() => document.querySelectorAll(".btn-mk").length >= 12')
+        assert has_mk_class, "[FAIL] Buttons missing .btn-mk Mortal Kombat design styling!"
+        print("[CHECK 8 PASSED] Controls panel is pitch black (#000000) and buttons use MK stone/bronze design code.")
+
+        # -------------------------------------------------------------
+        # CHECKLIST 9: In-game Tutorial & Softkey Text Verification
+        # -------------------------------------------------------------
+        print("\n--- Testing Checklist 9: In-game Tutorial & Softkey Strings ---")
+        tut_check = page.evaluate('''() => {
+            function getStr(id) {
+                const buf = CoreEngine.exec_a_int_encodedtextbuffer_to_encodedtextbuffer(id, null);
+                if (!buf) return '';
+                let s = '';
+                for (let i = 0; i < buf.bufferCapacity; i++) {
+                    const c = buf.getCharAt(i);
+                    const hi = (c >> 8) & 0xFF;
+                    const lo = c & 0xFF;
+                    if (hi >= 32 && hi <= 126) s += String.fromCharCode(hi);
+                    if (lo >= 32 && lo <= 126) s += String.fromCharCode(lo);
+                }
+                return s;
+            }
+            return {
+                str42: getStr(42),
+                str43: getStr(43),
+                str44: getStr(44),
+                str45: getStr(45),
+                str138: getStr(138),
+                str139: getStr(139)
+            };
+        }''')
+        print(f"Tutorial String 42: {tut_check['str42'][:80]}...")
+        print(f"Tutorial String 43: {tut_check['str43'][:80]}...")
+        assert "8-WAY D-PAD" in tut_check['str42'] or "8-WAY D-PAD" in tut_check['str43'], "[FAIL] Tutorial does not reference 8-WAY D-PAD!"
+        assert "A/B/C/D" in tut_check['str42'] or "A/B/C/D" in tut_check['str43'], "[FAIL] Tutorial does not reference A/B/C/D!"
+        print("[CHECK 9 PASSED] In-game tutorial fully updated under new 8-WAY D-PAD and A/B/C/D system.")
 
         # -------------------------------------------------------------
         # NAVIGATION & VISUAL SCREENSHOT VERIFICATION
@@ -363,7 +433,7 @@ def run_joystick_tests():
 
         context.close()
         browser.close()
-        print("\n=== ALL 6 CHECKLIST ITEMS & SCREENSHOTS VERIFIED 100% SUCCESSFULLY ===")
+        print("\n=== ALL 9 CHECKLIST ITEMS & SCREENSHOTS VERIFIED 100% SUCCESSFULLY ===")
 
 if __name__ == '__main__':
     run_joystick_tests()
