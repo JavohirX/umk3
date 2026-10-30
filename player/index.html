@@ -14,9 +14,8 @@
     <style>
         :root {
             --side-btn-width: 74px;
-            --main-pad-height: 154px;
-            --softkey-gap: 16px;
-            --controls-panel-height: 250px;
+            --main-pad-height: 160px;
+            --controls-panel-height: 215px;
         }
 
         * {
@@ -149,9 +148,9 @@
             flex: 1 1 auto;
             min-height: 0;
             display: flex;
-            flex-direction: column;
-            justify-content: space-evenly;
-            padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
             background: radial-gradient(circle at 50% 15%, #181b29 0%, #0a0b12 100%);
             border-top: 1px solid #292d3f;
             position: relative;
@@ -204,56 +203,62 @@
             color: #2994ec;
         }
 
-        /* --- TOP SOFTKEY ROW --- */
-        .softkey-row {
+        /* --- ON-SCREEN INTERACTIVE SOFTKEY ICONS (LSK / RSK) --- */
+        .on-screen-softkey {
+            position: absolute;
+            bottom: 0px;
+            width: 64px;
+            height: 56px;
+            z-index: 20;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            outline: none;
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            max-width: 360px;
-            margin: 0 auto var(--softkey-gap, 16px) auto;
-            padding: 0 4px;
-            box-sizing: border-box;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            padding: 0;
         }
 
-        /* Classic Nokia Horizontal Soft Keys */
-        .btn-3d-soft {
-            width: var(--side-btn-width, 74px);
-            height: 35px;
-            flex: 0 0 var(--side-btn-width, 74px);
-            border-radius: 9px;
-            background: linear-gradient(180deg, #444b68 0%, #2b3046 50%, #1e2232 100%);
-            color: #f1f5f9;
-            font-size: 0.8rem;
-            font-weight: 800;
-            letter-spacing: 0.8px;
-            border-top: 1px solid rgba(255, 255, 255, 0.35);
-            border-left: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 
-                0 4px 0 #0c0e16,
-                0 6px 8px rgba(0, 0, 0, 0.6),
-                inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        .softkey-left {
+            left: 0px;
         }
 
-        .btn-3d-soft:active, .btn-3d-soft.active {
-            transform: translateY(3px);
-            box-shadow: 
-                0 1px 0 #0c0e16,
-                0 2px 4px rgba(0, 0, 0, 0.8),
-                inset 0 2px 5px rgba(0, 0, 0, 0.6),
-                0 0 12px rgba(41, 148, 236, 0.55);
-            background: linear-gradient(180deg, #1b283d 0%, #121c2c 100%);
-            color: #2994ec;
+        .softkey-right {
+            right: 0px;
         }
 
-        /* --- MAIN COMBAT PAD ROW: LEFT JOYSTICK + RIGHT 3x3 COMBAT KEYPAD --- */
+        /* Glowing touch ripple/halo centered over the in-game icon */
+        .softkey-pulse {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(56, 189, 248, 0);
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.45) 0%, rgba(41, 148, 236, 0.15) 65%, transparent 100%);
+            opacity: 0;
+            transform: scale(0.75);
+            transition: opacity 0.08s ease, transform 0.08s ease, border-color 0.08s ease;
+            pointer-events: none;
+        }
+
+        .on-screen-softkey:active .softkey-pulse,
+        .on-screen-softkey.active .softkey-pulse {
+            opacity: 1;
+            transform: scale(1.18);
+            border-color: rgba(56, 189, 248, 0.85);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.8);
+        }
+
+        /* --- MAIN COMBAT PAD ROW: LEFT JOYSTICK + RIGHT 2x2 COMBAT KEYPAD --- */
         .main-pad-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            flex: 1;
-            padding: 2px 4px;
+            gap: 16px;
             width: 100%;
             max-width: 360px;
             margin: 0 auto;
@@ -428,15 +433,15 @@
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
         }
 
-        /* --- 2. RIGHT SIDE: 2x2 COMBAT KEYPAD (KEYS 5, 7, 8, 9) --- */
+        /* --- 2. RIGHT SIDE: 2x2 COMBAT KEYPAD (KEYS 5, 7, 8, 9 - NUMBERS ONLY) --- */
         .combat-4-grid {
-            width: var(--main-pad-height, 154px);
-            height: var(--main-pad-height, 154px);
+            width: var(--main-pad-height, 160px);
+            height: var(--main-pad-height, 160px);
             aspect-ratio: 1 / 1;
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             grid-template-rows: repeat(2, 1fr);
-            gap: 8px;
+            gap: 10px;
             background: #11131e;
             padding: 8px;
             border-radius: 20px;
@@ -452,58 +457,44 @@
         .combat-btn {
             width: 100%;
             height: 100%;
-            border-radius: 10px;
-            padding: 4px 2px;
-            gap: 2px;
+            border-radius: 12px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             box-sizing: border-box;
         }
 
         .combat-digit {
-            font-size: 1.3em;
-            font-weight: 800;
+            font-size: 1.75em;
+            font-weight: 850;
             line-height: 1;
             color: #f8fafc;
+            user-select: none;
+            -webkit-user-select: none;
+            display: block;
         }
 
-        .combat-action {
-            font-size: 0.68em;
-            font-weight: 750;
-            letter-spacing: 0.06em;
-            color: #94a3b8;
-            line-height: 1;
-        }
-
-        .combat-btn:active .combat-action,
-        .combat-btn.active .combat-action {
-            color: #7dd3fc;
+        .combat-btn:active .combat-digit,
+        .combat-btn.active .combat-digit {
+            color: #38bdf8;
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.85);
         }
 
         /* Small screens */
         @media (max-width: 360px) {
             :root {
                 --side-btn-width: 62px;
-                --main-pad-height: 142px;
-                --softkey-gap: 12px;
-                --controls-panel-height: 220px;
-            }
-            .softkey-row {
-                max-width: 320px;
-                gap: 4px;
-                margin-bottom: 12px;
-            }
-            .btn-3d-soft {
-                width: 62px;
-                height: 32px;
-                flex: 0 0 62px;
-                font-size: 0.72rem;
+                --main-pad-height: 144px;
+                --controls-panel-height: 195px;
             }
             .main-pad-row {
                 max-width: 320px;
-                gap: 8px;
+                gap: 10px;
             }
             .joystick-zone {
-                width: 142px;
-                height: 142px;
+                width: 144px;
+                height: 144px;
             }
             .joystick-thumb {
                 width: 48px;
@@ -514,17 +505,14 @@
                 height: 18px;
             }
             .combat-4-grid {
-                width: 142px;
-                height: 142px;
-                gap: 6px;
+                width: 144px;
+                height: 144px;
+                gap: 7px;
                 padding: 6px;
                 border-radius: 16px;
             }
             .combat-digit {
-                font-size: 1.15em;
-            }
-            .combat-action {
-                font-size: 0.62em;
+                font-size: 1.45em;
             }
         }
 
@@ -716,22 +704,19 @@
         <div id="screen-wrapper">
             <div id="screen-container">
                 <canvas id="display" tabindex="0"></canvas>
+                <!-- On-Screen Softkeys: Interactive Touch Targets Directly Over in-Game Left & Right Icons -->
+                <button id="screen-btn-lsk" class="ctrl-btn on-screen-softkey softkey-left" data-key="F1" aria-label="Left Soft Key / Options / Info">
+                    <span class="softkey-pulse"></span>
+                </button>
+                <button id="screen-btn-rsk" class="ctrl-btn on-screen-softkey softkey-right" data-key="F2" aria-label="Right Soft Key / Back / Pause">
+                    <span class="softkey-pulse"></span>
+                </button>
             </div>
         </div>
 
-        <!-- LOWER CONTROLS PANEL (3D RETRO PHONE) -->
+        <!-- LOWER CONTROLS PANEL (CLEAN DEDICATED CONSOLE CONTROLLER) -->
         <div class="mobile-controls-panel">
-            <!-- TOP SOFTKEYS: OPTNS (LEFT) & BACK (RIGHT) -->
-            <div class="softkey-row">
-                <button id="btn-lsk" class="ctrl-btn btn-3d btn-3d-soft" data-key="F1" aria-label="Options">
-                    <span>OPTNS</span>
-                </button>
-                <button id="btn-rsk" class="ctrl-btn btn-3d btn-3d-soft" data-key="F2" aria-label="Back">
-                    <span>BACK</span>
-                </button>
-            </div>
-
-            <!-- MAIN COMBAT CONTROLS: 360° JOYSTICK (LEFT) + 1-9 COMBAT KEYPAD (RIGHT) -->
+            <!-- MAIN COMBAT CONTROLS: 360° JOYSTICK (LEFT) + 4-KEY RETRO KEYPAD (RIGHT) -->
             <div class="main-pad-row">
                 <!-- Left: 360° Virtual Joystick with 8-Way Directional Feedback -->
                 <div class="joystick-zone" id="joystick-zone" aria-label="360 Directional Joystick">
@@ -751,26 +736,22 @@
                     </div>
                 </div>
 
-                <!-- Right: 2x2 Combat Action Keypad (5, 7, 8, 9) -->
+                <!-- Right: 2x2 Combat Action Keypad (5, 7, 8, 9 - Numbers Only) -->
                 <div class="combat-4-grid" id="combat-grid" aria-label="Combat Attack Keypad">
                     <!-- Row 1: 5 (Punch / Select) and 7 (Kick) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit5,Numpad5" aria-label="5 Punch">
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit5,Numpad5" aria-label="Key 5">
                         <span class="combat-digit">5</span>
-                        <span class="combat-action">PUNCH</span>
                     </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit7,Numpad7" aria-label="7 Kick">
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit7,Numpad7" aria-label="Key 7">
                         <span class="combat-digit">7</span>
-                        <span class="combat-action">KICK</span>
                     </button>
 
                     <!-- Row 2: 8 (Duck / Crouch) and 9 (Block / Special) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit8,Numpad8" aria-label="8 Duck">
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit8,Numpad8" aria-label="Key 8">
                         <span class="combat-digit">8</span>
-                        <span class="combat-action">DUCK</span>
                     </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit9,Numpad9" aria-label="9 Block Special">
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit9,Numpad9" aria-label="Key 9">
                         <span class="combat-digit">9</span>
-                        <span class="combat-action">BLOCK</span>
                     </button>
                 </div>
             </div>
@@ -861,7 +842,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load UMK3 pure JS engine
-        const APP_BUILD_HASH = "v20261030_umk3_combat4";
+        const APP_BUILD_HASH = "v20261030_umk3_clean4_softkeys";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
