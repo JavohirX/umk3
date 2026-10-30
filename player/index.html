@@ -428,18 +428,18 @@
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
         }
 
-        /* --- 2. RIGHT SIDE: 3x3 COMBAT KEYPAD (KEYS 1 TO 9) --- */
-        .numpad-9-grid {
+        /* --- 2. RIGHT SIDE: 2x2 COMBAT KEYPAD (KEYS 5, 7, 8, 9) --- */
+        .combat-4-grid {
             width: var(--main-pad-height, 154px);
             height: var(--main-pad-height, 154px);
             aspect-ratio: 1 / 1;
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
-            gap: 5px;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 8px;
             background: #11131e;
-            padding: 5px;
-            border-radius: 18px;
+            padding: 8px;
+            border-radius: 20px;
             border: 2px solid #24283c;
             box-shadow: 
                 0 6px 18px rgba(0, 0, 0, 0.75),
@@ -449,32 +449,32 @@
             box-sizing: border-box;
         }
 
-        .num-btn {
+        .combat-btn {
             width: 100%;
             height: 100%;
-            border-radius: 6px;
-            padding: 2px 0;
-            gap: 1px;
+            border-radius: 10px;
+            padding: 4px 2px;
+            gap: 2px;
             box-sizing: border-box;
         }
 
-        .num-digit {
-            font-size: 1.12em;
+        .combat-digit {
+            font-size: 1.3em;
             font-weight: 800;
             line-height: 1;
             color: #f8fafc;
         }
 
-        .num-action {
-            font-size: 0.62em;
+        .combat-action {
+            font-size: 0.68em;
             font-weight: 750;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.06em;
             color: #94a3b8;
             line-height: 1;
         }
 
-        .num-btn:active .num-action,
-        .num-btn.active .num-action {
+        .combat-btn:active .combat-action,
+        .combat-btn.active .combat-action {
             color: #7dd3fc;
         }
 
@@ -513,17 +513,18 @@
                 width: 18px;
                 height: 18px;
             }
-            .numpad-9-grid {
+            .combat-4-grid {
                 width: 142px;
                 height: 142px;
-                gap: 3px;
-                padding: 4px;
+                gap: 6px;
+                padding: 6px;
+                border-radius: 16px;
             }
-            .num-digit {
-                font-size: 1.02em;
+            .combat-digit {
+                font-size: 1.15em;
             }
-            .num-action {
-                font-size: 0.58em;
+            .combat-action {
+                font-size: 0.62em;
             }
         }
 
@@ -750,48 +751,26 @@
                     </div>
                 </div>
 
-                <!-- Right: 3x3 Combat Keypad (1 to 9) -->
-                <div class="numpad-9-grid" id="numpad-grid" aria-label="Combat Attack Keypad">
-                    <!-- Row 1: 1 (High Punch), 2 (Jump / Up), 3 (High Kick) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit1,Numpad1" aria-label="1 High Punch">
-                        <span class="num-digit">1</span>
-                        <span class="num-action">HP</span>
+                <!-- Right: 2x2 Combat Action Keypad (5, 7, 8, 9) -->
+                <div class="combat-4-grid" id="combat-grid" aria-label="Combat Attack Keypad">
+                    <!-- Row 1: 5 (Punch / Select) and 7 (Kick) -->
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit5,Numpad5" aria-label="5 Punch">
+                        <span class="combat-digit">5</span>
+                        <span class="combat-action">PUNCH</span>
                     </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit2,Numpad2" aria-label="2 Jump Up">
-                        <span class="num-digit">2</span>
-                        <span class="num-action">▲</span>
-                    </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit3,Numpad3" aria-label="3 High Kick">
-                        <span class="num-digit">3</span>
-                        <span class="num-action">HK</span>
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit7,Numpad7" aria-label="7 Kick">
+                        <span class="combat-digit">7</span>
+                        <span class="combat-action">KICK</span>
                     </button>
 
-                    <!-- Row 2: 4 (Low Punch), 5 (Block / OK), 6 (Low Kick) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit4,Numpad4" aria-label="4 Low Punch">
-                        <span class="num-digit">4</span>
-                        <span class="num-action">LP</span>
+                    <!-- Row 2: 8 (Duck / Crouch) and 9 (Block / Special) -->
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit8,Numpad8" aria-label="8 Duck">
+                        <span class="combat-digit">8</span>
+                        <span class="combat-action">DUCK</span>
                     </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit5,Numpad5" aria-label="5 Block">
-                        <span class="num-digit">5</span>
-                        <span class="num-action">BL</span>
-                    </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit6,Numpad6" aria-label="6 Low Kick">
-                        <span class="num-digit">6</span>
-                        <span class="num-action">LK</span>
-                    </button>
-
-                    <!-- Row 3: 7 (Run), 8 (Crouch / Down), 9 (Special) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit7,Numpad7" aria-label="7 Run">
-                        <span class="num-digit">7</span>
-                        <span class="num-action">RN</span>
-                    </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit8,Numpad8" aria-label="8 Crouch Down">
-                        <span class="num-digit">8</span>
-                        <span class="num-action">▼</span>
-                    </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark num-btn" data-key="Digit9,Numpad9" aria-label="9 Special">
-                        <span class="num-digit">9</span>
-                        <span class="num-action">SP</span>
+                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit9,Numpad9" aria-label="9 Block Special">
+                        <span class="combat-digit">9</span>
+                        <span class="combat-action">BLOCK</span>
                     </button>
                 </div>
             </div>
@@ -813,9 +792,10 @@
             </div>
         </div>
         <ul class="kh-list">
-            <li><kbd class="wide">Space</kbd><kbd>Enter</kbd><span>OK / Block</span></li>
+            <li><kbd class="wide">Space</kbd><kbd>Enter</kbd><span>OK / Punch (5)</span></li>
             <li><kbd>Q</kbd><span>Options</span><kbd>E</kbd><span>Back</span></li>
-            <li><kbd>1</kbd>..<kbd>9</kbd><span>Attacks: HP HK LP LK BL RN SP</span></li>
+            <li><kbd>5</kbd><span>Punch</span><kbd>7</kbd><span>Kick</span></li>
+            <li><kbd>8</kbd><span>Duck</span><kbd>9</kbd><span>Block</span></li>
             <li><kbd>M</kbd><span>Mute</span></li>
         </ul>
     </aside>
@@ -881,7 +861,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load UMK3 pure JS engine
-        const APP_BUILD_HASH = "v20261030_umk3_pad";
+        const APP_BUILD_HASH = "v20261030_umk3_combat4";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
