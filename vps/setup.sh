@@ -37,7 +37,7 @@ echo "=== 5. Setting up Python Virtual Environment for Bot ==="
 mkdir -p /opt/umk3-bot
 python3 -m venv /opt/umk3-bot/venv
 /opt/umk3-bot/venv/bin/pip install --upgrade pip
-/opt/umk3-bot/venv/bin/pip install aiogram python-dotenv
+/opt/umk3-bot/venv/bin/pip install aiogram python-dotenv aiohttp
 
 cp ../bot.py /opt/umk3-bot/bot.py
 if [ -f ../.env ]; then

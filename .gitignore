@@ -42,6 +42,10 @@ launcher_log.txt
 venv/
 __pycache__/
 *.pyc
+*.db
+*.db-wal
+*.db-shm
+data/*.db
 
 # IDE
 .idea/

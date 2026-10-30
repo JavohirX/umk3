@@ -56,7 +56,7 @@ jobs:
               python3 -m venv venv
             fi
             ./venv/bin/pip install --upgrade pip
-            ./venv/bin/pip install aiogram python-dotenv
+            ./venv/bin/pip install aiogram python-dotenv aiohttp
 
             echo "=== 4. Reloading Nginx & Restarting Bot Service ==="
             if [ -f "vps/umk3-bot.service" ]; then

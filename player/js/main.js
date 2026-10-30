@@ -2,12 +2,15 @@ import { loadAllAssets } from './assets.js';
 import { Graphics, Display } from './j2me/graphics.js';
 import { Manager } from './j2me/audio.js';
 import { initEngine, SDKMIDlet, CoreEngine } from './engine/umk3.js';
+import { MultiplayerClient } from './network.js';
 
 let midlet = null;
 let animFrameId = null;
 let isAudioMuted = false;
 let canvas = null;
 let ctx = null;
+let mpClient = new MultiplayerClient();
+window.mpClient = mpClient;
 
 // Key mapping table from UI / keyboard identifiers to J2ME KeyCodes
 const KEY_MAP = {
@@ -103,6 +106,31 @@ function unlockAudio() {
 
 function sendKeyEvent(keyCode, isDown) {
     if (!CoreEngine.val_maincanvasbridge_a) return;
+
+    if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") {
+        mpClient.sendInput(keyCode, isDown);
+        if (mpClient.role === 'p2') {
+            // Local player is P2 -> drive Fighter C directly!
+            const localFighter = CoreEngine.val_coreengine_c;
+            if (localFighter) {
+                if (isDown) {
+                    if (keyCode === 53 || keyCode === -5) localFighter.updateActor(4);
+                    else if (keyCode === 55) localFighter.updateActor(5);
+                    else if (keyCode === 57) localFighter.updateActor(27);
+                    else if (keyCode === -1 || keyCode === 49 || keyCode === 51) localFighter.updateActor(12);
+                    else if (keyCode === -2 || keyCode === 56) localFighter.updateActor(3);
+                    else if (keyCode === -3) localFighter.setActorAnimation(-1);
+                    else if (keyCode === -4) localFighter.setActorAnimation(1);
+                } else {
+                    if (keyCode === -2 || keyCode === 57 || keyCode === -3 || keyCode === -4) {
+                        localFighter.updateActor(0);
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     if (isDown) {
         CoreEngine.val_maincanvasbridge_a.keyPressed(keyCode);
     } else {
@@ -712,6 +740,27 @@ function startAnimationLoop() {
         if (midlet && !midlet.isExitRequested) {
             try {
                 midlet.stepFrame();
+
+                // Monitor active multiplayer health for KO resolution
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") {
+                    if (CoreEngine.val_coreengine_b && CoreEngine.val_coreengine_c) {
+                        if (CoreEngine.val_coreengine_b.currentHealth <= 0 && mpClient.role === 'p1') {
+                            mpClient.status = "COMPLETED";
+                            mpClient.sendPacket({
+                                type: "match_finish",
+                                winner_id: mpClient.opponent ? mpClient.opponent.id : "p2",
+                                reason: "KNOCKOUT"
+                            });
+                        } else if (CoreEngine.val_coreengine_c.currentHealth <= 0 && mpClient.role === 'p1') {
+                            mpClient.status = "COMPLETED";
+                            mpClient.sendPacket({
+                                type: "match_finish",
+                                winner_id: mpClient.userId,
+                                reason: "KNOCKOUT"
+                            });
+                        }
+                    }
+                }
             } catch (err) {
                 console.error("[Game Loop Error]:", err);
             }
@@ -767,7 +816,39 @@ async function bootstrap() {
             canvasEl.focus();
         }
 
-        // 7. Start requestAnimationFrame loop
+        // 7. Initialize Multiplayer Subsystem
+        mpClient.onMatchStartCallback = (data) => {
+            console.log("[Multiplayer] Match starting in 2-Player Versus Mode!");
+            CoreEngine.val_bool_am = true;
+            if (CoreEngine.val_int_h < 11) {
+                CoreEngine.val_int_dQ = 0; // Scorpion
+                CoreEngine.val_int_dR = 1; // Sub-Zero
+                CoreEngine.setGameState(11); // Enter combat
+            }
+        };
+
+        mpClient.onPeerInputCallback = (keyCode, isDown) => {
+            const targetFighter = (mpClient.role === 'p1') ? CoreEngine.val_coreengine_c : CoreEngine.val_coreengine_b;
+            if (!targetFighter) return;
+
+            if (isDown) {
+                if (keyCode === 53 || keyCode === -5) targetFighter.updateActor(4);
+                else if (keyCode === 55) targetFighter.updateActor(5);
+                else if (keyCode === 57) targetFighter.updateActor(27);
+                else if (keyCode === -1 || keyCode === 49 || keyCode === 51) targetFighter.updateActor(12);
+                else if (keyCode === -2 || keyCode === 56) targetFighter.updateActor(3);
+                else if (keyCode === -3) targetFighter.setActorAnimation(-1);
+                else if (keyCode === -4) targetFighter.setActorAnimation(1);
+            } else {
+                if (keyCode === -2 || keyCode === 57 || keyCode === -3 || keyCode === -4) {
+                    targetFighter.updateActor(0);
+                }
+            }
+        };
+
+        mpClient.initUI();
+
+        // 8. Start requestAnimationFrame loop
         startAnimationLoop();
 
     } catch (err) {
