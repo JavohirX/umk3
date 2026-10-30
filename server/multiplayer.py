@@ -38,6 +38,10 @@ class MatchRoom:
         self.disconnect_tasks: Dict[str, asyncio.Task] = {}
         self.join_timeout_task: Optional[asyncio.Task] = None
         self.ready_players: Set[str] = set()
+        self.p1_id: Optional[str] = None
+        self.p2_id: Optional[str] = None
+        self.p1_name: Optional[str] = None
+        self.p2_name: Optional[str] = None
         self.p1_hero: Optional[int] = None
         self.p2_hero: Optional[int] = None
         self.p1_rounds: int = 0
@@ -359,16 +363,29 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                             "hero_id": hero_id
                         }, exclude_id=current_player_id)
 
-                elif msg_type == "hero_lock":
+                elif msg_type in ("hero_lock", "select_hero"):
                     if room:
                         hero_id = int(data.get("hero_id", 0))
-                        from_role = "p1" if current_player_id == room.creator_id else "p2"
-                        if from_role == "p1":
+                        player_name = room.player_names.get(current_player_id, "Player")
+                        # First player to select becomes P1 (Left), second becomes P2 (Right)
+                        if room.p1_hero is None:
+                            room.p1_id = current_player_id
+                            room.p1_name = player_name
                             room.p1_hero = hero_id
-                        else:
+                            from_role = "p1"
+                        elif room.p2_hero is None and current_player_id != room.p1_id:
+                            room.p2_id = current_player_id
+                            room.p2_name = player_name
                             room.p2_hero = hero_id
+                            from_role = "p2"
+                        else:
+                            from_role = "p1" if current_player_id == room.p1_id else "p2"
+                            if from_role == "p1":
+                                room.p1_hero = hero_id
+                            else:
+                                room.p2_hero = hero_id
 
-                        logging.info(f"[{match_id}] Player {from_role} locked hero {hero_id} (P1={room.p1_hero}, P2={room.p2_hero})")
+                        logging.info(f"[{match_id}] Player {from_role} ({player_name}) locked hero {hero_id} (P1={room.p1_hero}, P2={room.p2_hero})")
 
                         await room.broadcast({
                             "type": "peer_hero_lock",
@@ -376,13 +393,17 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                             "hero_id": hero_id
                         })
 
-                        # When BOTH fighters are locked in, initiate the iconic VERSUS screen!
+                        # When BOTH fighters are locked in, start the fight!
                         if room.p1_hero is not None and room.p2_hero is not None:
-                            logging.info(f"[{match_id}] Both heroes locked! Initiating Versus Face-Off Screen.")
+                            p1_id = room.p1_id or room.creator_id
+                            p2_id = room.p2_id or room.opponent_id
+                            p1_name = room.p1_name or room.creator_name
+                            p2_name = room.p2_name or room.opponent_name
+                            logging.info(f"[{match_id}] Both heroes locked! Initiating match.")
                             await room.broadcast({
                                 "type": "versus_start",
-                                "p1": {"id": room.creator_id, "name": room.creator_name, "hero_id": room.p1_hero},
-                                "p2": {"id": room.opponent_id, "name": room.opponent_name, "hero_id": room.p2_hero},
+                                "p1": {"id": p1_id, "name": p1_name, "hero_id": room.p1_hero},
+                                "p2": {"id": p2_id, "name": p2_name, "hero_id": room.p2_hero},
                                 "countdown": 3,
                                 "message": "VERSUS"
                             })
@@ -403,10 +424,14 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         if room.p1_rounds >= 2 or room.p2_rounds >= 2:
                             # 2 round wins achieved -> Match Won!
                             winner_role = "p1" if room.p1_rounds >= 2 else "p2"
-                            winner_id = room.creator_id if winner_role == "p1" else room.opponent_id
-                            winner_name = room.creator_name if winner_role == "p1" else room.opponent_name
-                            loser_id = room.opponent_id if winner_role == "p1" else room.creator_id
-                            loser_name = room.opponent_name if winner_role == "p1" else room.creator_name
+                            p1_id = room.p1_id or room.creator_id
+                            p2_id = room.p2_id or room.opponent_id
+                            p1_name = room.p1_name or room.creator_name
+                            p2_name = room.p2_name or room.opponent_name
+                            winner_id = p1_id if winner_role == "p1" else p2_id
+                            winner_name = p1_name if winner_role == "p1" else p2_name
+                            loser_id = p2_id if winner_role == "p1" else p1_id
+                            loser_name = p2_name if winner_role == "p1" else p1_name
                             room.status = "COMPLETED"
                             db.finish_match(room.match_id, winner_id=winner_id, finish_reason="KNOCKOUT")
 
@@ -494,6 +519,10 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     if room:
                         # Reset match to active and clear heroes & rounds for fresh rematch
                         room.status = "ACTIVE"
+                        room.p1_id = None
+                        room.p2_id = None
+                        room.p1_name = None
+                        room.p2_name = None
                         room.p1_hero = None
                         room.p2_hero = None
                         room.p1_rounds = 0
