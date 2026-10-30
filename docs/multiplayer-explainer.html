@@ -150,28 +150,49 @@ sequenceDiagram
 
             <!-- SECTION 4: REAL-TIME INPUT RELAY -->
             <section id="flow-combat">
-                <h2>4. Zero-Latency Combat Input Synchronization</h2>
-                <p>During active combat, both clients run the 1:1 J2ME simulation locally. When Player 1 inputs an attack or movement command, it is executed locally with 0ms visual latency, while a compact JSON payload is forwarded through the WebSocket coordinator to control Fighter C on Player 2's screen.</p>
+                <h2>4. Ultra-Low Latency Combat Architecture: WebRTC P2P & Binary Streaming</h2>
+                <p>During active combat, both clients run the 1:1 J2ME simulation locally. To minimize latency to the physical floor, Immortal Combat implements a multi-tier transport architecture combining direct WebRTC P2P DataChannels, zero-copy 4-byte binary serialization, TCP_NODELAY kernel tuning, and periodic authoritative state reconciliation.</p>
+
+                <div class="note">
+                    <strong>Multi-Tier Latency Reductions:</strong>
+                    <ul class="tight">
+                        <li><strong>WebRTC P2P DataChannel (UDP/SCTP):</strong> WebSockets serve as signaling during lobby/hero select. Once in combat, an unordered, 0-retransmission DataChannel connects players directly device-to-device, eliminating server bounce latency (~50% RTT drop) and TCP Head-of-Line blocking.</li>
+                        <li><strong>Zero-Copy Binary Protocol:</strong> Instead of ~55-byte JSON strings, input events transmit as 4-byte <code>ArrayBuffer</code> payloads (<code>[0x01, KeyCode, isDown, Seq]</code>), reducing bandwidth by 93% with zero JSON parsing CPU overhead.</li>
+                        <li><strong>Kernel & Proxy Optimization:</strong> Nginx runs with <code>proxy_buffering off;</code> and <code>tcp_nodelay on;</code>, while the aiohttp server sets <code>TCP_NODELAY</code> and <code>TCP_QUICKACK</code> directly on client sockets.</li>
+                        <li><strong>Authoritative Reconciliation:</strong> Player 1 periodically broadcasts an 11-byte sync packet every 30 frames (~1s) to smoothly reconcile health and position drift without visual stutter.</li>
+                    </ul>
+                </div>
 
                 <div class="fig-box">
                     <div class="mermaid">
 sequenceDiagram
     autonumber
     actor P1 as Player 1 (Fighter B)
-    participant SVR as Real-Time Relay
+    participant SVR as WebSocket Signaling / Relay
     actor P2 as Player 2 (Fighter C)
 
-    P1->>P1: Presses High Punch (Key 53)
-    P1->>SVR: {"type": "input", "key": 53, "down": true, "seq": 101}
-    SVR->>P2: {"type": "peer_input", "from_role": "p1", "key": 53, "down": true}
-    P2->>P2: Fighter B executes High Punch animation
+    rect rgb(240, 248, 255)
+    Note over P1,P2: Phase 1: WebRTC Signaling via WebSocket
+    P1->>SVR: rtc_signal (Offer + ICE Candidates)
+    SVR->>P2: rtc_signal (Offer + ICE Candidates)
+    P2->>SVR: rtc_signal (Answer + ICE Candidates)
+    SVR->>P1: rtc_signal (Answer + ICE Candidates)
+    Note over P1,P2: ⚡ Direct P2P DataChannel OPEN! (UDP transport)
+    end
 
-    P2->>P2: Slides D-pad Down-Left (Crouch Block)
-    P2->>SVR: {"type": "input", "key": 57, "down": true, "seq": 45}
-    SVR->>P1: {"type": "peer_input", "from_role": "p2", "key": 57, "down": true}
-    P1->>P1: Fighter C assumes defensive Crouch Block
+    rect rgb(255, 250, 240)
+    Note over P1,P2: Phase 2: Ultra-Fast Combat Transmission
+    P1->>P2: [P2P UDP 4-byte binary] Key 53 (High Punch), Down=1
+    P2->>P2: Fighter B executes High Punch instantly (0ms server detour)
+
+    P2->>P1: [P2P UDP 4-byte binary] Key 57 (Block), Down=1
+    P1->>P1: Fighter C assumes defensive Crouch Block instantly
+
+    P1->>P2: [Periodic 11-byte Sync] HP=(100, 85), Pos=(-64, 48), Timer=94s
+    P2->>P2: Soft position reconciliation to keep simulation aligned
+    end
                     </div>
-                    <div class="figcaption">Figure 2: Full-duplex peer input relaying between Player 1 and Player 2.</div>
+                    <div class="figcaption">Figure 2: WebRTC P2P direct UDP data stream with binary serialization and periodic state reconciliation.</div>
                 </div>
             </section>
 

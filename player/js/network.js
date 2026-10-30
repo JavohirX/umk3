@@ -26,11 +26,19 @@ export class MultiplayerClient {
         this.onVersusStartCallback = null;
         this.onRoundNextCallback = null;
         this.onMatchEndedCallback = null;
+        this.onPeerSyncCallback = null;
         this.isMultiplayer = false;
         this._roundActive = false;
         this._boutLive = false;
         this._heroSelected = false;
         this._heroId = null;
+
+        // Ultra-low-latency WebRTC P2P DataChannel & Latency Monitoring
+        this.rtcPeer = null;
+        this.dataChannel = null;
+        this.isP2PActive = false;
+        this.pingInterval = null;
+        this.rtt = 0;
 
         this.parseEnvironment();
     }
@@ -147,7 +155,10 @@ export class MultiplayerClient {
                 <span class="mp-role-dot dot-p1"></span>
                 <span id="mp-hud-p1-name">P1: Loading...</span>
             </div>
-            <button id="mp-btn-leaderboard" class="mp-btn-hud">🏆 Leaderboard</button>
+            <div class="mp-center-hud">
+                <span id="mp-net-badge" class="mp-net-badge mp-net-relay" title="Connection mode">🌐 Relay</span>
+                <button id="mp-btn-leaderboard" class="mp-btn-hud">🏆 Leaderboard</button>
+            </div>
             <div class="mp-player-badge mp-badge-p2">
                 <span class="mp-role-dot dot-p2"></span>
                 <span id="mp-hud-p2-name">P2: Waiting...</span>
@@ -268,6 +279,36 @@ export class MultiplayerClient {
             }
             .dot-p1 { background: #ff7518; box-shadow: 0 0 6px #ff7518; }
             .dot-p2 { background: #00d2ff; box-shadow: 0 0 6px #00d2ff; }
+            .mp-center-hud {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .mp-net-badge {
+                font-size: 9px;
+                font-weight: 700;
+                padding: 1px 5px;
+                border-radius: 3px;
+                background: #252836;
+                color: #8c9ba5;
+                border: 1px solid #3c4254;
+                letter-spacing: 0.3px;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                user-select: none;
+            }
+            .mp-net-p2p {
+                background: rgba(0, 230, 118, 0.15);
+                color: #00e676;
+                border-color: #00e676;
+                box-shadow: 0 0 6px rgba(0, 230, 118, 0.3);
+            }
+            .mp-net-relay {
+                background: rgba(255, 170, 0, 0.15);
+                color: #ffaa00;
+                border-color: #ffaa00;
+            }
             .mp-btn-hud {
                 background: #1a1a1a;
                 border: 1px solid #ff7518;
@@ -506,6 +547,7 @@ export class MultiplayerClient {
 
         try {
             this.ws = new WebSocket(wsUrl);
+            this.ws.binaryType = "arraybuffer"; // Zero-copy binary transport
         } catch (e) {
             console.error("[Multiplayer] WebSocket creation error:", e);
             if (statusText) statusText.innerHTML = "⚠️ <b>Connection error!</b> Retrying in 3s...";
@@ -525,19 +567,39 @@ export class MultiplayerClient {
                 user_id: this.userId,
                 user_name: this.userName
             });
+
+            // Start latency monitoring ping every 5 seconds
+            clearInterval(this.pingInterval);
+            this.pingInterval = setInterval(() => {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.sendPacket({ type: "ping", time: performance.now() });
+                }
+            }, 5000);
         };
 
         this.ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                this.handlePacket(data);
-            } catch (err) {
-                console.error("[Multiplayer] Packet parse error:", err);
+            if (event.data instanceof ArrayBuffer) {
+                this.handleBinaryPacket(event.data);
+            } else {
+                try {
+                    const data = JSON.parse(event.data);
+                    this.handlePacket(data);
+                } catch (err) {
+                    console.error("[Multiplayer] Packet parse error:", err);
+                }
             }
         };
 
         this.ws.onclose = () => {
             console.log("[Multiplayer] WebSocket closed.");
+            clearInterval(this.pingInterval);
+            if (this.rtcPeer) {
+                try { this.rtcPeer.close(); } catch (_) {}
+                this.rtcPeer = null;
+            }
+            this.isP2PActive = false;
+            this.updateNetBadge(false);
+
             if (this.status === "WAITING" && !this.isTimeout) {
                 if (statusText) statusText.textContent = "Reconnecting to arena...";
                 setTimeout(() => {
@@ -552,6 +614,159 @@ export class MultiplayerClient {
         };
     }
 
+    handleBinaryPacket(buffer) {
+        if (!buffer || buffer.byteLength < 4) return;
+        const view = new DataView(buffer);
+        const packetType = view.getUint8(0);
+
+        if (packetType === 1) { // 0x01: PACKET_INPUT
+            const keyCode = view.getInt8(1);
+            const isDown = view.getUint8(2) === 1;
+            if (typeof this.onPeerInputCallback === 'function') {
+                this.onPeerInputCallback(keyCode, isDown);
+            }
+        } else if (packetType === 2 && buffer.byteLength >= 11) { // 0x02: PACKET_SYNC
+            const p1Hp = view.getUint8(1);
+            const p2Hp = view.getUint8(2);
+            const p1X = view.getInt16(3);
+            const p2X = view.getInt16(5);
+            const roundTimer = view.getInt32(7);
+            if (typeof this.onPeerSyncCallback === 'function') {
+                this.onPeerSyncCallback({
+                    p1_hp: p1Hp,
+                    p2_hp: p2Hp,
+                    p1_x: p1X,
+                    p2_x: p2X,
+                    round_timer: roundTimer
+                });
+            }
+        }
+    }
+
+    // =========================================================================
+    // WEBRTC P2P DATACHANNEL (UDP-BASED ZERO SERVER BOUNCE TRANSPORT)
+    // =========================================================================
+
+    async initWebRTC(isInitiator) {
+        if (typeof RTCPeerConnection === 'undefined') return;
+        if (this.rtcPeer) {
+            try { this.rtcPeer.close(); } catch (_) {}
+            this.rtcPeer = null;
+        }
+
+        try {
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
+            };
+            this.rtcPeer = new RTCPeerConnection(config);
+
+            this.rtcPeer.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.sendPacket({
+                        type: "rtc_signal",
+                        signal: { type: "candidate", candidate: event.candidate.toJSON() }
+                    });
+                }
+            };
+
+            if (isInitiator) {
+                // High-performance unordered, un-retransmitted DataChannel (UDP-like)
+                const dc = this.rtcPeer.createDataChannel("combat_input", {
+                    ordered: false,
+                    maxRetransmits: 0
+                });
+                this.setupDataChannel(dc);
+
+                const offer = await this.rtcPeer.createOffer();
+                await this.rtcPeer.setLocalDescription(offer);
+                this.sendPacket({
+                    type: "rtc_signal",
+                    signal: { type: "offer", sdp: offer }
+                });
+            } else {
+                this.rtcPeer.ondatachannel = (event) => {
+                    this.setupDataChannel(event.channel);
+                };
+            }
+        } catch (err) {
+            console.warn("[Multiplayer] WebRTC setup error, will use WebSocket relay:", err);
+        }
+    }
+
+    async handleRtcSignal(signal) {
+        if (!signal) return;
+        if (!this.rtcPeer && signal.type === "offer") {
+            await this.initWebRTC(false);
+        }
+        if (!this.rtcPeer) return;
+
+        try {
+            if (signal.type === "offer") {
+                await this.rtcPeer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                const answer = await this.rtcPeer.createAnswer();
+                await this.rtcPeer.setLocalDescription(answer);
+                this.sendPacket({
+                    type: "rtc_signal",
+                    signal: { type: "answer", sdp: answer }
+                });
+            } else if (signal.type === "answer") {
+                await this.rtcPeer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+            } else if (signal.type === "candidate" && signal.candidate) {
+                await this.rtcPeer.addIceCandidate(new RTCIceCandidate(signal.candidate));
+            }
+        } catch (err) {
+            console.warn("[Multiplayer] Failed to process RTC signal:", err);
+        }
+    }
+
+    setupDataChannel(dc) {
+        if (!dc) return;
+        this.dataChannel = dc;
+        dc.binaryType = "arraybuffer";
+
+        dc.onopen = () => {
+            console.log("[Multiplayer] ⚡ WebRTC P2P DataChannel OPEN! Direct low-latency UDP combat active.");
+            this.isP2PActive = true;
+            this.updateNetBadge(true);
+        };
+
+        dc.onclose = () => {
+            console.log("[Multiplayer] WebRTC DataChannel closed. Falling back to WebSocket relay.");
+            this.isP2PActive = false;
+            this.updateNetBadge(false);
+        };
+
+        dc.onerror = (err) => {
+            console.warn("[Multiplayer] WebRTC DataChannel error:", err);
+            this.isP2PActive = false;
+            this.updateNetBadge(false);
+        };
+
+        dc.onmessage = (event) => {
+            if (event.data instanceof ArrayBuffer) {
+                this.handleBinaryPacket(event.data);
+            }
+        };
+    }
+
+    updateNetBadge(isP2P) {
+        const badge = document.getElementById('mp-net-badge');
+        if (!badge) return;
+        if (isP2P) {
+            badge.className = 'mp-net-badge mp-net-p2p';
+            badge.textContent = '⚡ P2P (UDP)';
+            badge.title = 'Direct Peer-to-Peer WebRTC DataChannel active';
+        } else {
+            badge.className = 'mp-net-badge mp-net-relay';
+            badge.textContent = this.rtt > 0 ? `🌐 ${this.rtt}ms` : '🌐 Relay';
+            badge.title = 'Connected via low-latency WebSocket relay';
+        }
+    }
+
     sendPacket(data) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
@@ -560,13 +775,71 @@ export class MultiplayerClient {
 
     sendInput(keyCode, isDown) {
         if (!this.isMultiplayer || this.status !== "ACTIVE") return;
-        this.inputSeq++;
+        this.inputSeq = (this.inputSeq + 1) & 0xFF;
+
+        // Compact 4-byte binary payload: [0x01, keyCode, isDown, seq]
+        const buffer = new ArrayBuffer(4);
+        const view = new DataView(buffer);
+        view.setUint8(0, 1);
+        view.setInt8(1, keyCode);
+        view.setUint8(2, isDown ? 1 : 0);
+        view.setUint8(3, this.inputSeq);
+
+        // 1. Direct WebRTC P2P DataChannel (0ms server bounce, UDP transport)
+        if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
+            try {
+                this.dataChannel.send(buffer);
+                return;
+            } catch (_) {
+                this.isP2PActive = false;
+                this.updateNetBadge(false);
+            }
+        }
+
+        // 2. Binary WebSocket relay (TCP_NODELAY enabled)
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                this.ws.send(buffer);
+                return;
+            } catch (_) {}
+        }
+
+        // 3. Fallback text JSON
         this.sendPacket({
             type: "input",
             key: keyCode,
             down: isDown,
             seq: this.inputSeq
         });
+    }
+
+    sendSync(p1Hp, p2Hp, p1X, p2X, roundTimer) {
+        if (!this.isMultiplayer || this.status !== "ACTIVE") return;
+
+        const buffer = new ArrayBuffer(11);
+        const view = new DataView(buffer);
+        view.setUint8(0, 2); // 0x02: PACKET_SYNC
+        view.setUint8(1, Math.max(0, Math.min(100, Math.round(p1Hp || 0))));
+        view.setUint8(2, Math.max(0, Math.min(100, Math.round(p2Hp || 0))));
+        view.setInt16(3, Math.round(p1X || 0));
+        view.setInt16(5, Math.round(p2X || 0));
+        view.setInt32(7, Math.round(roundTimer || 0));
+
+        if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
+            try {
+                this.dataChannel.send(buffer);
+                return;
+            } catch (_) {
+                this.isP2PActive = false;
+                this.updateNetBadge(false);
+            }
+        }
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                this.ws.send(buffer);
+            } catch (_) {}
+        }
     }
 
     sendHeroHover(heroId) {
@@ -591,6 +864,9 @@ export class MultiplayerClient {
                 console.log(`[Multiplayer] Joined as role: ${this.role}. Match status: ${data.status}`);
                 this.updateHudBar();
                 this.showLobbyWaiting(data.remaining_seconds || 60);
+                if (this.role === "p1" && data.status === "ACTIVE") {
+                    this.initWebRTC(true);
+                }
                 break;
 
             case "waiting_opponent":
@@ -603,6 +879,9 @@ export class MultiplayerClient {
                 this.creator = data.p1;
                 this.opponent = data.p2;
                 this.updateHudBar();
+                if (this.role === "p1") {
+                    this.initWebRTC(true);
+                }
                 if (data.stage === "hero_select") {
                     this.status = "HERO_SELECT";
                     this._heroSelected = false;
@@ -638,6 +917,9 @@ export class MultiplayerClient {
                 this.creator = data.p1;
                 this.updateHudBar();
                 console.log(`[Multiplayer] Fight starting: P1=${data.p1.hero_id}, P2=${data.p2.hero_id}. Local role=${this.role}`);
+                if (this.role === "p1" && !this.isP2PActive && !this.rtcPeer) {
+                    this.initWebRTC(true);
+                }
                 if (typeof this.onVersusStartCallback === 'function') {
                     this.onVersusStartCallback(data.p1.hero_id, data.p2.hero_id, data);
                 }
@@ -653,6 +935,23 @@ export class MultiplayerClient {
             case "peer_input":
                 if (typeof this.onPeerInputCallback === 'function') {
                     this.onPeerInputCallback(data.key, data.down);
+                }
+                break;
+
+            case "peer_sync":
+                if (typeof this.onPeerSyncCallback === 'function') {
+                    this.onPeerSyncCallback(data);
+                }
+                break;
+
+            case "rtc_signal":
+                this.handleRtcSignal(data.signal);
+                break;
+
+            case "pong":
+                if (data.time) {
+                    this.rtt = Math.max(1, Math.round(performance.now() - data.time));
+                    this.updateNetBadge(this.isP2PActive);
                 }
                 break;
 
