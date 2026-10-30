@@ -493,6 +493,9 @@ function setupInputControls() {
 
         const handlePress = (e) => {
             e.preventDefault();
+            if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE" && (keyData === 'F1' || keyData === 'F2')) {
+                return;
+            }
             btn.classList.add('active');
             try { btn.setPointerCapture(e.pointerId); } catch (_) {}
             triggerHaptic(12);
@@ -660,7 +663,53 @@ function setupKeyboardControls() {
     });
 }
 
+function fitScreenContainer() {
+    const wrapper = document.getElementById('screen-wrapper');
+    const container = document.getElementById('screen-container');
+    if (!wrapper || !container) return;
+
+    const availW = wrapper.clientWidth;
+    const availH = wrapper.clientHeight;
+    if (!availW || !availH) return;
+
+    const isDesktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const maxW = isDesktop ? availW * 0.96 : availW;
+    const maxH = isDesktop ? availH * 0.96 : availH;
+
+    const targetRatio = 352 / 416;
+    let w, h;
+    if (maxW / maxH > targetRatio) {
+        // Height-constrained (landscape / desktop)
+        h = Math.floor(maxH);
+        w = Math.round(h * targetRatio);
+    } else {
+        // Width-constrained (portrait phone)
+        w = Math.floor(maxW);
+        h = Math.round(w / targetRatio);
+    }
+
+    if (h > maxH) {
+        h = Math.floor(maxH);
+        w = Math.round(h * targetRatio);
+    }
+    if (w > maxW) {
+        w = Math.floor(maxW);
+        h = Math.round(w / targetRatio);
+    }
+
+    container.style.width = `${w}px`;
+    container.style.height = `${h}px`;
+}
+
 function setupCanvas() {
+    fitScreenContainer();
+    const wrapper = document.getElementById('screen-wrapper');
+    if (wrapper && typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => fitScreenContainer()).observe(wrapper);
+    }
+    window.addEventListener('resize', fitScreenContainer);
+    window.addEventListener('orientationchange', () => setTimeout(fitScreenContainer, 100));
+
     canvas = document.getElementById('display');
     canvas.width = 352;
     canvas.height = 416;
@@ -683,8 +732,37 @@ function setupCanvas() {
         unlockAudio();
 
         if (mpClient && mpClient.isMultiplayer) {
+            if (mpClient.status === "ACTIVE") {
+                // In active combat, canvas pointer events do not trigger menus
+                return;
+            }
+
             if (mpClient.status === "HERO_SELECT") {
                 if (mpClient._heroSelected) return; // Already locked in
+
+                // Allow softkeys (e.g. Back/Info) during hero select
+                if (cy >= 355) {
+                    if (cx <= 105) {
+                        const lskBtn = document.getElementById('screen-btn-lsk');
+                        if (lskBtn) {
+                            lskBtn.classList.add('active');
+                            setTimeout(() => lskBtn.classList.remove('active'), 120);
+                        }
+                        sendKeyEvent(-6, true);
+                        setTimeout(() => sendKeyEvent(-6, false), 90);
+                        return;
+                    }
+                    if (cx >= 247) {
+                        const rskBtn = document.getElementById('screen-btn-rsk');
+                        if (rskBtn) {
+                            rskBtn.classList.add('active');
+                            setTimeout(() => rskBtn.classList.remove('active'), 120);
+                        }
+                        sendKeyEvent(-7, true);
+                        setTimeout(() => sendKeyEvent(-7, false), 90);
+                        return;
+                    }
+                }
 
                 const startX = CoreEngine.val_int_bT || 0;
                 const startY = CoreEngine.val_int_bU || 0;
@@ -705,9 +783,32 @@ function setupCanvas() {
                 }
                 return;
             }
+        }
 
-            if (mpClient.status === "ACTIVE") {
-                // In active combat, canvas pointer events do not trigger menus
+        // 1. Softkey zone at the bottom of the screen (OPTNS / BACK / PAUSE)
+        // Canvas is 352 x 416. The bottom softkey bar occupies cy >= 355.
+        // LSK is on the left (cx <= 105), RSK is on the right (cx >= 247).
+        if (cy >= 355) {
+            if (cx <= 105) {
+                // Left Softkey (LSK / Options / Info / Select) -> keycode -6
+                const lskBtn = document.getElementById('screen-btn-lsk');
+                if (lskBtn) {
+                    lskBtn.classList.add('active');
+                    setTimeout(() => lskBtn.classList.remove('active'), 120);
+                }
+                sendKeyEvent(-6, true);
+                setTimeout(() => sendKeyEvent(-6, false), 90);
+                return;
+            }
+            if (cx >= 247) {
+                // Right Softkey (RSK / Back / Pause / Exit) -> keycode -7
+                const rskBtn = document.getElementById('screen-btn-rsk');
+                if (rskBtn) {
+                    rskBtn.classList.add('active');
+                    setTimeout(() => rskBtn.classList.remove('active'), 120);
+                }
+                sendKeyEvent(-7, true);
+                setTimeout(() => sendKeyEvent(-7, false), 90);
                 return;
             }
         }
@@ -896,6 +997,7 @@ async function bootstrap() {
             splashScreen.classList.add('fade-out');
             setTimeout(() => {
                 try { splashScreen.remove(); } catch (_) {}
+                fitScreenContainer();
             }, 360);
         }
         if (canvasEl) {
