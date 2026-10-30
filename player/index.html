@@ -529,101 +529,6 @@
                 display: none;
             }
         }
-
-        #keyboard-hint {
-            display: none;
-            position: fixed;
-            left: 50%;
-            bottom: max(22px, env(safe-area-inset-bottom, 0px));
-            z-index: 40;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            width: max-content;
-            max-width: calc(100vw - 28px);
-            padding: 16px 18px 14px;
-            background: rgba(8, 7, 6, 0.92);
-            border: 1px solid rgba(229, 198, 135, 0.28);
-            border-radius: 18px;
-            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
-            pointer-events: none;
-            color: #f4efe4;
-            transform: translateX(-50%);
-            opacity: 0;
-        }
-
-        .kh-title {
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-            color: #e5c687;
-        }
-
-        .kh-keys {
-            display: grid;
-            grid-template-columns: repeat(3, 58px);
-            gap: 6px;
-        }
-
-        .kh-zero {
-            grid-column: 2;
-        }
-
-        .kh-extra {
-            display: flex;
-            gap: 8px;
-        }
-
-        #keyboard-hint kbd {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 2px;
-            min-height: 48px;
-            border-radius: 10px;
-            background: linear-gradient(180deg, #3a3226 0%, #1a1612 70%);
-            color: #f7f1e4;
-            border: 1px solid rgba(229, 198, 135, 0.18);
-            border-top-color: rgba(255, 236, 196, 0.35);
-            box-shadow: 0 2px 0 #050403, 0 6px 12px rgba(0, 0, 0, 0.35);
-            font-family: inherit;
-            font-size: 16px;
-            font-weight: 800;
-            line-height: 1;
-        }
-
-        #keyboard-hint kbd small {
-            font-size: 9px;
-            font-weight: 750;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: #e5c687;
-        }
-
-        #keyboard-hint kbd.kh-wide {
-            min-width: 92px;
-            padding: 0 12px;
-        }
-
-        @media (hover: hover) and (pointer: fine) {
-            #keyboard-hint {
-                display: flex;
-                animation: kh-in 0.45s ease 0.2s forwards;
-            }
-
-            #keyboard-hint.is-hiding {
-                animation: none;
-                opacity: 0;
-                transition: opacity 0.4s ease;
-            }
-        }
-
-        @keyframes kh-in {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
     </style>
 </head>
 <body>
@@ -691,66 +596,6 @@
         </div>
     </div>
 
-    <!-- Desktop keypad card. Shown once at the start, then hidden. Touch screens keep the on-screen pad. -->
-    <aside id="keyboard-hint" aria-label="Keyboard controls">
-        <p class="kh-title">Keys</p>
-        <div class="kh-keys">
-            <kbd>1</kbd>
-            <kbd>2<small>Up</small></kbd>
-            <kbd>3</kbd>
-            <kbd>4<small>Left</small></kbd>
-            <kbd>5<small>Punch</small></kbd>
-            <kbd>6<small>Right</small></kbd>
-            <kbd>7<small>Kick</small></kbd>
-            <kbd>8<small>Down</small></kbd>
-            <kbd>9<small>Block</small></kbd>
-            <kbd class="kh-zero">0</kbd>
-        </div>
-        <div class="kh-extra">
-            <kbd class="kh-wide">Enter<small>OK</small></kbd>
-            <kbd class="kh-wide">Shift<small>Kick</small></kbd>
-        </div>
-    </aside>
-    <script>
-        (function () {
-            var hint = document.getElementById('keyboard-hint');
-            if (!hint || !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-
-            var gone = false;
-            function hide() {
-                if (gone) return;
-                gone = true;
-                hint.classList.add('is-hiding');
-                hint.setAttribute('aria-hidden', 'true');
-                setTimeout(function () { hint.hidden = true; }, 420);
-            }
-
-            function arm() {
-                window.addEventListener('keydown', hide, { once: true });
-                setTimeout(hide, 6000);
-            }
-
-            var splash = document.getElementById('splash-screen');
-            if (!splash) {
-                arm();
-                return;
-            }
-
-            var armed = false;
-            function maybeArm() {
-                if (armed) return;
-                if (splash.classList.contains('fade-out') || !splash.isConnected) {
-                    armed = true;
-                    arm();
-                }
-            }
-
-            var obs = new MutationObserver(maybeArm);
-            obs.observe(splash, { attributes: true, attributeFilter: ['class'] });
-            if (splash.parentNode) obs.observe(splash.parentNode, { childList: true });
-        })();
-    </script>
-
     <!-- 100% Pure Native JavaScript Engine Entrypoint -->
     <script type="module">
         window.addEventListener('error', (e) => console.error("Global Error:", e.message, e.filename, e.lineno, e.error));
@@ -812,7 +657,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load Immortal Combat pure JS engine
-        const APP_BUILD_HASH = "v20261030_controls_v2";
+        const APP_BUILD_HASH = "v20261031_clean_pc_v1";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
