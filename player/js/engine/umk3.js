@@ -1408,6 +1408,12 @@ export class AsyncWorkerThread extends Thread {
         CoreEngine.exec_c_byte_to_void(this.threadPriority);
         CoreEngine.exec_d_to_bool();
     }
+    isAlive() {
+        return !!this._isAlive;
+    }
+    join() {
+        this._isAlive = false;
+    }
 }
 globalThis.AsyncWorkerThread = AsyncWorkerThread;
 globalThis.AsyncWorkerThread = AsyncWorkerThread;
@@ -15388,12 +15394,12 @@ export class CoreEngine {
                 if ((AudioMetaTable.val_arr_int_a[var0]) !== (-1)) {
                     if (CoreEngine.val_int_bv !== 1) {
                         if ((CoreEngine.val_thread_a) !== (null)) {
-                            if (CoreEngine.val_thread_a.isAlive()) {
+                            if (typeof CoreEngine.val_thread_a.isAlive === 'function' && CoreEngine.val_thread_a.isAlive()) {
                                 if ((AudioMetaTable.val_arr_byte_c[var0]) === (1)) {
                                     return;
                                 }
                                 try {
-                                    CoreEngine.val_thread_a.join();
+                                    if (typeof CoreEngine.val_thread_a.join === 'function') { CoreEngine.val_thread_a.join(); }
                                 } catch (var2) {
 
                                 }
