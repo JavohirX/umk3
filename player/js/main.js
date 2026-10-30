@@ -151,8 +151,8 @@ class AdvancedMovementJoystick {
         this.config = Object.assign({
             deadZoneRadius: 14,          // Layer 2: 15-20% base radius
             maxRadius: 55,               // Layer 1: pad radius - knob radius
-            hysteresisAngleDeg: 10,      // Layer 4: 8-12 deg sticky angle margin
-            cardinalHalfWidthDeg: 30     // Layer 3: 30 deg half-width (60 deg full cardinal arc)
+            hysteresisAngleDeg: 6,       // Layer 4: 6 deg sticky angle margin (leaves 32 deg diagonal window)
+            cardinalHalfWidthDeg: 26     // Layer 3: 26 deg half-width (52 deg full cardinal arc)
         }, config);
 
         this.currentDirection = null;
@@ -347,8 +347,8 @@ function setupInputControls() {
             'down': [-2],
             'left': [-3],
             'right': [-4],
-            'up-left': [-1, -3],
-            'up-right': [-1, -4],
+            'up-left': [49],     // Key 1: Native J2ME Up-Left Diagonal Jump
+            'up-right': [51],    // Key 3: Native J2ME Up-Right Diagonal Jump
             'down-left': [-2, -3],
             'down-right': [-2, -4]
         };
@@ -356,8 +356,8 @@ function setupInputControls() {
         const joystick = new AdvancedMovementJoystick({
             deadZoneRadius: 14,
             maxRadius: 50,
-            hysteresisAngleDeg: 10,
-            cardinalHalfWidthDeg: 30
+            hysteresisAngleDeg: 6,
+            cardinalHalfWidthDeg: 26
         });
         window.__joystick = joystick;
 
@@ -516,6 +516,58 @@ function setupInputControls() {
 }
 
 function setupKeyboardControls() {
+    const activeDirKeys = new Set();
+    let currentDiagonalChord = null;
+
+    const isDirCode = (code) => [
+        'ArrowUp', 'KeyW', 'ArrowDown', 'KeyS',
+        'ArrowLeft', 'KeyA', 'ArrowRight', 'KeyD'
+    ].includes(code);
+
+    const updateKeyboardDirection = () => {
+        const hasUp = activeDirKeys.has('ArrowUp') || activeDirKeys.has('KeyW');
+        const hasDown = activeDirKeys.has('ArrowDown') || activeDirKeys.has('KeyS');
+        const hasLeft = activeDirKeys.has('ArrowLeft') || activeDirKeys.has('KeyA');
+        const hasRight = activeDirKeys.has('ArrowRight') || activeDirKeys.has('KeyD');
+
+        let targetChord = null;
+        if (hasUp && hasRight) targetChord = 'up-right';
+        else if (hasUp && hasLeft) targetChord = 'up-left';
+
+        if (targetChord !== currentDiagonalChord) {
+            // Release prior diagonal chord key
+            if (currentDiagonalChord === 'up-right') {
+                sendKeyEvent(51, false);
+            } else if (currentDiagonalChord === 'up-left') {
+                sendKeyEvent(49, false);
+            }
+
+            currentDiagonalChord = targetChord;
+
+            if (currentDiagonalChord === 'up-right') {
+                sendKeyEvent(-1, false);
+                sendKeyEvent(-4, false);
+                sendKeyEvent(51, true);
+            } else if (currentDiagonalChord === 'up-left') {
+                sendKeyEvent(-1, false);
+                sendKeyEvent(-3, false);
+                sendKeyEvent(49, true);
+            } else {
+                // Return to active cardinal keys
+                if (hasUp) sendKeyEvent(-1, true);
+                if (hasRight) sendKeyEvent(-4, true);
+                if (hasLeft) sendKeyEvent(-3, true);
+                if (hasDown) sendKeyEvent(-2, true);
+            }
+
+            // Sync visual indicators for diagonal arrows
+            const urInd = document.querySelector('[data-joy-dir="up-right"]');
+            const ulInd = document.querySelector('[data-joy-dir="up-left"]');
+            if (urInd) urInd.classList.toggle('active', currentDiagonalChord === 'up-right');
+            if (ulInd) ulInd.classList.toggle('active', currentDiagonalChord === 'up-left');
+        }
+    };
+
     window.addEventListener('keydown', (e) => {
         if (e.repeat) return;
         unlockAudio();
@@ -531,6 +583,21 @@ function setupKeyboardControls() {
             return;
         }
 
+        if (isDirCode(e.code)) {
+            activeDirKeys.add(e.code);
+            triggerButtonActive(e.code, true);
+
+            const hasUp = activeDirKeys.has('ArrowUp') || activeDirKeys.has('KeyW');
+            const hasRight = activeDirKeys.has('ArrowRight') || activeDirKeys.has('KeyD');
+            const hasLeft = activeDirKeys.has('ArrowLeft') || activeDirKeys.has('KeyA');
+
+            if ((hasUp && hasRight) || (hasUp && hasLeft)) {
+                updateKeyboardDirection();
+                e.preventDefault();
+                return;
+            }
+        }
+
         const keyCode = KEY_MAP[e.code];
         if (keyCode !== undefined) {
             sendKeyEvent(keyCode, true);
@@ -540,12 +607,30 @@ function setupKeyboardControls() {
     });
 
     window.addEventListener('keyup', (e) => {
+        if (isDirCode(e.code)) {
+            activeDirKeys.delete(e.code);
+            triggerButtonActive(e.code, false);
+            updateKeyboardDirection();
+        }
+
+        if (currentDiagonalChord) {
+            e.preventDefault();
+            return;
+        }
+
         const keyCode = KEY_MAP[e.code];
         if (keyCode !== undefined) {
             sendKeyEvent(keyCode, false);
             triggerButtonActive(e.code, false);
             e.preventDefault();
         }
+    });
+
+    window.addEventListener('blur', () => {
+        if (currentDiagonalChord === 'up-right') sendKeyEvent(51, false);
+        if (currentDiagonalChord === 'up-left') sendKeyEvent(49, false);
+        currentDiagonalChord = null;
+        activeDirKeys.clear();
     });
 }
 
