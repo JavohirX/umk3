@@ -131,12 +131,8 @@ class MatchCoordinator:
         logging.info(f"[{room.match_id}] Player {player_id} disconnected. Status: {room.status}. Active sockets: {len(room.sockets)}")
 
         if room.status == "WAITING":
-            # If creator left lobby before opponent joined
-            if len(room.sockets) == 0:
-                if room.join_timeout_task:
-                    room.join_timeout_task.cancel()
-                room.status = "CANCELLED"
-                db.cancel_match(room.match_id, reason="CREATOR_LEFT")
+            # If a player disconnects during lobby wait (e.g. reload or temporary blip),
+            # keep room alive for reconnection until the 60-second join timeout genuinely fires.
             return
 
         if room.status == "ACTIVE":
@@ -255,9 +251,18 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         creator_name=user_name
                     )
 
-                    # Store socket and player metadata
-                    room.sockets[current_player_id] = ws
-                    room.player_names[current_player_id] = user_name
+                    # Check if match has expired or concluded
+                    now = time.time()
+                    if room.status in ("CANCELLED", "COMPLETED", "ABANDONED") or (room.status == "WAITING" and now >= room.expires_at):
+                        if room.status == "WAITING":
+                            room.status = "CANCELLED"
+                            db.cancel_match(match_id, reason="JOIN_TIMEOUT")
+                        await ws.send_str(json.dumps({
+                            "type": "match_cancelled",
+                            "reason": "EXPIRED",
+                            "message": "This battle session has expired (60s timer). Please create a new challenge."
+                        }))
+                        continue
 
                     # If this player was disconnected, cancel forfeit timer
                     if current_player_id in room.disconnect_tasks:
@@ -272,18 +277,38 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         }, exclude_id=current_player_id)
 
                     # Determine player role (P1 = creator, P2 = opponent)
-                    if current_player_id == room.creator_id:
+                    # If creator is ALREADY connected with an active socket and another join arrives with same ID:
+                    existing_creator_socket = room.sockets.get(room.creator_id)
+                    is_duplicate_creator = (
+                        current_player_id == room.creator_id
+                        and existing_creator_socket is not None
+                        and existing_creator_socket is not ws
+                        and not existing_creator_socket.closed
+                    )
+
+                    if is_duplicate_creator:
+                        # Another client joined with same ID (e.g. 2 tabs in same browser or shared URL)
+                        # Treat this connection as Player 2!
+                        current_player_id = f"{current_player_id}_p2_{str(uuid.uuid4())[:4]}"
+                        user_name = f"{user_name} (P2)"
+                        role = "p2"
+                    elif current_player_id == room.creator_id:
                         role = "p1"
                     else:
                         role = "p2"
-                        if room.status == "WAITING":
-                            # Second player joins the waiting lobby!
-                            db.join_match(match_id, current_player_id, user_name)
-                            room.opponent_id = current_player_id
-                            room.opponent_name = user_name
-                            room.status = "ACTIVE"
-                            if room.join_timeout_task:
-                                room.join_timeout_task.cancel()
+
+                    if role == "p2" and room.status == "WAITING":
+                        # Second player joins the waiting lobby!
+                        db.join_match(match_id, current_player_id, user_name)
+                        room.opponent_id = current_player_id
+                        room.opponent_name = user_name
+                        room.status = "ACTIVE"
+                        if room.join_timeout_task:
+                            room.join_timeout_task.cancel()
+
+                    # Store socket and player metadata
+                    room.sockets[current_player_id] = ws
+                    room.player_names[current_player_id] = user_name
 
                     # Send acknowledgment to this player
                     await ws.send_str(json.dumps({
