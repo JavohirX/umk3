@@ -238,6 +238,78 @@ def run_joystick_tests():
         print("[CHECK 5 PASSED] Center Tap: Reliable Fire / Select / OK (-5) dispatched on deadzone tap.")
 
         # -------------------------------------------------------------
+        # CHECKLIST 6: Native J2ME Diagonal Jump Key Dispatch (Up-Right & Up-Left)
+        # -------------------------------------------------------------
+        print("\n--- Testing Checklist 6: Native J2ME Diagonal Jump Key Dispatch ---")
+        page.evaluate('() => window.__keyHistory = []')
+
+        # 6a. Touch drag into intentional Up-Right (45 deg diagonal: dx = 38, dy = -38)
+        page.mouse.move(cx, cy)
+        page.mouse.down()
+        time.sleep(0.03)
+        page.mouse.move(cx + 38, cy - 38)
+        time.sleep(0.05)
+
+        st6_ur = page.evaluate('''() => {
+            const j = window.__joystick;
+            const urInd = document.querySelector('[data-joy-dir="up-right"]').classList.contains('active');
+            const downKeys = window.__keyHistory.filter(h => h.type === 'down').map(h => h.code);
+            return { dir: j.currentDirection, urActive: urInd, downKeys };
+        }''')
+        print(f"Up-Right drag result: dir={st6_ur['dir']}, indicator={st6_ur['urActive']}, downKeys={st6_ur['downKeys']}")
+        assert st6_ur['dir'] == 'up-right', f"[FAIL] Expected 'up-right', got {st6_ur['dir']}"
+        assert st6_ur['urActive'], "[FAIL] Up-Right joystick indicator not active!"
+        assert 51 in st6_ur['downKeys'], f"[FAIL] Native J2ME Key 3 (51) not dispatched for Up-Right! Dispatched: {st6_ur['downKeys']}"
+        assert -1 not in st6_ur['downKeys'], f"[FAIL] Straight vertical jump (-1) falsely dispatched alongside diagonal!"
+
+        page.mouse.up()
+        time.sleep(0.05)
+
+        # 6b. Touch drag into intentional Up-Left (135 deg diagonal: dx = -38, dy = -38)
+        page.evaluate('() => window.__keyHistory = []')
+        page.mouse.move(cx, cy)
+        page.mouse.down()
+        time.sleep(0.03)
+        page.mouse.move(cx - 38, cy - 38)
+        time.sleep(0.05)
+
+        st6_ul = page.evaluate('''() => {
+            const j = window.__joystick;
+            const ulInd = document.querySelector('[data-joy-dir="up-left"]').classList.contains('active');
+            const downKeys = window.__keyHistory.filter(h => h.type === 'down').map(h => h.code);
+            return { dir: j.currentDirection, ulActive: ulInd, downKeys };
+        }''')
+        print(f"Up-Left drag result: dir={st6_ul['dir']}, indicator={st6_ul['ulActive']}, downKeys={st6_ul['downKeys']}")
+        assert st6_ul['dir'] == 'up-left', f"[FAIL] Expected 'up-left', got {st6_ul['dir']}"
+        assert st6_ul['ulActive'], "[FAIL] Up-Left joystick indicator not active!"
+        assert 49 in st6_ul['downKeys'], f"[FAIL] Native J2ME Key 1 (49) not dispatched for Up-Left! Dispatched: {st6_ul['downKeys']}"
+        assert -1 not in st6_ul['downKeys'], f"[FAIL] Straight vertical jump (-1) falsely dispatched alongside diagonal!"
+
+        page.mouse.up()
+        time.sleep(0.05)
+
+        # 6c. Desktop Keyboard Diagonal Chord (ArrowUp + ArrowRight -> Key 51)
+        page.evaluate('() => window.__keyHistory = []')
+        page.keyboard.down('ArrowUp')
+        time.sleep(0.02)
+        page.keyboard.down('ArrowRight')
+        time.sleep(0.05)
+
+        st6_chord = page.evaluate('''() => {
+            const downKeys = window.__keyHistory.filter(h => h.type === 'down').map(h => h.code);
+            const urInd = document.querySelector('[data-joy-dir="up-right"]').classList.contains('active');
+            return { downKeys, urInd };
+        }''')
+        print(f"Keyboard chord result: downKeys={st6_chord['downKeys']}, urIndicator={st6_chord['urInd']}")
+        assert 51 in st6_chord['downKeys'], f"[FAIL] Chord ArrowUp+ArrowRight did not dispatch Key 51! Keys: {st6_chord['downKeys']}"
+        page.keyboard.up('ArrowRight')
+        time.sleep(0.02)
+        page.keyboard.up('ArrowUp')
+        time.sleep(0.05)
+
+        print("[CHECK 6 PASSED] Diagonal Jump Key Dispatch: Key 51 (Up-Right) & Key 49 (Up-Left) dispatched cleanly without vertical override.")
+
+        # -------------------------------------------------------------
         # NAVIGATION & VISUAL SCREENSHOT VERIFICATION
         # -------------------------------------------------------------
         print("\n--- Capturing Screenshots for Verification Artifact ---")
@@ -291,7 +363,7 @@ def run_joystick_tests():
 
         context.close()
         browser.close()
-        print("\n=== ALL 5 CHECKLIST ITEMS & SCREENSHOTS VERIFIED 100% SUCCESSFULLY ===")
+        print("\n=== ALL 6 CHECKLIST ITEMS & SCREENSHOTS VERIFIED 100% SUCCESSFULLY ===")
 
 if __name__ == '__main__':
     run_joystick_tests()
