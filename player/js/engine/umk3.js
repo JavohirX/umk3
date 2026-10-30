@@ -4159,7 +4159,7 @@ export class CoreEngine {
     static val_int_bu = 0;
     static val_int_bv = 2;
     static val_int_g = -1;
-    static val_int_bw = 0;
+    static val_int_bw = 1;
     static val_int_bx = 1;
     static val_bool_b = false;
     static val_int_h = -1;
@@ -14458,7 +14458,13 @@ export class CoreEngine {
             CoreEngine.exec_I_int_to_void(var2.readByte());
             (CoreEngine.val_int_bu = var2.readByte());
             CoreEngine.exec_h_int_to_void(var2.readByte());
-            (CoreEngine.val_int_bw = var2.readByte());
+            let loadedBw = var2.readByte();
+            if (typeof localStorage !== 'undefined' && !localStorage.getItem('umk3_advanced_mode_default_applied')) {
+                (CoreEngine.val_int_bw = 1);
+                try { localStorage.setItem('umk3_advanced_mode_default_applied', '1'); } catch (_) {}
+            } else {
+                (CoreEngine.val_int_bw = loadedBw);
+            }
             (CoreEngine.val_int_bx = var2.readByte());
             let var12 = var2.readBoolean();
             CoreEngine.exec_d_bool_to_void(var12);
