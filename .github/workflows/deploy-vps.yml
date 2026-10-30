@@ -63,8 +63,8 @@ jobs:
             if [ -f "vps/nginx.conf" ]; then
               sed "s/YOUR_DOMAIN/${DOMAIN}/g" vps/nginx.conf > /tmp/umk3_nginx.conf
               $SUDO cp /tmp/umk3_nginx.conf /etc/nginx/sites-available/umk3.conf
+              $SUDO rm -f /etc/nginx/sites-enabled/*
               $SUDO ln -sf /etc/nginx/sites-available/umk3.conf /etc/nginx/sites-enabled/umk3.conf
-              $SUDO rm -f /etc/nginx/sites-enabled/default
               if $SUDO nginx -t; then
                 $SUDO systemctl reload nginx
                 echo "Nginx reloaded successfully with WebSocket & REST proxy."
