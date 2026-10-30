@@ -842,7 +842,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load UMK3 pure JS engine
-        const APP_BUILD_HASH = "v20261030_umk3_clean4_softkeys";
+        const APP_BUILD_HASH = "v20261030_umk3_adv_joystick_v2";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
