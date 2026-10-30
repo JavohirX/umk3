@@ -318,7 +318,7 @@ def run_joystick_tests():
             return btns;
         }''')
         print(f"Combat button labels: {btn_labels}")
-        assert btn_labels == ['A', 'B', 'D'], f"[FAIL] Expected buttons A, B, D, got {btn_labels}"
+        assert btn_labels == ['B', 'D', 'A'], f"[FAIL] Expected buttons B, D, then wide A, got {btn_labels}"
 
         # Test clicking each button
         for label, expected_code in [('A', 53), ('B', 55), ('D', 57)]:
