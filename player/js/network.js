@@ -5,6 +5,8 @@
  * and local group leaderboards.
  */
 
+import { MultiplayerUI } from './multiplayer_ui.js';
+
 export class MultiplayerClient {
     constructor() {
         this.ws = null;
@@ -21,9 +23,15 @@ export class MultiplayerClient {
         this.disconnectTimerInterval = null;
         this.onPeerInputCallback = null;
         this.onMatchStartCallback = null;
+        this.onVersusStartCallback = null;
+        this.onRoundNextCallback = null;
+        this.onMatchEndedCallback = null;
         this.isMultiplayer = false;
+        this._roundActive = false;
+        this._boutLive = false;
 
         this.parseEnvironment();
+        this.ui = new MultiplayerUI(this);
     }
 
     parseEnvironment() {
@@ -123,7 +131,7 @@ export class MultiplayerClient {
         this.bindUIEvents();
 
         if (this.isMultiplayer) {
-            this.showLobbyWaiting(60);
+            this.ui.showLobby(60);
             this.connect();
         }
     }
@@ -560,6 +568,19 @@ export class MultiplayerClient {
         });
     }
 
+    sendHeroHover(heroId) {
+        this.sendPacket({ type: "hero_hover", hero_id: heroId });
+    }
+
+    sendHeroLock(heroId) {
+        this.sendPacket({ type: "hero_lock", hero_id: heroId });
+    }
+
+    sendRoundWin(winnerRole) {
+        if (!this.isMultiplayer || this.status !== "ACTIVE") return;
+        this.sendPacket({ type: "round_win", winner_role: winnerRole });
+    }
+
     handlePacket(data) {
         switch (data.type) {
             case "joined":
@@ -568,22 +589,67 @@ export class MultiplayerClient {
                 this.opponent = data.opponent;
                 console.log(`[Multiplayer] Joined as role: ${this.role}. Match status: ${data.status}`);
                 this.updateHudBar();
+                if (this.role === 'p2') {
+                    this.ui.selectedHeroId = 1;
+                    this.ui.peerHeroId = 0;
+                } else {
+                    this.ui.selectedHeroId = 0;
+                    this.ui.peerHeroId = 1;
+                }
+                this.ui.showLobby(data.remaining_seconds || 60);
+                if (this.opponent) {
+                    this.ui.updateLobbyOpponent(this.opponent.name);
+                }
                 break;
 
             case "waiting_opponent":
-                this.showLobbyWaiting(data.remaining_seconds || 60);
+                this.ui.showLobby(data.remaining_seconds || 60);
                 break;
 
             case "match_start":
                 this.status = "ACTIVE";
-                this.dismissLobby();
                 this.dismissDisconnectModal();
                 this.creator = data.p1;
                 this.opponent = data.p2;
                 this.updateHudBar();
-                console.log("[Multiplayer] Match ACTIVE! Starting combat simulation.");
+                console.log("[Multiplayer] Match ACTIVE! Starting hero selection.");
+                if (this.role === 'p2') {
+                    this.ui.selectedHeroId = 1;
+                    this.ui.peerHeroId = 0;
+                } else {
+                    this.ui.selectedHeroId = 0;
+                    this.ui.peerHeroId = 1;
+                }
+                this.ui.startHeroSelect();
                 if (typeof this.onMatchStartCallback === 'function') {
                     this.onMatchStartCallback(data);
+                }
+                break;
+
+            case "peer_hero_hover":
+                this.ui.handlePeerHover(data.from_role, data.hero_id);
+                break;
+
+            case "peer_hero_lock":
+                this.ui.handlePeerLock(data.from_role, data.hero_id);
+                break;
+
+            case "versus_start":
+                console.log("[Multiplayer] Versus screen starting:", data);
+                this.ui.showVersusScreen(data, (p1Hero, p2Hero) => {
+                    if (typeof this.onVersusStartCallback === 'function') {
+                        this.onVersusStartCallback(p1Hero, p2Hero, data);
+                    }
+                });
+                break;
+
+            case "round_next":
+                console.log(`[Multiplayer] Starting Round ${data.round_num}! Scores: P1=${data.p1_rounds}, P2=${data.p2_rounds}`);
+                this.ui.updateRoundCoins(data.p1_rounds, data.p2_rounds);
+                this.ui.setRoundNumber(data.round_num);
+                this.ui.showRoundAnnounceBanner((data.round_num >= 3) ? "FINAL ROUND" : `ROUND ${data.round_num}`, "FIGHT!");
+                if (typeof this.onRoundNextCallback === 'function') {
+                    this.onRoundNextCallback(data);
                 }
                 break;
 
@@ -608,12 +674,18 @@ export class MultiplayerClient {
 
             case "match_ended":
                 this.status = "COMPLETED";
+                this._roundActive = false;
                 this.dismissDisconnectModal();
-                this.showMatchResultModal(data);
+                console.log("[Multiplayer] Match ended! Winner:", data.winner_name);
+                this.ui.showVictoryScreen(data);
+                if (typeof this.onMatchEndedCallback === 'function') {
+                    this.onMatchEndedCallback(data);
+                }
                 break;
 
             case "match_cancelled":
                 this.status = "CANCELLED";
+                this.ui.hideAllOverlays();
                 this.showMatchCancelled(data.message || "Match cancelled.");
                 break;
 
@@ -804,11 +876,13 @@ export class MultiplayerClient {
     }
 
     handleRematchOffered(data) {
-        const accept = confirm(`${data.from_name} has requested a rematch! Do you accept?`);
+        const accept = confirm(`${data.from_name || 'Opponent'} has requested a rematch! Do you accept?`);
         if (accept) {
             this.sendPacket({ type: "rematch_accept" });
             const resultModal = document.getElementById('mp-result-modal');
             if (resultModal) resultModal.style.display = 'none';
+            const victoryView = document.getElementById('mp-view-victory');
+            if (victoryView) victoryView.style.display = 'none';
         }
     }
 
