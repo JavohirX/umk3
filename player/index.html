@@ -32,7 +32,7 @@
             height: 100%;
             height: 100dvh;
             overflow: hidden;
-            background-color: #08090d;
+            background-color: #000000;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
             color: #e0e2ec;
             display: flex;
@@ -48,7 +48,7 @@
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            background: #0d0e15;
+            background: #000000;
             position: relative;
             box-shadow: 0 0 35px rgba(0, 0, 0, 0.8);
             overflow: hidden;
@@ -63,7 +63,7 @@
             align-items: center;
             justify-content: center;
             position: relative;
-            border-bottom: 2px solid #232635;
+            border-bottom: none;
             overflow: hidden;
         }
 
@@ -152,7 +152,7 @@
             justify-content: center;
             padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
             background: #000000;
-            border-top: 1px solid #1a1610;
+            border-top: none;
             position: relative;
             user-select: none;
             -webkit-user-select: none;
@@ -460,7 +460,7 @@
                 max-height: 100%;
                 flex: 0 0 auto;
                 border-bottom: none;
-                border-right: 2px solid #232635;
+                border-right: none;
             }
             #screen-container {
                 height: 100%;
@@ -491,7 +491,7 @@
                 align-items: center;
                 justify-content: center;
                 box-shadow: none;
-                background: #08090d;
+                background: #000000;
             }
 
             #screen-wrapper {
@@ -740,9 +740,9 @@
 
                 // 4. Immersive theme colors
                 try {
-                    if (tg.setHeaderColor) tg.setHeaderColor("#08090d");
-                    if (tg.setBackgroundColor) tg.setBackgroundColor("#08090d");
-                    if (tg.setBottomBarColor) tg.setBottomBarColor("#08090d");
+                    if (tg.setHeaderColor) tg.setHeaderColor("#000000");
+                    if (tg.setBackgroundColor) tg.setBackgroundColor("#000000");
+                    if (tg.setBottomBarColor) tg.setBottomBarColor("#000000");
                 } catch (_) {}
 
                 // 5. Viewport change safety handler: keep expanded
@@ -774,7 +774,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load UMK3 pure JS engine
-        const APP_BUILD_HASH = "v20261030_umk3_ui_complete_overhaul";
+        const APP_BUILD_HASH = "v20261030_umk3_seamless_pitch_black";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
