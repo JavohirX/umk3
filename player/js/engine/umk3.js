@@ -1735,7 +1735,7 @@ export class EncodedTextBuffer {
             (this.textBytes[var2] = 0);
         }
         for (let var3 = 0; (var3 < this.bufferCapacity); var3++) {
-            (this.textBytes[var3] = (((var1.charAt(var3)) << 24) >> 24));
+            (this.textBytes[var3] = (((var1.charCodeAt(var3)) << 24) >> 24));
         }
     }
     _init_2(var1) {
@@ -1789,7 +1789,7 @@ export class EncodedTextBuffer {
         let var3 = this.bufferCapacity;
         (this.bufferCapacity += var2);
         for (let var4 = 0; (var4 < var2); var4++) {
-            this.setCharAt((var3 + var4), var1.charAt(var4));
+            this.setCharAt((var3 + var4), var1.charCodeAt(var4));
         }
         return this;
     }
@@ -1832,7 +1832,8 @@ export class EncodedTextBuffer {
         if (this.isWritable()) {
             let var3 = ((((this.flagsByte & 63)) << 24) >> 24);
             let var5 = 0;
-            let var4 = (var5 = (((var2) << 16) >> 16));
+            let charVal = typeof var2 === 'string' ? var2.charCodeAt(0) : var2;
+            let var4 = (var5 = (((charVal) << 16) >> 16));
             if (((var5 > 127) && (var3) !== (0))) {
                 let var8 = null;
                 (var4 = ((((CoreEngine.exec_a_arr_short_int_int_int_int_fontcharmap_to_int((var8 = CoreEngine.exec_a_to_fontcharmap()).val_arr_short_d, var5, 0, 127, 128, var8) + 128)) << 16) >> 16));
@@ -2555,8 +2556,8 @@ export class MarketPanelController {
                         (var2 = var5.substring((var1 + 1), var7));
                     }
                     (var1 = var7);
-                    if ((((var2.startsWith("MGPANEL") && (var2.length) === (("MGPANEL".length + 1))) && (var2.charAt((var2.length - 1)) >= 48)) && (var2.charAt((var2.length - 1)) <= 57))) {
-                        let var8 = (var2.charAt((var2.length - 1)) - 48);
+                    if ((((var2.startsWith("MGPANEL") && (var2.length) === (("MGPANEL".length + 1))) && (var2.charCodeAt((var2.length - 1)) >= 48)) && (var2.charCodeAt((var2.length - 1)) <= 57))) {
+                        let var8 = (var2.charCodeAt((var2.length - 1)) - 48);
                         let var9 = null;
                         if ((((var9 = CoreEngine.exec_a_string_to_string(("MG_MGPANEL" + var8)))) !== (null) && (var8 < this.val_arr_short_i.length))) {
                             let var14 = false;
@@ -2612,8 +2613,8 @@ export class MarketPanelController {
                         (var4 = var5.substring((var30 + 1), var6));
                     }
                     (var30 = var6);
-                    if ((((var4.startsWith("MGPANEL") && (var4.length) === (("MGPANEL".length + 1))) && (var4.charAt((var4.length - 1)) >= 48)) && (var4.charAt((var4.length - 1)) <= 57))) {
-                        (var6 = (var4.charAt((var4.length - 1)) - 48));
+                    if ((((var4.startsWith("MGPANEL") && (var4.length) === (("MGPANEL".length + 1))) && (var4.charCodeAt((var4.length - 1)) >= 48)) && (var4.charCodeAt((var4.length - 1)) <= 57))) {
+                        (var6 = (var4.charCodeAt((var4.length - 1)) - 48));
                         let var16 = null;
                         if ((((var16 = CoreEngine.exec_a_string_to_string(("MG_MGPANEL" + var6)))) !== (null) && (var6 < this.val_arr_short_i.length))) {
                             var26.setSize(0);
@@ -4998,7 +4999,7 @@ export class CoreEngine {
                                 }
                                 (var1.characterMoveFrames = var7);
                             }
-                            if ((var1.playerSideIndex) === (0)) {
+                            if ((var1.playerSideIndex) === (0) || (typeof window !== 'undefined' && window.mpClient?.isMultiplayer)) {
                                 (var1.val_arr_arr_byte_a = CoreEngine.val_arr_arr_arr_byte_b[var1.characterId]);
                             } else {
                                 (var1.val_arr_arr_byte_a = CoreEngine.val_arr_arr_byte_w);
@@ -15659,6 +15660,7 @@ export class CoreEngine {
                     break;
                 case 3:
                     CoreEngine.exec_a_int_encodedtextbuffer_to_encodedtextbuffer(100, var3);
+                    break;
                 case 4:
                 case 5:
                 case 6:
