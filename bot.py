@@ -108,7 +108,7 @@ async def handle_start(message: types.Message, command: CommandObject):
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="⚔️ ENTER THE ARENA (FIGHT!)",
+                            text="Play",
                             web_app=WebAppInfo(url=play_url)
                         )
                     ]
@@ -134,7 +134,7 @@ async def handle_start(message: types.Message, command: CommandObject):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚔️ PLAY IMMORTAL COMBAT",
+                    text="Play",
                     web_app=WebAppInfo(url=play_url)
                 )
             ],
@@ -197,7 +197,7 @@ async def handle_challenge(message: types.Message):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚔️ ACCEPT CHALLENGE (FIGHT!)",
+                    text="Play",
                     web_app=WebAppInfo(url=play_url)
                 )
             ]
@@ -266,7 +266,7 @@ async def handle_callback_challenge(callback: types.CallbackQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚔️ ACCEPT CHALLENGE (FIGHT!)",
+                    text="Play",
                     web_app=WebAppInfo(url=play_url)
                 )
             ]
@@ -313,7 +313,7 @@ async def handle_inline_query(inline_query: InlineQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚔️ ACCEPT CHALLENGE (FIGHT!)",
+                    text="Play",
                     web_app=WebAppInfo(url=play_url)
                 )
             ]
@@ -384,7 +384,7 @@ async def main():
         play_url = get_player_url()
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
-                text="⚔️ Play Immortal Combat",
+                text="Play",
                 web_app=WebAppInfo(url=play_url)
             )
         )
