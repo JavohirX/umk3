@@ -97,10 +97,7 @@ function triggerHaptic(duration = 10) {
 
 function unlockAudio() {
     try {
-        const actx = Manager.getAudioContext();
-        if (actx && actx.state === 'suspended') {
-            actx.resume().catch(() => {});
-        }
+        Manager.unlockAudio();
     } catch (_) {}
 }
 
