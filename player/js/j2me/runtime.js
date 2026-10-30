@@ -127,15 +127,24 @@ export class Random {
 export class Thread {
     constructor(target = null) {
         this.target = target;
+        this._isAlive = false;
     }
     setPriority(p) {}
     start() {
+        this._isAlive = true;
         if (this.run) {
             this.run();
         } else if (this.target && this.target.run) {
             // If target is GameMidletLoop, startApp handles tickFrame / loop
             this.target.run();
         }
+        this._isAlive = false;
+    }
+    isAlive() {
+        return !!this._isAlive;
+    }
+    join() {
+        this._isAlive = false;
     }
     run() {}
     static sleep(ms) {}

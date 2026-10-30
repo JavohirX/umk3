@@ -43,37 +43,33 @@ const KEY_MAP = {
     'NumpadDivide': 35,
     'Equal': 35,
 
-    // 6-Button Combat Cluster (J2ME NumPad 1..9)
-    'Digit1': 49, // High Punch (HP)
+    // Combat Action Cluster (A: Punch 53, B: Kick 55, D: Block 57)
+    'Digit1': 49,
     'Numpad1': 49,
     'KeyZ': 49,
-    'KeyU': 49,
 
-    'Digit2': 50, // Jump / Up
+    'Digit2': 50,
     'Numpad2': 50,
-    'KeyI': 50,
 
-    'Digit3': 51, // High Kick (HK)
+    'Digit3': 51,
     'Numpad3': 51,
-    'KeyO': 51,
 
-    'Digit4': 52, // Low Punch (LP)
+    'Digit4': 52,
     'Numpad4': 52,
     'KeyC': 52,
-    'KeyJ': 52,
 
-    'Digit5': 53, // Block (BL)
+    'Digit5': 53, // Button A (Punch / Select)
     'Numpad5': 53,
+    'KeyJ': 53,
     'KeyB': 53,
-    'KeyL': 53,
 
-    'Digit6': 54, // Low Kick (LK)
+    'Digit6': 54,
     'Numpad6': 54,
     'KeyV': 54,
-    'KeyK': 54,
 
-    'Digit7': 55, // Run (RN)
+    'Digit7': 55, // Button B (Kick)
     'Numpad7': 55,
+    'KeyK': 55,
     'KeyN': 55,
     'ShiftLeft': 55,
     'ShiftRight': 55,
@@ -81,8 +77,12 @@ const KEY_MAP = {
     'Digit8': 56, // Crouch / Down
     'Numpad8': 56,
 
-    'Digit9': 57, // Special
-    'Numpad9': 57
+    'Digit9': 57, // Button D (Block / Special)
+    'Numpad9': 57,
+    'KeyL': 57,
+    'KeyU': 57,
+    'KeyO': 57,
+    'KeyI': 57
 };
 
 function triggerHaptic(duration = 10) {
@@ -454,6 +454,14 @@ function setupInputControls() {
 
         const keys = keyData.split(',');
 
+        const getPrimaryJ2meKey = () => {
+            for (let i = 0; i < keys.length; i++) {
+                const k = KEY_MAP[keys[i].trim()];
+                if (k !== undefined) return k;
+            }
+            return undefined;
+        };
+
         const handlePress = (e) => {
             e.preventDefault();
             btn.classList.add('active');
@@ -461,10 +469,8 @@ function setupInputControls() {
             triggerHaptic(12);
             unlockAudio();
 
-            keys.forEach((k) => {
-                const j2meKey = KEY_MAP[k.trim()];
-                if (j2meKey !== undefined) sendKeyEvent(j2meKey, true);
-            });
+            const j2meKey = getPrimaryJ2meKey();
+            if (j2meKey !== undefined) sendKeyEvent(j2meKey, true);
         };
 
         const handleRelease = (e) => {
@@ -472,10 +478,8 @@ function setupInputControls() {
             btn.classList.remove('active');
             try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
 
-            keys.forEach((k) => {
-                const j2meKey = KEY_MAP[k.trim()];
-                if (j2meKey !== undefined) sendKeyEvent(j2meKey, false);
-            });
+            const j2meKey = getPrimaryJ2meKey();
+            if (j2meKey !== undefined) sendKeyEvent(j2meKey, false);
         };
 
         btn.addEventListener('pointerdown', handlePress);
@@ -490,10 +494,14 @@ function setupInputControls() {
                 btn.classList.remove('active');
                 const keyData = btn.getAttribute('data-key');
                 if (keyData) {
-                    keyData.split(',').forEach(k => {
-                        const j2meKey = KEY_MAP[k.trim()];
-                        if (j2meKey !== undefined) sendKeyEvent(j2meKey, false);
-                    });
+                    const keys = keyData.split(',');
+                    for (let i = 0; i < keys.length; i++) {
+                        const j2meKey = KEY_MAP[keys[i].trim()];
+                        if (j2meKey !== undefined) {
+                            sendKeyEvent(j2meKey, false);
+                            break;
+                        }
+                    }
                 }
             }
         });
@@ -632,6 +640,71 @@ function setupCanvas() {
 
     const g = new Graphics(ctx);
     Display.getDisplay().setGraphics(g);
+
+    // Interactive Touch & Mouse Controls on the Display Canvas
+    const handleCanvasPointer = (e) => {
+        if (!CoreEngine?.val_maincanvasbridge_a) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const cx = (e.clientX - rect.left) * scaleX;
+        const cy = (e.clientY - rect.top) * scaleY;
+
+        triggerHaptic(12);
+        unlockAudio();
+
+        // 1. Initial screens & Title Screen (val_int_h < 9):
+        // "TOUCH THE SCREEN TO START" or language/sound selections
+        if (CoreEngine.val_int_h < 9) {
+            sendKeyEvent(-5, true);
+            setTimeout(() => sendKeyEvent(-5, false), 90);
+            return;
+        }
+
+        // 2. Main Menu (val_int_h === 9):
+        if (CoreEngine.val_int_h === 9 && Array.isArray(CoreEngine.val_arr_int_t)) {
+            // Up scroll arrow
+            if (cy < 135 && cy > 40) {
+                sendKeyEvent(-1, true);
+                setTimeout(() => sendKeyEvent(-1, false), 90);
+                return;
+            }
+            // Down scroll arrow
+            if (cy > 300 && cy < 380) {
+                sendKeyEvent(-2, true);
+                setTimeout(() => sendKeyEvent(-2, false), 90);
+                return;
+            }
+
+            const startY = CoreEngine.val_int_aL || 139;
+            const itemH = (CoreEngine.val_arr_int_P && CoreEngine.val_arr_int_P[CoreEngine.val_int_aH]) || 45;
+            const gap = (CoreEngine.val_arr_int_Q && CoreEngine.val_arr_int_Q[CoreEngine.val_int_aH]) || 10;
+            const step = itemH + gap;
+
+            for (let i = 0; i < CoreEngine.val_arr_int_t.length; i++) {
+                const top = startY + i * step;
+                const bottom = top + itemH + 6;
+                if (cy >= top - 6 && cy <= bottom) {
+                    const targetId = CoreEngine.val_arr_int_t[i];
+                    CoreEngine.val_int_aD = targetId;
+                    sendKeyEvent(-5, true);
+                    setTimeout(() => sendKeyEvent(-5, false), 90);
+                    return;
+                }
+            }
+        }
+
+        // 3. Selection Screens (e.g. Choose Destiny / Difficulty / Character Select):
+        if (CoreEngine.val_int_h < 12) {
+            sendKeyEvent(-5, true);
+            setTimeout(() => sendKeyEvent(-5, false), 90);
+        }
+    };
+
+    canvas.addEventListener('pointerdown', (e) => {
+        if (e.target && e.target.classList && e.target.classList.contains('on-screen-softkey')) return;
+        handleCanvasPointer(e);
+    });
 }
 
 function startAnimationLoop() {
