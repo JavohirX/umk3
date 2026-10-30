@@ -37,47 +37,85 @@ export class MultiplayerClient {
             };
         }
 
-        // 2. Extract from URL params
-        const params = new URLSearchParams(window.location.search);
+        // 2. Extract matchId from URL search params OR hash fragment
+        this.matchId = this.extractMatchId();
 
-        // Check start parameter from Telegram startapp
-        const startParam = tg?.initDataUnsafe?.start_param || params.get('tgWebAppStartParam') || params.get('startapp');
-        if (startParam) {
-            if (startParam.startsWith('challenge_') || startParam.startsWith('match_')) {
-                this.matchId = startParam.split('_')[1];
-            }
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.get('chat')) this.chatId = String(searchParams.get('chat'));
+        if (searchParams.get('chat_id')) this.chatId = String(searchParams.get('chat_id'));
+
+        // Check hash for chat_id if not in search params
+        if (window.location.hash && window.location.hash.includes('=')) {
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            if (hashParams.get('chat')) this.chatId = String(hashParams.get('chat'));
+            if (hashParams.get('chat_id')) this.chatId = String(hashParams.get('chat_id'));
         }
-
-        if (params.get('match')) this.matchId = params.get('match');
-        if (params.get('match_id')) this.matchId = params.get('match_id');
-        if (params.get('chat')) this.chatId = String(params.get('chat'));
-        if (params.get('chat_id')) this.chatId = String(params.get('chat_id'));
-
-        const urlUser = params.get('user') || params.get('user_id');
-        const urlName = params.get('name');
 
         if (authenticatedUser) {
             this.userId = authenticatedUser.id;
             this.userName = authenticatedUser.name;
-        } else if (urlUser) {
-            this.userId = String(urlUser);
-            this.userName = urlName || "Fighter";
         }
 
-        // Fallback guest credentials for testing outside Telegram
+        // Fallback unique session credentials for testing outside Telegram (isolated per tab)
         if (!this.userId) {
-            let savedId = localStorage.getItem('ic_user_id');
-            if (!savedId) {
-                savedId = 'guest_' + Math.floor(1000 + Math.random() * 9000);
-                localStorage.setItem('ic_user_id', savedId);
+            let sessionUserId = sessionStorage.getItem('ic_session_user_id');
+            if (!sessionUserId) {
+                sessionUserId = 'fighter_' + Math.floor(100000 + Math.random() * 900000);
+                sessionStorage.setItem('ic_session_user_id', sessionUserId);
             }
-            this.userId = savedId;
+            this.userId = sessionUserId;
+            this.userName = 'Fighter #' + this.userId.slice(-4);
         }
 
         if (this.matchId) {
             this.isMultiplayer = true;
             console.log(`[Multiplayer] Detected match ID: ${this.matchId}, User: ${this.userId} (${this.userName})`);
         }
+    }
+
+    extractMatchId() {
+        const tg = window.Telegram?.WebApp;
+        let match = null;
+
+        // A. Telegram WebApp start_param
+        const tgParam = tg?.initDataUnsafe?.start_param;
+        if (tgParam) {
+            match = tgParam.replace(/^(challenge_|match_)/, '').trim();
+            if (match) return match;
+        }
+
+        // B. URL Search Query (?match=... or ?startapp=...)
+        const searchParams = new URLSearchParams(window.location.search);
+        const searchStart = searchParams.get('tgWebAppStartParam') || searchParams.get('startapp');
+        if (searchStart) {
+            match = searchStart.replace(/^(challenge_|match_)/, '').trim();
+            if (match) return match;
+        }
+        if (searchParams.get('match')) return searchParams.get('match').trim();
+        if (searchParams.get('match_id')) return searchParams.get('match_id').trim();
+
+        // C. URL Hash fragment (#match=... or #abc123 or #challenge_abc123)
+        if (window.location.hash) {
+            const rawHash = window.location.hash.replace(/^#/, '').trim();
+            if (rawHash) {
+                if (rawHash.includes('=')) {
+                    const hashParams = new URLSearchParams(rawHash);
+                    const hashStart = hashParams.get('tgWebAppStartParam') || hashParams.get('startapp');
+                    if (hashStart) {
+                        match = hashStart.replace(/^(challenge_|match_)/, '').trim();
+                        if (match) return match;
+                    }
+                    if (hashParams.get('match')) return hashParams.get('match').trim();
+                    if (hashParams.get('match_id')) return hashParams.get('match_id').trim();
+                }
+                match = rawHash.replace(/^(challenge_|match_)/, '').trim();
+                if (match && /^[a-zA-Z0-9_-]+$/.test(match)) {
+                    return match;
+                }
+            }
+        }
+
+        return null;
     }
 
     initUI() {
@@ -432,17 +470,45 @@ export class MultiplayerClient {
     connect() {
         if (!this.matchId) return;
 
-        const params = new URLSearchParams(window.location.search);
-        const serverOverride = params.get('server') || params.get('ws');
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = serverOverride || window.location.host;
+        const searchParams = new URLSearchParams(window.location.search);
+        let hostOverride = searchParams.get('server') || searchParams.get('ws');
+
+        if (!hostOverride && window.location.hash && window.location.hash.includes('=')) {
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            hostOverride = hashParams.get('server') || hashParams.get('ws');
+        }
+
+        let host = hostOverride;
+        if (!host) {
+            // When hosted on GitHub Pages static CDN, route WebSocket traffic to production VPS gateway
+            if (window.location.host.includes('github.io')) {
+                host = '193.36.236.221.sslip.io';
+            } else {
+                host = window.location.host;
+            }
+        }
+
+        const protocol = (window.location.protocol === 'https:' || host.includes('sslip.io')) ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${host}/ws/match/${this.matchId}`;
 
         console.log(`[Multiplayer] Connecting to ${wsUrl}...`);
-        this.ws = new WebSocket(wsUrl);
+        const statusText = document.getElementById('mp-lobby-status-text');
+        if (statusText) statusText.textContent = "Connecting to combat arena...";
+
+        try {
+            this.ws = new WebSocket(wsUrl);
+        } catch (e) {
+            console.error("[Multiplayer] WebSocket creation error:", e);
+            if (statusText) statusText.innerHTML = "⚠️ <b>Connection error!</b> Retrying in 3s...";
+            setTimeout(() => {
+                if (this.status === "WAITING" && !this.isTimeout) this.connect();
+            }, 3000);
+            return;
+        }
 
         this.ws.onopen = () => {
             console.log("[Multiplayer] WebSocket connected. Sending join packet...");
+            if (statusText) statusText.textContent = "Connected to Arena! Waiting for opponent to join...";
             this.sendPacket({
                 type: "join",
                 match_id: this.matchId,
@@ -463,10 +529,17 @@ export class MultiplayerClient {
 
         this.ws.onclose = () => {
             console.log("[Multiplayer] WebSocket closed.");
+            if (this.status === "WAITING" && !this.isTimeout) {
+                if (statusText) statusText.textContent = "Reconnecting to arena...";
+                setTimeout(() => {
+                    if (this.status === "WAITING" && !this.isTimeout) this.connect();
+                }, 2000);
+            }
         };
 
         this.ws.onerror = (err) => {
             console.error("[Multiplayer] WebSocket error:", err);
+            if (statusText && this.status === "WAITING") statusText.textContent = "Connecting to arena server...";
         };
     }
 
@@ -555,10 +628,22 @@ export class MultiplayerClient {
         const matchLabel = document.getElementById('mp-lobby-match-id');
         const timerDisplay = document.getElementById('mp-lobby-timer');
         const bar = document.getElementById('mp-lobby-bar');
+        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
+        const statusText = document.getElementById('mp-lobby-status-text');
 
         if (!modal) return;
         modal.style.display = 'flex';
+        this.status = "WAITING";
+        this.isTimeout = false;
         if (matchLabel) matchLabel.textContent = `Match: #${this.matchId}`;
+        if (statusText) statusText.textContent = "Waiting for opponent to join...";
+        if (cancelBtn) {
+            cancelBtn.textContent = "Cancel Challenge";
+            cancelBtn.onclick = () => {
+                this.closeLobby();
+                if (this.ws) this.ws.close();
+            };
+        }
 
         let remaining = seconds;
         if (timerDisplay) timerDisplay.textContent = `${remaining}s`;
@@ -572,8 +657,29 @@ export class MultiplayerClient {
 
             if (remaining <= 0) {
                 clearInterval(this.joinTimerInterval);
+                this.handleJoinTimeout();
             }
         }, 1000);
+    }
+
+    handleJoinTimeout() {
+        this.isTimeout = true;
+        this.status = "CANCELLED";
+        if (this.ws) {
+            try { this.ws.close(); } catch (_) {}
+        }
+        const statusText = document.getElementById('mp-lobby-status-text');
+        const timerDisplay = document.getElementById('mp-lobby-timer');
+        const bar = document.getElementById('mp-lobby-bar');
+        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
+
+        if (statusText) statusText.innerHTML = "⏱️ <b>Join window expired!</b><br>Opponent did not join within 1 minute. Match cancelled.";
+        if (timerDisplay) timerDisplay.textContent = "EXPIRED";
+        if (bar) bar.style.width = '0%';
+        if (cancelBtn) {
+            cancelBtn.textContent = "Close";
+            cancelBtn.onclick = () => this.closeLobby();
+        }
     }
 
     dismissLobby() {
@@ -585,8 +691,13 @@ export class MultiplayerClient {
     }
 
     closeLobby() {
-        this.dismissLobby();
+        clearInterval(this.joinTimerInterval);
+        const modal = document.getElementById('mp-lobby-modal');
+        if (modal) modal.style.display = 'none';
         this.isMultiplayer = false;
+        if (this.ws) {
+            try { this.ws.close(); } catch (_) {}
+        }
     }
 
     showOpponentDisconnectModal(seconds = 60, oppName = "Opponent") {
@@ -667,8 +778,29 @@ export class MultiplayerClient {
     }
 
     showMatchCancelled(msg) {
-        alert(msg);
-        this.closeLobby();
+        clearInterval(this.joinTimerInterval);
+        this.status = "CANCELLED";
+        this.isTimeout = true;
+        if (this.ws) {
+            try { this.ws.close(); } catch (_) {}
+        }
+
+        const modal = document.getElementById('mp-lobby-modal');
+        const statusText = document.getElementById('mp-lobby-status-text');
+        const timerDisplay = document.getElementById('mp-lobby-timer');
+        const bar = document.getElementById('mp-lobby-bar');
+        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
+
+        if (modal) {
+            modal.style.display = 'flex';
+            if (statusText) statusText.innerHTML = `⚠️ <b>${escapeHtml(msg)}</b>`;
+            if (timerDisplay) timerDisplay.textContent = "CANCELLED";
+            if (bar) bar.style.width = "0%";
+            if (cancelBtn) {
+                cancelBtn.textContent = "Close";
+                cancelBtn.onclick = () => this.closeLobby();
+            }
+        }
     }
 
     handleRematchOffered(data) {

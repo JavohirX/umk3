@@ -237,6 +237,57 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
             self.assertEqual(p["losses"], 0)
             self.assertEqual(p["draws"], 1)
 
+    async def test_two_tabs_same_credentials_join_and_start_match(self):
+        """
+        Verify that if two tabs open the same link with the same credentials/hash,
+        the server seamlessly pairs Tab 2 as Player 2 and activates the match!
+        """
+        match_id = "test_same_hash_tabs"
+        chat_id = "group_tabs"
+
+        # Tab 1 connects
+        ws1 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws1.send_json({
+            "type": "join",
+            "user_id": "same_user",
+            "user_name": "SharedFighter",
+            "chat_id": chat_id
+        })
+        resp1 = await ws1.receive_json()
+        self.assertEqual(resp1["type"], "joined")
+        self.assertEqual(resp1["role"], "p1")
+
+        # Tab 2 connects to the SAME match with the SAME user_id
+        ws2 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2.send_json({
+            "type": "join",
+            "user_id": "same_user",
+            "user_name": "SharedFighter",
+            "chat_id": chat_id
+        })
+        resp2 = await ws2.receive_json()
+        self.assertEqual(resp2["type"], "joined")
+        self.assertEqual(resp2["role"], "p2")
+
+        # Tab 2 must trigger match_start for both
+        start2 = await ws2.receive_json()
+        self.assertEqual(start2["type"], "match_start")
+
+        # Tab 1 receives waiting_opponent then match_start
+        msg_t1 = await ws1.receive_json()
+        if msg_t1["type"] == "waiting_opponent":
+            start1 = await ws1.receive_json()
+        else:
+            start1 = msg_t1
+        self.assertEqual(start1["type"], "match_start")
+
+        # Verify room is ACTIVE
+        room = coordinator.rooms[match_id]
+        self.assertEqual(room.status, "ACTIVE")
+
+        await ws1.close()
+        await ws2.close()
+
 
 if __name__ == "__main__":
     unittest.main()

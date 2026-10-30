@@ -87,7 +87,8 @@ class TestBotHandlers(unittest.IsolatedAsyncioTestCase):
         """
         Test /start challenge_<id> differentiation between creator and opponent.
         """
-        match_id = "test_dl_01"
+        import uuid
+        match_id = f"test_dl_{uuid.uuid4().hex[:6]}"
         db.create_match(match_id, "chat_group", creator_id="100", creator_name="Raiden", timeout_seconds=60)
 
         # 1. Test when creator opens link
