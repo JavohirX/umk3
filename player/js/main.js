@@ -3,6 +3,7 @@ import { Graphics, Display } from './j2me/graphics.js';
 import { Manager } from './j2me/audio.js';
 import { initEngine, SDKMIDlet, CoreEngine } from './engine/umk3.js';
 import { MultiplayerClient } from './network.js';
+import { stepMatchEnd } from './match_end.js';
 
 let midlet = null;
 let animFrameId = null;
@@ -741,24 +742,34 @@ function startAnimationLoop() {
             try {
                 midlet.stepFrame();
 
-                // Monitor active multiplayer health for KO resolution
-                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") {
-                    if (CoreEngine.val_coreengine_b && CoreEngine.val_coreengine_c) {
-                        if (CoreEngine.val_coreengine_b.currentHealth <= 0 && mpClient.role === 'p1') {
-                            mpClient.status = "COMPLETED";
-                            mpClient.sendPacket({
-                                type: "match_finish",
-                                winner_id: mpClient.opponent ? mpClient.opponent.id : "p2",
-                                reason: "KNOCKOUT"
-                            });
-                        } else if (CoreEngine.val_coreengine_c.currentHealth <= 0 && mpClient.role === 'p1') {
-                            mpClient.status = "COMPLETED";
-                            mpClient.sendPacket({
-                                type: "match_finish",
-                                winner_id: mpClient.userId,
-                                reason: "KNOCKOUT"
-                            });
+                // Hero confirm spawns the second fighter at 0 health. That is
+                // the walk-in, not a knockout. Finish only after a live bout
+                // and two round wins. P1 is the authority so both clients
+                // don't declare a winner.
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE" && mpClient.role === "p1") {
+                    const fighterB = CoreEngine.val_coreengine_b;
+                    const fighterC = CoreEngine.val_coreengine_c;
+                    const decision = stepMatchEnd(
+                        { armed: !!mpClient._boutLive },
+                        {
+                            fightersExist: !!(fighterB && fighterC),
+                            p1Health: fighterB ? fighterB.currentHealth : null,
+                            p2Health: fighterC ? fighterC.currentHealth : null,
+                            p1Rounds: CoreEngine.val_int_dU | 0,
+                            p2Rounds: CoreEngine.val_int_dV | 0,
+                            stagePhase: CoreEngine.val_int_dN | 0
                         }
+                    );
+                    mpClient._boutLive = decision.armed;
+                    if (decision.finish) {
+                        mpClient.status = "COMPLETED";
+                        mpClient.sendPacket({
+                            type: "match_finish",
+                            winner_id: decision.winner === "p2"
+                                ? (mpClient.opponent ? mpClient.opponent.id : "p2")
+                                : mpClient.userId,
+                            reason: "KNOCKOUT"
+                        });
                     }
                 }
             } catch (err) {
@@ -819,6 +830,7 @@ async function bootstrap() {
         // 7. Initialize Multiplayer Subsystem
         mpClient.onMatchStartCallback = (data) => {
             console.log("[Multiplayer] Match starting in 2-Player Versus Mode!");
+            mpClient._boutLive = false;
             CoreEngine.val_bool_am = true;
             if (CoreEngine.val_int_h < 11) {
                 CoreEngine.val_int_dQ = 0; // Scorpion
