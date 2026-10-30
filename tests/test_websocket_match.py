@@ -288,6 +288,86 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         await ws1.close()
         await ws2.close()
 
+    async def test_hero_selection_versus_and_best_of_three_round_wins(self):
+        """
+        Verify end-to-end multiplayer hero selection, versus screen trigger,
+        and best-of-three round win resolution (first to 2 round wins).
+        """
+        match_id = "test_hero_flow_01"
+        chat_id = "group_tournament"
+
+        # 1. P1 and P2 connect
+        ws1 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws1.send_json({"type": "join", "user_id": "p1_id", "user_name": "Player 1", "chat_id": chat_id})
+        await ws1.receive_json() # joined
+        await ws1.receive_json() # waiting
+
+        ws2 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2.send_json({"type": "join", "user_id": "p2_id", "user_name": "Player 2", "chat_id": chat_id})
+        await ws2.receive_json() # joined
+        s1 = await ws1.receive_json() # match_start / hero select
+        s2 = await ws2.receive_json() # match_start / hero select
+        self.assertEqual(s1["type"], "match_start")
+        self.assertEqual(s1["stage"], "hero_select")
+
+        # 2. P1 hovers Scorpion (0)
+        await ws1.send_json({"type": "hero_hover", "hero_id": 0})
+        p2_hover = await ws2.receive_json()
+        self.assertEqual(p2_hover["type"], "peer_hero_hover")
+        self.assertEqual(p2_hover["from_role"], "p1")
+        self.assertEqual(p2_hover["hero_id"], 0)
+
+        # 3. P1 locks Scorpion (0)
+        await ws1.send_json({"type": "hero_lock", "hero_id": 0})
+        p1_lock_recv1 = await ws1.receive_json()
+        p1_lock_recv2 = await ws2.receive_json()
+        self.assertEqual(p1_lock_recv1["type"], "peer_hero_lock")
+        self.assertEqual(p1_lock_recv2["type"], "peer_hero_lock")
+        self.assertEqual(p1_lock_recv1["hero_id"], 0)
+
+        # 4. P2 locks Sub-Zero (1) -> triggers versus_start
+        await ws2.send_json({"type": "hero_lock", "hero_id": 1})
+        await ws1.receive_json() # peer_hero_lock for p2
+        await ws2.receive_json() # peer_hero_lock for p2
+
+        vs1 = await ws1.receive_json() # versus_start
+        vs2 = await ws2.receive_json() # versus_start
+        self.assertEqual(vs1["type"], "versus_start")
+        self.assertEqual(vs2["type"], "versus_start")
+        self.assertEqual(vs1["p1"]["hero_id"], 0)
+        self.assertEqual(vs1["p2"]["hero_id"], 1)
+
+        # 5. Round 1: P1 wins round 1
+        await ws1.send_json({"type": "round_win", "winner_role": "p1"})
+        r1_w1 = await ws1.receive_json()
+        r1_w2 = await ws2.receive_json()
+        self.assertEqual(r1_w1["type"], "round_next")
+        self.assertEqual(r1_w1["p1_rounds"], 1)
+        self.assertEqual(r1_w1["p2_rounds"], 0)
+        self.assertEqual(r1_w1["round_num"], 2)
+
+        # 6. Round 2: P2 wins round 2 (tied 1-1)
+        await ws1.send_json({"type": "round_win", "winner_role": "p2"})
+        r2_w1 = await ws1.receive_json()
+        r2_w2 = await ws2.receive_json()
+        self.assertEqual(r2_w1["type"], "round_next")
+        self.assertEqual(r2_w1["p1_rounds"], 1)
+        self.assertEqual(r2_w1["p2_rounds"], 1)
+        self.assertEqual(r2_w1["round_num"], 3)
+
+        # 7. Round 3 (Deciding round): P1 wins round 3 (P1 has 2 round wins -> MATCH WON!)
+        await ws1.send_json({"type": "round_win", "winner_role": "p1"})
+        end1 = await ws1.receive_json()
+        end2 = await ws2.receive_json()
+        self.assertEqual(end1["type"], "match_ended")
+        self.assertEqual(end2["type"], "match_ended")
+        self.assertEqual(end1["winner_role"], "p1")
+        self.assertEqual(end1["p1_rounds"], 2)
+        self.assertEqual(end1["p2_rounds"], 1)
+
+        await ws1.close()
+        await ws2.close()
+
 
 if __name__ == "__main__":
     unittest.main()

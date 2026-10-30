@@ -38,6 +38,10 @@ class MatchRoom:
         self.disconnect_tasks: Dict[str, asyncio.Task] = {}
         self.join_timeout_task: Optional[asyncio.Task] = None
         self.ready_players: Set[str] = set()
+        self.p1_hero: Optional[int] = None
+        self.p2_hero: Optional[int] = None
+        self.p1_rounds: int = 0
+        self.p2_rounds: int = 0
 
     def is_expired(self) -> bool:
         return self.status == "WAITING" and time.time() > self.expires_at
@@ -332,17 +336,103 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                             "message": "Waiting for opponent to join... (Cancels in 1 minute if nobody joins)"
                         }))
                     elif room.status == "ACTIVE" and len(room.sockets) >= 2:
-                        # Both players connected! Notify both to start match
-                        logging.info(f"[{match_id}] Match ACTIVE! Both fighters in the arena.")
+                        # Both players connected! Notify both to enter Character Selection
+                        logging.info(f"[{match_id}] Match ACTIVE! Both fighters joined. Entering Hero Select.")
                         await room.broadcast({
                             "type": "match_start",
+                            "stage": "hero_select",
                             "p1": {"id": room.creator_id, "name": room.creator_name},
                             "p2": {"id": room.opponent_id, "name": room.opponent_name},
-                            "message": "⚔️ MORTAL COMBAT! FIGHT!"
+                            "message": "⚔️ SELECT YOUR FIGHTER!"
                         })
 
                 # -------------------------------------------------------------
-                # 2. REAL-TIME INPUT RELAY (Keys, D-pad, Punches, Kicks, Blocks)
+                # 2. HERO SELECTION & LOCK-IN SYNCHRONIZATION
+                # -------------------------------------------------------------
+                elif msg_type == "hero_hover":
+                    if room:
+                        hero_id = int(data.get("hero_id", 0))
+                        from_role = "p1" if current_player_id == room.creator_id else "p2"
+                        await room.broadcast({
+                            "type": "peer_hero_hover",
+                            "from_role": from_role,
+                            "hero_id": hero_id
+                        }, exclude_id=current_player_id)
+
+                elif msg_type == "hero_lock":
+                    if room:
+                        hero_id = int(data.get("hero_id", 0))
+                        from_role = "p1" if current_player_id == room.creator_id else "p2"
+                        if from_role == "p1":
+                            room.p1_hero = hero_id
+                        else:
+                            room.p2_hero = hero_id
+
+                        logging.info(f"[{match_id}] Player {from_role} locked hero {hero_id} (P1={room.p1_hero}, P2={room.p2_hero})")
+
+                        await room.broadcast({
+                            "type": "peer_hero_lock",
+                            "from_role": from_role,
+                            "hero_id": hero_id
+                        })
+
+                        # When BOTH fighters are locked in, initiate the iconic VERSUS screen!
+                        if room.p1_hero is not None and room.p2_hero is not None:
+                            logging.info(f"[{match_id}] Both heroes locked! Initiating Versus Face-Off Screen.")
+                            await room.broadcast({
+                                "type": "versus_start",
+                                "p1": {"id": room.creator_id, "name": room.creator_name, "hero_id": room.p1_hero},
+                                "p2": {"id": room.opponent_id, "name": room.opponent_name, "hero_id": room.p2_hero},
+                                "countdown": 3,
+                                "message": "VERSUS"
+                            })
+
+                # -------------------------------------------------------------
+                # 3. ROUND PROGRESSION & BEST-OF-THREE RESOLUTION
+                # -------------------------------------------------------------
+                elif msg_type == "round_win":
+                    if room and room.status == "ACTIVE":
+                        winner_role = str(data.get("winner_role", "p1")).lower()
+                        if winner_role == "p1":
+                            room.p1_rounds += 1
+                        elif winner_role == "p2":
+                            room.p2_rounds += 1
+
+                        logging.info(f"[{match_id}] Round won by {winner_role}! Score: P1={room.p1_rounds}, P2={room.p2_rounds}")
+
+                        if room.p1_rounds >= 2 or room.p2_rounds >= 2:
+                            # 2 round wins achieved -> Match Won!
+                            winner_role = "p1" if room.p1_rounds >= 2 else "p2"
+                            winner_id = room.creator_id if winner_role == "p1" else room.opponent_id
+                            winner_name = room.creator_name if winner_role == "p1" else room.opponent_name
+                            loser_id = room.opponent_id if winner_role == "p1" else room.creator_id
+                            loser_name = room.opponent_name if winner_role == "p1" else room.creator_name
+                            room.status = "COMPLETED"
+                            db.finish_match(room.match_id, winner_id=winner_id, finish_reason="KNOCKOUT")
+
+                            await room.broadcast({
+                                "type": "match_ended",
+                                "winner_id": winner_id,
+                                "winner_name": winner_name,
+                                "winner_role": winner_role,
+                                "loser_id": loser_id,
+                                "loser_name": loser_name,
+                                "p1_rounds": room.p1_rounds,
+                                "p2_rounds": room.p2_rounds,
+                                "reason": "KNOCKOUT",
+                                "message": f"🏆 {winner_name} WINS! ({room.p1_rounds} - {room.p2_rounds})"
+                            })
+                        else:
+                            await room.broadcast({
+                                "type": "round_next",
+                                "round_num": room.p1_rounds + room.p2_rounds + 1,
+                                "p1_rounds": room.p1_rounds,
+                                "p2_rounds": room.p2_rounds,
+                                "winner_role": winner_role
+                            })
+
+                # -------------------------------------------------------------
+                # 4. REAL-TIME INPUT RELAY (Keys, D-pad, Punches, Kicks, Blocks)
                 # -------------------------------------------------------------
                 elif msg_type == "input":
                     if room and room.status == "ACTIVE":
@@ -402,13 +492,18 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
 
                 elif msg_type == "rematch_accept":
                     if room:
-                        # Reset match to active
+                        # Reset match to active and clear heroes & rounds for fresh rematch
                         room.status = "ACTIVE"
+                        room.p1_hero = None
+                        room.p2_hero = None
+                        room.p1_rounds = 0
+                        room.p2_rounds = 0
                         await room.broadcast({
                             "type": "match_start",
+                            "stage": "hero_select",
                             "p1": {"id": room.creator_id, "name": room.creator_name},
                             "p2": {"id": room.opponent_id, "name": room.opponent_name},
-                            "message": "⚔️ REMATCH BEGINS! FIGHT!"
+                            "message": "⚔️ REMATCH BEGINS! CHOOSE YOUR FIGHTERS!"
                         })
 
                 # -------------------------------------------------------------

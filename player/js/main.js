@@ -682,6 +682,13 @@ function setupCanvas() {
         triggerHaptic(12);
         unlockAudio();
 
+        if (mpClient && mpClient.isMultiplayer) {
+            // In multiplayer mode, hero selection and fight progression are managed
+            // through the synchronized MK UI overlay. Tapping the canvas directly
+            // must NOT trigger single-player menus, avoiding clone hero matches.
+            return;
+        }
+
         // 1. Initial screens & Title Screen (val_int_h < 9):
         // "TOUCH THE SCREEN TO START" or language/sound selections
         if (CoreEngine.val_int_h < 9) {
@@ -742,34 +749,46 @@ function startAnimationLoop() {
             try {
                 midlet.stepFrame();
 
-                // Hero confirm spawns the second fighter at 0 health. That is
-                // the walk-in, not a knockout. Finish only after a live bout
-                // and two round wins. P1 is the authority so both clients
-                // don't declare a winner.
-                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE" && mpClient.role === "p1") {
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") {
                     const fighterB = CoreEngine.val_coreengine_b;
                     const fighterC = CoreEngine.val_coreengine_c;
-                    const decision = stepMatchEnd(
-                        { armed: !!mpClient._boutLive },
-                        {
-                            fightersExist: !!(fighterB && fighterC),
-                            p1Health: fighterB ? fighterB.currentHealth : null,
-                            p2Health: fighterC ? fighterC.currentHealth : null,
-                            p1Rounds: CoreEngine.val_int_dU | 0,
-                            p2Rounds: CoreEngine.val_int_dV | 0,
-                            stagePhase: CoreEngine.val_int_dN | 0
+
+                    if (fighterB && fighterC) {
+                        const p1Hp = fighterB.currentHealth;
+                        const p2Hp = fighterC.currentHealth;
+
+                        // Tick round timer down in multiplayer (val_int_e is frame delta in ms)
+                        if (CoreEngine.val_int_dS > 0) {
+                            CoreEngine.val_int_dS = Math.max(0, CoreEngine.val_int_dS - (CoreEngine.val_int_e || 33));
                         }
-                    );
-                    mpClient._boutLive = decision.armed;
-                    if (decision.finish) {
-                        mpClient.status = "COMPLETED";
-                        mpClient.sendPacket({
-                            type: "match_finish",
-                            winner_id: decision.winner === "p2"
-                                ? (mpClient.opponent ? mpClient.opponent.id : "p2")
-                                : mpClient.userId,
-                            reason: "KNOCKOUT"
-                        });
+                        const timerSec = Math.max(0, Math.floor(CoreEngine.val_int_dS / 1000));
+
+                        // Real-time Top Combat HUD updates
+                        if (mpClient.ui) {
+                            mpClient.ui.updateHealthBars(p1Hp, p2Hp);
+                            mpClient.ui.setRoundClock(timerSec);
+                        }
+
+                        // Best-of-3 Round Win Arbiter (P1 is authoritative to maintain 100% sync)
+                        if (mpClient.role === "p1" && mpClient._roundActive) {
+                            // Ensure stage is in live combat phase (val_int_dN === 2)
+                            if (CoreEngine.val_int_dN === 2) {
+                                if (p1Hp <= 0 && p2Hp > 0) {
+                                    mpClient._roundActive = false;
+                                    console.log("[Multiplayer] P1 knocked out! Round won by P2.");
+                                    mpClient.sendRoundWin("p2");
+                                } else if (p2Hp <= 0 && p1Hp > 0) {
+                                    mpClient._roundActive = false;
+                                    console.log("[Multiplayer] P2 knocked out! Round won by P1.");
+                                    mpClient.sendRoundWin("p1");
+                                } else if (CoreEngine.val_int_dS <= 0) {
+                                    mpClient._roundActive = false;
+                                    const winnerRole = (p1Hp >= p2Hp) ? "p1" : "p2";
+                                    console.log(`[Multiplayer] Round timeout! Round won by ${winnerRole} (P1: ${p1Hp}, P2: ${p2Hp})`);
+                                    mpClient.sendRoundWin(winnerRole);
+                                }
+                            }
+                        }
                     }
                 }
             } catch (err) {
@@ -828,15 +847,50 @@ async function bootstrap() {
         }
 
         // 7. Initialize Multiplayer Subsystem
-        mpClient.onMatchStartCallback = (data) => {
-            console.log("[Multiplayer] Match starting in 2-Player Versus Mode!");
-            mpClient._boutLive = false;
-            CoreEngine.val_bool_am = true;
-            if (CoreEngine.val_int_h < 11) {
-                CoreEngine.val_int_dQ = 0; // Scorpion
-                CoreEngine.val_int_dR = 1; // Sub-Zero
-                CoreEngine.setGameState(11); // Enter combat
+        mpClient.onVersusStartCallback = (p1Hero, p2Hero, data) => {
+            console.log(`[Multiplayer] Spawning fighters: P1=${p1Hero}, P2=${p2Hero}`);
+            mpClient._roundActive = true;
+            mpClient._boutLive = true;
+            CoreEngine.val_bool_am = true; // 2-player versus mode
+            CoreEngine.val_int_dU = 0; // P1 round wins
+            CoreEngine.val_int_dV = 0; // P2 round wins
+
+            // Mirror match tint palette = 1 if both selected same hero
+            const palette = (p1Hero === p2Hero) ? 1 : 0;
+            CoreEngine.exec_a_int_int_byte_to_void(p1Hero, p2Hero, palette);
+
+            // Transition engine to active combat
+            CoreEngine.setGameState(11);
+
+            // Show top battle HUD with dragon win medallions
+            mpClient.ui.showCombatHud(p1Hero, p2Hero, data.p1?.name, data.p2?.name);
+            mpClient.ui.setRoundNumber(1);
+            mpClient.ui.showRoundAnnounceBanner("ROUND 1", "FIGHT!");
+        };
+
+        mpClient.onRoundNextCallback = (data) => {
+            console.log(`[Multiplayer] Starting Round ${data.round_num}! Resetting fighters.`);
+            mpClient._roundActive = true;
+
+            // Reset fighter health to 100
+            if (CoreEngine.val_coreengine_b) {
+                CoreEngine.val_coreengine_b.currentHealth = 100;
+                CoreEngine.val_coreengine_b.setActorPosition(-64, 0);
+                CoreEngine.val_coreengine_b.updateActor(0);
             }
+            if (CoreEngine.val_coreengine_c) {
+                CoreEngine.val_coreengine_c.currentHealth = 100;
+                CoreEngine.val_coreengine_c.setActorPosition(64, 0);
+                CoreEngine.val_coreengine_c.updateActor(0);
+            }
+
+            // Reset 99s timer
+            CoreEngine.val_int_dS = 99000;
+
+            // Update HUD
+            mpClient.ui.updateHealthBars(100, 100);
+            mpClient.ui.updateRoundCoins(data.p1_rounds, data.p2_rounds);
+            mpClient.ui.setRoundNumber(data.round_num);
         };
 
         mpClient.onPeerInputCallback = (keyCode, isDown) => {
