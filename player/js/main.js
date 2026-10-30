@@ -141,14 +141,195 @@ function triggerButtonActive(code, isActive) {
     }
 }
 
+// =========================================================================
+// ADVANCED VIRTUAL LEFT JOYSTICK MOVEMENT & TRANSITION SYSTEM
+// Multi-stage input pipeline: analog clamp, asymmetric sectors,
+// angular hysteresis, transition matrix / ignored moves, clean key sync.
+// =========================================================================
+class AdvancedMovementJoystick {
+    constructor(config = {}) {
+        this.config = Object.assign({
+            deadZoneRadius: 14,          // Layer 2: 15-20% base radius
+            maxRadius: 55,               // Layer 1: pad radius - knob radius
+            hysteresisAngleDeg: 10,      // Layer 4: 8-12 deg sticky angle margin
+            cardinalHalfWidthDeg: 30     // Layer 3: 30 deg half-width (60 deg full cardinal arc)
+        }, config);
+
+        this.currentDirection = null;
+        this.hasExceededDeadzone = false;
+        this.recentTouchHistory = [];
+    }
+
+    processMove(dx, dy) {
+        const dist = Math.hypot(dx, dy);
+
+        // Layer 1: Coordinate Normalization & Analog 360 Visual Clamp
+        const clampedDist = Math.min(dist, this.config.maxRadius);
+        const scale = dist > 0 ? (clampedDist / dist) : 0;
+        const thumbX = dx * scale;
+        const thumbY = dy * scale;
+
+        // Layer 2: Radial Deadzone & Center-Tap Filter
+        if (dist < this.config.deadZoneRadius) {
+            this.setDirection(null);
+            return { direction: null, thumbX, thumbY };
+        }
+
+        this.hasExceededDeadzone = true;
+
+        // Angle in degrees: 0° = Right, 90° = Down, 180° = Left, 270° = Up
+        let deg = Math.atan2(dy, dx) * (180 / Math.PI);
+        if (deg < 0) deg += 360;
+
+        // Track rolling touch history (past 60ms) for flick/snapback suppression
+        this.recordHistory(dist, deg);
+
+        // Layer 3 & 4: Resolve Candidate Sector with Asymmetric Weighting & Angular Hysteresis
+        const candidate = this.resolveSector(deg);
+
+        // Layer 5: Transition Matrix & Ignored Moves Engine
+        if (this.isValidTransition(this.currentDirection, candidate, dist, dx, dy)) {
+            this.setDirection(candidate);
+        }
+
+        return { direction: this.currentDirection, thumbX, thumbY };
+    }
+
+    resolveSector(deg) {
+        const cHalf = this.config.cardinalHalfWidthDeg; // 30° -> 60° total for Cardinals
+        const hyst = this.config.hysteresisAngleDeg;    // 10° hysteresis margin
+
+        // Test if angle falls within cardinal sector with hysteresis expansion/contraction
+        const inSector = (centerDeg) => {
+            let effectiveHalf = cHalf;
+            if (this.isCurrent(centerDeg)) {
+                // Currently in this cardinal: expand sector boundary by hyst
+                effectiveHalf = cHalf + hyst;
+            } else if (this.isAdjacentDiagonal(this.currentDirection, centerDeg)) {
+                // Currently in adjacent diagonal: cardinal boundary shrinks by hyst
+                effectiveHalf = cHalf - hyst;
+            }
+            const diff = Math.abs(((deg - centerDeg + 180 + 360) % 360) - 180);
+            return diff <= effectiveHalf;
+        };
+
+        if (inSector(0)) return 'right';
+        if (inSector(90)) return 'down';
+        if (inSector(180)) return 'left';
+        if (inSector(270)) return 'up';
+
+        // Diagonals take remaining narrower sectors (30° each)
+        if (deg > 0 && deg < 90) return 'down-right';
+        if (deg > 90 && deg < 180) return 'down-left';
+        if (deg > 180 && deg < 270) return 'up-left';
+        return 'up-right';
+    }
+
+    isCurrent(centerDeg) {
+        if (!this.currentDirection) return false;
+        const dirCenterMap = {
+            'right': 0, 'down': 90, 'left': 180, 'up': 270
+        };
+        return dirCenterMap[this.currentDirection] === centerDeg;
+    }
+
+    isAdjacentDiagonal(dir, cardinalCenterDeg) {
+        if (!dir) return false;
+        const adjMap = {
+            0: ['up-right', 'down-right'],
+            90: ['down-right', 'down-left'],
+            180: ['down-left', 'up-left'],
+            270: ['up-left', 'up-right']
+        };
+        return (adjMap[cardinalCenterDeg] || []).includes(dir);
+    }
+
+    isValidTransition(from, to, dist, dx, dy) {
+        if (from === to) return true;
+        if (!from || !to) return true;
+
+        // Rule 1: Opposing Cardinal Reversal Lock (Left <-> Right, Up <-> Down)
+        // Direct 180° flip prohibited without neutral passage
+        const opposites = [
+            ['left', 'right'], ['right', 'left'],
+            ['up', 'down'], ['down', 'up'],
+            ['up-left', 'down-right'], ['down-right', 'up-left'],
+            ['up-right', 'down-left'], ['down-left', 'up-right']
+        ];
+        const isOpposite = opposites.some(([a, b]) => (from === a && to === b));
+        if (isOpposite) {
+            // Rule 1: Instant 180 flip is prohibited in a single movement frame.
+            // Thumb must transition through neutral (null) for at least 1 tick before opposite is acknowledged.
+            this.setDirection(null);
+            return false;
+        }
+
+        // Rule 2: Snap-Back / Release Flick Suppression
+        if (this.isSnapbackFlick(to)) {
+            return false;
+        }
+
+        // Rule 3: Diagonal Intent & Threshold Elevation (|dy| >= 0.5 * |dx|)
+        if ((from === 'right' && to === 'up-right') || (from === 'left' && to === 'up-left')) {
+            if (Math.abs(dy) < 0.5 * Math.abs(dx)) {
+                return false; // Keep horizontal walk without accidental diagonal jump
+            }
+        }
+
+        // Rule 4: Crouch Direction Lock (Duck Sweep)
+        if ((from === 'down' || from === 'down-left' || from === 'down-right') && (to === 'left' || to === 'right')) {
+            if (dy > this.config.deadZoneRadius * 0.75) {
+                // Retain defensive crouch instead of popping up into standing walk
+                const defensiveCrouch = (to === 'left') ? 'down-left' : 'down-right';
+                this.setDirection(defensiveCrouch);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    isSnapbackFlick(target) {
+        if (this.recentTouchHistory.length < 2) return false;
+        const oldest = this.recentTouchHistory[0];
+        const newest = this.recentTouchHistory[this.recentTouchHistory.length - 1];
+
+        // If radius collapsed rapidly while angle swung > 90 degrees -> Snap-back artifact
+        const radiusDelta = oldest.dist - newest.dist;
+        const angleDelta = Math.abs(((newest.angle - oldest.angle + 180 + 360) % 360) - 180);
+
+        return (radiusDelta > 10 && angleDelta > 90);
+    }
+
+    handleRelease() {
+        const wasTap = !this.hasExceededDeadzone;
+        this.setDirection(null);
+        this.hasExceededDeadzone = false;
+        this.recentTouchHistory = [];
+        return { centerTapped: wasTap };
+    }
+
+    setDirection(dir) {
+        this.currentDirection = dir;
+    }
+
+    recordHistory(dist, angle) {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.recentTouchHistory.push({ dist, angle, time: now });
+        if (this.recentTouchHistory.length > 10) this.recentTouchHistory.shift();
+        this.recentTouchHistory = this.recentTouchHistory.filter(h => now - h.time <= 120);
+    }
+}
+window.AdvancedMovementJoystick = AdvancedMovementJoystick;
+
 function setupInputControls() {
-    // --- 1. VIRTUAL 360° JOYSTICK CONTROLLER (FREE ROTATION WITH 8-WAY DIRECTIONAL FEEDBACK) ---
+    // --- 1. VIRTUAL 360° JOYSTICK CONTROLLER (ADVANCED MOVEMENT & TRANSITION SYSTEM) ---
     const joyZone = document.getElementById('joystick-zone');
     const joyThumb = document.getElementById('joystick-thumb');
     if (joyZone && joyThumb) {
         let joyPointerId = null;
         let currentJoyDir = null;
-        let hasMovedBeyondDeadzone = false;
+        let activeJoyKeys = [];
 
         const joyIndicators = {
             'up': joyZone.querySelector('[data-joy-dir="up"]'),
@@ -172,40 +353,38 @@ function setupInputControls() {
             'down-right': [-2, -4]
         };
 
-        const SECTORS = [
-            'right',       // 0: [337.5°, 22.5°)
-            'down-right',  // 1: [22.5°, 67.5°)
-            'down',        // 2: [67.5°, 112.5°)
-            'down-left',   // 3: [112.5°, 157.5°)
-            'left',        // 4: [157.5°, 202.5°)
-            'up-left',     // 5: [202.5°, 247.5°)
-            'up',          // 6: [247.5°, 292.5°)
-            'up-right'     // 7: [292.5°, 337.5°)
-        ];
+        const joystick = new AdvancedMovementJoystick({
+            deadZoneRadius: 14,
+            maxRadius: 50,
+            hysteresisAngleDeg: 10,
+            cardinalHalfWidthDeg: 30
+        });
+        window.__joystick = joystick;
 
-        function setJoyDirection(newDir) {
+        // Layer 6: Event Dispatch & Clean Key Sync (Diff previous keys vs new keys)
+        function syncJoyDirection(newDir) {
             if (newDir === currentJoyDir) return;
 
-            // Release previous direction
-            if (currentJoyDir) {
-                const oldInd = joyIndicators[currentJoyDir];
-                if (oldInd) oldInd.classList.remove('active');
-                const oldKeys = DIR_KEYS[currentJoyDir];
-                if (oldKeys) {
-                    oldKeys.forEach(k => sendKeyEvent(k, false));
-                }
+            // Visual indicators
+            if (currentJoyDir && joyIndicators[currentJoyDir]) {
+                joyIndicators[currentJoyDir].classList.remove('active');
+            }
+            if (newDir && joyIndicators[newDir]) {
+                joyIndicators[newDir].classList.add('active');
             }
 
+            // Diff previous keys vs new keys -> KeyUp obsolete, KeyDown new
+            const newKeys = newDir ? (DIR_KEYS[newDir] || []) : [];
+            const keysToRelease = activeJoyKeys.filter(k => !newKeys.includes(k));
+            const keysToPress = newKeys.filter(k => !activeJoyKeys.includes(k));
+
+            keysToRelease.forEach(k => sendKeyEvent(k, false));
+            keysToPress.forEach(k => sendKeyEvent(k, true));
+
+            activeJoyKeys = newKeys;
             currentJoyDir = newDir;
 
-            // Press new direction
-            if (currentJoyDir) {
-                const newInd = joyIndicators[currentJoyDir];
-                if (newInd) newInd.classList.add('active');
-                const newKeys = DIR_KEYS[currentJoyDir];
-                if (newKeys) {
-                    newKeys.forEach(k => sendKeyEvent(k, true));
-                }
+            if (newDir) {
                 triggerHaptic(8);
                 unlockAudio();
             }
@@ -217,47 +396,37 @@ function setupInputControls() {
             const cy = rect.top + rect.height / 2;
             const dx = clientX - cx;
             const dy = clientY - cy;
-            const dist = Math.hypot(dx, dy);
 
-            // Maximum radius for thumb travel
-            const maxRadius = Math.max(15, (rect.width / 2) - 24);
-            const deadZone = 10;
+            const res = joystick.processMove(dx, dy);
 
-            let thumbX = dx;
-            let thumbY = dy;
-            if (dist > maxRadius) {
-                thumbX = (dx / dist) * maxRadius;
-                thumbY = (dy / dist) * maxRadius;
-            }
+            // Layer 1: Smooth 360-degree free rotation visual positioning (analog 360 clamp)
+            joyThumb.style.transform = `translate3d(${res.thumbX}px, ${res.thumbY}px, 0)`;
 
-            // Smooth 360-degree free rotation visual positioning
-            joyThumb.style.transform = `translate3d(${thumbX}px, ${thumbY}px, 0)`;
-
-            if (dist < deadZone) {
-                setJoyDirection(null);
-                return;
-            }
-
-            hasMovedBeyondDeadzone = true;
-            let deg = Math.atan2(dy, dx) * (180 / Math.PI);
-            if (deg < 0) deg += 360;
-
-            const sector = Math.floor(((deg + 22.5) % 360) / 45);
-            setJoyDirection(SECTORS[sector] || null);
+            // Layer 6: Sync key states with diff-based transition
+            syncJoyDirection(res.direction);
         }
 
         function releaseJoystick() {
             joyZone.classList.remove('dragging');
             joyThumb.style.transform = 'translate3d(0, 0, 0)';
-            setJoyDirection(null);
+            const { centerTapped } = joystick.handleRelease();
+            syncJoyDirection(null);
+            return centerTapped;
         }
 
         joyZone.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             joyPointerId = e.pointerId;
-            hasMovedBeyondDeadzone = false;
             joyZone.classList.add('dragging');
             try { joyZone.setPointerCapture(e.pointerId); } catch (_) {}
+
+            // Dynamically adjust radius to bounding box
+            const rect = joyZone.getBoundingClientRect();
+            const padRadius = rect.width / 2;
+            const thumbRadius = (joyThumb.offsetWidth / 2) || 27;
+            joystick.config.maxRadius = Math.max(15, padRadius - thumbRadius);
+            joystick.config.deadZoneRadius = Math.max(10, Math.round(padRadius * 0.18));
+
             handleJoyMove(e.clientX, e.clientY);
         });
 
@@ -273,15 +442,15 @@ function setupInputControls() {
             try { joyZone.releasePointerCapture(e.pointerId); } catch (_) {}
             joyPointerId = null;
 
-            // Center tap detection (< 10px deadzone movement): dispatch Fire / OK (-5)
-            if (!hasMovedBeyondDeadzone) {
+            const centerTapped = releaseJoystick();
+
+            // Center tap detection (< innerDeadzone movement): dispatch Fire / OK (-5)
+            if (centerTapped) {
                 sendKeyEvent(-5, true);
                 setTimeout(() => sendKeyEvent(-5, false), 90);
                 triggerHaptic(14);
                 unlockAudio();
             }
-
-            releaseJoystick();
         };
 
         joyZone.addEventListener('pointerup', onJoyEnd);
