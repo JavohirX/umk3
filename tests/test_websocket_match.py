@@ -368,6 +368,56 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         await ws1.close()
         await ws2.close()
 
+    async def test_binary_input_relay_and_rtc_signaling(self):
+        """Tests ultra-low latency binary packet relay and WebRTC signaling exchange."""
+        match_id = "test_binary_rtc_001"
+        chat_id = "group_fast"
+
+        # 1. Connect both players
+        ws1 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws1.send_json({"type": "join", "user_id": "u1", "user_name": "Liu Kang", "chat_id": chat_id})
+        await ws1.receive_json() # joined
+        await ws1.receive_json() # waiting_opponent
+
+        ws2 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2.send_json({"type": "join", "user_id": "u2", "user_name": "Kung Lao", "chat_id": chat_id})
+        await ws2.receive_json() # joined
+
+        await ws1.receive_json() # match_start
+        await ws2.receive_json() # match_start
+
+        # 2. Test WebRTC signaling relay (Offer/Answer/Candidate)
+        await ws1.send_json({
+            "type": "rtc_signal",
+            "signal": {"type": "offer", "sdp": "v=0..."}
+        })
+        sig_p2 = await ws2.receive_json()
+        self.assertEqual(sig_p2["type"], "rtc_signal")
+        self.assertEqual(sig_p2["from_role"], "p1")
+        self.assertEqual(sig_p2["signal"]["type"], "offer")
+
+        await ws2.send_json({
+            "type": "rtc_signal",
+            "signal": {"type": "answer", "sdp": "v=0..."}
+        })
+        sig_p1 = await ws1.receive_json()
+        self.assertEqual(sig_p1["type"], "rtc_signal")
+        self.assertEqual(sig_p1["from_role"], "p2")
+        self.assertEqual(sig_p1["signal"]["type"], "answer")
+
+        # 3. Test Binary Input Relay (zero-copy ArrayBuffer / bytes)
+        # Format: [0x01 (INPUT), 53 (Key Digit5), 1 (Down), 42 (Seq)]
+        binary_input = bytes([1, 53, 1, 42])
+        await ws1.send_bytes(binary_input)
+
+        msg2 = await ws2.receive()
+        from aiohttp import WSMsgType
+        self.assertEqual(msg2.type, WSMsgType.BINARY)
+        self.assertEqual(msg2.data, binary_input)
+
+        await ws1.close()
+        await ws2.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import socket
 import time
 import uuid
 from typing import Dict, Optional, Set
@@ -225,6 +226,18 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse(heartbeat=15.0)
     await ws.prepare(request)
 
+    # Low-latency socket tuning: disable Nagle's algorithm and enable quick ACK
+    transport = request.transport
+    if transport:
+        sock = transport.get_extra_info('socket')
+        if sock:
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                if hasattr(socket, 'TCP_QUICKACK'):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
+            except Exception:
+                pass
+
     match_id = request.match_info.get("match_id")
     if not match_id:
         await ws.send_str(json.dumps({"type": "error", "message": "Missing match_id in path"}))
@@ -236,7 +249,19 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
 
     try:
         async for msg in ws:
-            if msg.type == WSMsgType.TEXT:
+            if msg.type == WSMsgType.BINARY:
+                if room and room.status == "ACTIVE":
+                    # Ultra-low-latency zero-copy binary input packet relay
+                    payload = msg.data
+                    for pid, peer_ws in list(room.sockets.items()):
+                        if pid != current_player_id and not peer_ws.closed:
+                            try:
+                                await peer_ws.send_bytes(payload)
+                            except Exception as e:
+                                logging.warning(f"[{match_id}] Binary broadcast error to {pid}: {e}")
+                continue
+
+            elif msg.type == WSMsgType.TEXT:
                 try:
                     data = json.loads(msg.data)
                 except Exception:
@@ -540,6 +565,18 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                 # -------------------------------------------------------------
                 elif msg_type == "ping":
                     await ws.send_str(json.dumps({"type": "pong", "time": data.get("time")}))
+
+                # -------------------------------------------------------------
+                # 7. WEBRTC P2P SIGNALING (SDP Offer/Answer & ICE Candidates)
+                # -------------------------------------------------------------
+                elif msg_type == "rtc_signal":
+                    if room:
+                        from_role = "p1" if current_player_id == room.creator_id else "p2"
+                        await room.broadcast({
+                            "type": "rtc_signal",
+                            "from_role": from_role,
+                            "signal": data.get("signal")
+                        }, exclude_id=current_player_id)
 
             elif msg.type == WSMsgType.ERROR:
                 logging.warning(f"WebSocket connection closed with error: {ws.exception()}")

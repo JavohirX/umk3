@@ -915,6 +915,17 @@ function startAnimationLoop() {
                                 CoreEngine.val_int_dS = Math.max(0, CoreEngine.val_int_dS - (CoreEngine.val_int_e || 33));
                             }
 
+                            // Periodic authoritative state sync every 30 frames (~1s) to prevent desync drift
+                            if (mpClient.role === "p1" && mpClient._roundActive) {
+                                if (!window._mpSyncFrame) window._mpSyncFrame = 0;
+                                window._mpSyncFrame++;
+                                if (window._mpSyncFrame % 30 === 0) {
+                                    const p1X = (typeof fighterB.exec_a_to_int === 'function') ? fighterB.exec_a_to_int() : 0;
+                                    const p2X = (typeof fighterC.exec_a_to_int === 'function') ? fighterC.exec_a_to_int() : 0;
+                                    mpClient.sendSync(p1Hp, p2Hp, p1X, p2X, CoreEngine.val_int_dS);
+                                }
+                            }
+
                             // Best-of-3 Round Win Arbiter (P1 is authoritative to maintain 100% sync)
                             if (mpClient.role === "p1" && mpClient._roundActive) {
                                 // Ensure stage is in live combat phase (val_int_dN === 2)
@@ -1065,6 +1076,27 @@ async function bootstrap() {
                     CoreEngine.val_maincanvasbridge_a.keyPressed(keyCode);
                 } else {
                     CoreEngine.val_maincanvasbridge_a.keyReleased(keyCode);
+                }
+            }
+        };
+
+        mpClient.onPeerSyncCallback = (data) => {
+            // P2 receives authoritative sync corrections from P1
+            if (mpClient.role === 'p2' && CoreEngine.val_coreengine_b && CoreEngine.val_coreengine_c) {
+                if (data.p1_hp !== undefined && data.p1_hp >= 0) {
+                    CoreEngine.val_coreengine_b.currentHealth = data.p1_hp;
+                }
+                if (data.p2_hp !== undefined && data.p2_hp >= 0) {
+                    CoreEngine.val_coreengine_c.currentHealth = data.p2_hp;
+                }
+                if (data.round_timer !== undefined && data.round_timer >= 0) {
+                    CoreEngine.val_int_dS = data.round_timer;
+                }
+                if (data.p2_x !== undefined && typeof CoreEngine.val_coreengine_c.exec_a_to_int === 'function') {
+                    const curX = CoreEngine.val_coreengine_c.exec_a_to_int();
+                    if (Math.abs(curX - data.p2_x) > 16) {
+                        CoreEngine.val_coreengine_c.setActorPosition(data.p2_x, 0);
+                    }
                 }
             }
         };
