@@ -143,7 +143,7 @@
             transition: width 0.1s linear;
         }
 
-        /* --- 3D TACTILE RETRO CONTROLS PANEL --- */
+        /* --- MORTAL KOMBAT RETRO CONTROLS PANEL (PITCH BLACK BACKGROUND) --- */
         .mobile-controls-panel {
             flex: 1 1 auto;
             min-height: 0;
@@ -151,18 +151,17 @@
             align-items: center;
             justify-content: center;
             padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
-            background: radial-gradient(circle at 50% 15%, #181b29 0%, #0a0b12 100%);
-            border-top: 1px solid #292d3f;
+            background: #000000;
+            border-top: 1px solid #1a1610;
             position: relative;
             user-select: none;
             -webkit-user-select: none;
             touch-action: none;
         }
 
-        /* Base 3D Tactile Button */
-        .btn-3d {
+        /* --- MORTAL KOMBAT STONE/BRONZE 3D BEVELED BUTTON DESIGN CODE --- */
+        .btn-mk {
             position: relative;
-            border: none;
             outline: none;
             cursor: pointer;
             user-select: none;
@@ -172,35 +171,32 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
+            background: linear-gradient(180deg, #2c251b 0%, #1c1711 52%, #110e0a 100%);
+            color: #e5c687;
+            border-top: 1.5px solid rgba(220, 185, 110, 0.45);
+            border-left: 1px solid rgba(180, 145, 80, 0.25);
+            border-right: 1.5px solid rgba(0, 0, 0, 0.65);
+            border-bottom: 2.5px solid rgba(0, 0, 0, 0.85);
+            box-shadow: 
+                0 3px 0 #050403,
+                0 5px 10px rgba(0, 0, 0, 0.85),
+                inset 0 1px 0 rgba(240, 210, 140, 0.22);
             transition: transform 0.04s ease-out, box-shadow 0.04s ease-out, background 0.04s ease-out, color 0.04s ease-out;
             -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
         }
 
-        /* Dark Slate 3D Keycap */
-        .btn-3d-dark {
-            background: linear-gradient(180deg, #373c52 0%, #242838 52%, #191c28 100%);
-            color: #e2e8f0;
-            border-radius: 8px;
-            border-top: 1px solid rgba(255, 255, 255, 0.22);
-            border-left: 1px solid rgba(255, 255, 255, 0.08);
-            border-right: 1px solid rgba(0, 0, 0, 0.4);
+        /* Active / Pressed state - Burning Amber / Golden Glow */
+        .btn-mk:active, .btn-mk.active {
+            transform: translateY(2px);
             box-shadow: 
-                0 4px 0 #090a10,
-                0 6px 10px rgba(0, 0, 0, 0.65),
-                inset 0 1px 0 rgba(255, 255, 255, 0.18);
-        }
-
-        /* 3D Button Mechanically Pressed Animation - Telegram UI Blue */
-        .btn-3d-dark:active, .btn-3d-dark.active {
-            transform: translateY(3px);
-            box-shadow: 
-                0 1px 0 #090a10,
-                0 2px 4px rgba(0, 0, 0, 0.8),
-                inset 0 2px 5px rgba(0, 0, 0, 0.6),
-                0 0 12px rgba(41, 148, 236, 0.55);
-            background: linear-gradient(180deg, #1b283d 0%, #121c2c 100%);
-            color: #2994ec;
+                0 1px 0 #050403,
+                0 2px 4px rgba(0, 0, 0, 0.9),
+                inset 0 2px 5px rgba(0, 0, 0, 0.8),
+                0 0 14px rgba(229, 198, 135, 0.75);
+            background: linear-gradient(180deg, #3a2e1d 0%, #241c10 100%);
+            color: #fff2b8;
+            text-shadow: 0 0 10px rgba(255, 230, 140, 0.95), 0 0 18px rgba(212, 175, 55, 0.7);
         }
 
         /* --- ON-SCREEN INTERACTIVE SOFTKEY ICONS (LSK / RSK) --- */
@@ -232,13 +228,13 @@
             right: 0px;
         }
 
-        /* Glowing touch ripple/halo centered over the in-game icon */
+        /* Glowing touch ripple/halo matching MK Golden/Bronze button design code */
         .softkey-pulse {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            border: 2px solid rgba(56, 189, 248, 0);
-            background: radial-gradient(circle, rgba(56, 189, 248, 0.45) 0%, rgba(41, 148, 236, 0.15) 65%, transparent 100%);
+            border: 2px solid rgba(229, 198, 135, 0);
+            background: radial-gradient(circle, rgba(229, 198, 135, 0.45) 0%, rgba(180, 140, 60, 0.15) 65%, transparent 100%);
             opacity: 0;
             transform: scale(0.75);
             transition: opacity 0.08s ease, transform 0.08s ease, border-color 0.08s ease;
@@ -249,11 +245,11 @@
         .on-screen-softkey.active .softkey-pulse {
             opacity: 1;
             transform: scale(1.18);
-            border-color: rgba(56, 189, 248, 0.85);
-            box-shadow: 0 0 16px rgba(56, 189, 248, 0.8);
+            border-color: rgba(229, 198, 135, 0.9);
+            box-shadow: 0 0 16px rgba(229, 198, 135, 0.85);
         }
 
-        /* --- MAIN COMBAT PAD ROW: LEFT JOYSTICK + RIGHT 2x2 COMBAT KEYPAD --- */
+        /* --- MAIN COMBAT PAD ROW: LEFT 8-WAY D-PAD + RIGHT 2x2 COMBAT KEYPAD --- */
         .main-pad-row {
             display: flex;
             align-items: center;
@@ -265,175 +261,71 @@
             box-sizing: border-box;
         }
 
-        /* --- 1. LEFT SIDE: VIRTUAL 360° JOYSTICK (FREE ROTATION & 8-WAY FEEDBACK) --- */
-        .joystick-zone {
-            width: var(--main-pad-height, 154px);
-            height: var(--main-pad-height, 154px);
+        /* --- 1. LEFT SIDE: 8-DIRECTIONAL TACTILE D-PAD (TOUCH & GLIDE PAD) --- */
+        .dpad-8-grid {
+            width: var(--main-pad-height, 160px);
+            height: var(--main-pad-height, 160px);
             aspect-ratio: 1 / 1;
-            border-radius: 50%;
-            background: radial-gradient(circle at 50% 50%, #141724 0%, #0d0e17 100%);
-            border: 2px solid #24283c;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 4px;
+            background: #080706;
+            padding: 6px;
+            border-radius: 20px;
+            border: 2px solid #3d3120;
             box-shadow: 
-                0 6px 18px rgba(0, 0, 0, 0.75),
-                inset 0 3px 8px rgba(0, 0, 0, 0.85);
-            position: relative;
-            user-select: none;
-            -webkit-user-select: none;
+                0 6px 18px rgba(0, 0, 0, 0.95),
+                inset 0 2px 6px rgba(0, 0, 0, 0.85);
             touch-action: none;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .dpad-btn {
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .dpad-card {
+            font-size: 1.25em;
+            font-weight: 900;
+        }
+
+        .dpad-diag {
+            font-size: 1.05em;
+            font-weight: 800;
+            opacity: 0.88;
+        }
+
+        .dpad-center-hub {
+            width: 100%;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-shrink: 0;
+            background: radial-gradient(circle, #1a150e 0%, #0d0a07 100%);
+            border-radius: 50%;
+            border: 1px solid rgba(180, 145, 80, 0.25);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
+            pointer-events: auto;
             cursor: pointer;
         }
 
-        /* Subtle inner alignment ring */
-        .joy-base-ring {
-            position: absolute;
-            width: 58%;
-            height: 58%;
+        .dpad-center-dimple {
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
-            border: 1px dashed rgba(255, 255, 255, 0.08);
-            pointer-events: none;
+            background: radial-gradient(circle at 40% 35%, #3a2e1d 0%, #15110b 100%);
+            border: 1px solid rgba(220, 185, 110, 0.35);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
         }
 
-        /* 8 Directional Indicators positioned radially */
-        .joy-dir-indicator {
-            position: absolute;
-            font-weight: 800;
-            pointer-events: none;
-            transition: color 0.08s ease, text-shadow 0.08s ease, transform 0.08s ease;
-            user-select: none;
-            -webkit-user-select: none;
-            line-height: 1;
-            text-align: center;
-        }
-
-        /* Cardinal arrows */
-        .joy-up, .joy-down, .joy-left, .joy-right {
-            font-size: 1.15em;
-            color: #64748b;
-        }
-
-        .joy-up {
-            top: 6px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .joy-down {
-            bottom: 6px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .joy-left {
-            left: 6px;
-            top: 50%;
-            transform: translateY(-50%);
-        }
-
-        .joy-right {
-            right: 6px;
-            top: 50%;
-            transform: translateY(-50%);
-        }
-
-        /* Diagonal arrows */
-        .joy-up-left, .joy-up-right, .joy-down-left, .joy-down-right {
-            font-size: 0.95em;
-            color: #475569;
-        }
-
-        .joy-up-left {
-            top: 14px;
-            left: 14px;
-        }
-
-        .joy-up-right {
-            top: 14px;
-            right: 14px;
-        }
-
-        .joy-down-left {
-            bottom: 14px;
-            left: 14px;
-        }
-
-        .joy-down-right {
-            bottom: 14px;
-            right: 14px;
-        }
-
-        /* Active glowing direction state (Telegram cyan blue glow) */
-        .joy-dir-indicator.active {
-            color: #38bdf8 !important;
-            text-shadow: 0 0 10px rgba(56, 189, 248, 0.95), 0 0 18px rgba(41, 148, 236, 0.7);
-        }
-
-        .joy-up.active {
-            transform: translateX(-50%) scale(1.25);
-        }
-
-        .joy-down.active {
-            transform: translateX(-50%) scale(1.25);
-        }
-
-        .joy-left.active {
-            transform: translateY(-50%) scale(1.25);
-        }
-
-        .joy-right.active {
-            transform: translateY(-50%) scale(1.25);
-        }
-
-        .joy-up-left.active, .joy-up-right.active, .joy-down-left.active, .joy-down-right.active {
-            transform: scale(1.25);
-        }
-
-        /* 3D Tactile Thumb Knob */
-        .joystick-thumb {
-            position: absolute;
-            width: 54px;
-            height: 54px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 40% 35%, #474e6b 0%, #292d3f 55%, #181b28 100%);
-            border-top: 1px solid rgba(255, 255, 255, 0.28);
-            border-left: 1px solid rgba(255, 255, 255, 0.12);
-            border-right: 1px solid rgba(0, 0, 0, 0.4);
-            border-bottom: 2px solid rgba(0, 0, 0, 0.7);
-            box-shadow: 
-                0 4px 0 #090a10,
-                0 8px 14px rgba(0, 0, 0, 0.7),
-                inset 0 1px 0 rgba(255, 255, 255, 0.25);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            pointer-events: none;
-            will-change: transform;
-            transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
-        }
-
-        .joystick-zone.dragging .joystick-thumb {
-            transition: none;
-            box-shadow: 
-                0 2px 0 #090a10,
-                0 4px 8px rgba(0, 0, 0, 0.8),
-                inset 0 1px 3px rgba(0, 0, 0, 0.6),
-                0 0 14px rgba(41, 148, 236, 0.65);
-            border-color: rgba(56, 189, 248, 0.6);
-        }
-
-        .thumb-dimple {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 45% 40%, #1e2230 0%, #11131b 100%);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
-        }
-
-        /* --- 2. RIGHT SIDE: 2x2 COMBAT KEYPAD (KEYS 5, 7, 8, 9 - NUMBERS ONLY) --- */
+        /* --- 2. RIGHT SIDE: 2x2 COMBAT KEYPAD (BUTTONS A, B, C, D) --- */
         .combat-4-grid {
             width: var(--main-pad-height, 160px);
             height: var(--main-pad-height, 160px);
@@ -441,14 +333,14 @@
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             grid-template-rows: repeat(2, 1fr);
-            gap: 10px;
-            background: #11131e;
-            padding: 8px;
+            gap: 8px;
+            background: #080706;
+            padding: 7px;
             border-radius: 20px;
-            border: 2px solid #24283c;
+            border: 2px solid #3d3120;
             box-shadow: 
-                0 6px 18px rgba(0, 0, 0, 0.75),
-                inset 0 2px 6px rgba(0, 0, 0, 0.7);
+                0 6px 18px rgba(0, 0, 0, 0.95),
+                inset 0 2px 6px rgba(0, 0, 0, 0.85);
             touch-action: none;
             flex-shrink: 0;
             box-sizing: border-box;
@@ -466,10 +358,10 @@
         }
 
         .combat-digit {
-            font-size: 1.75em;
-            font-weight: 850;
+            font-size: 1.8em;
+            font-weight: 900;
             line-height: 1;
-            color: #f8fafc;
+            color: #e5c687;
             user-select: none;
             -webkit-user-select: none;
             display: block;
@@ -477,7 +369,45 @@
 
         .combat-btn:active .combat-digit,
         .combat-btn.active .combat-digit {
-            color: #38bdf8;
+            color: #fff2b8;
+            text-shadow: 0 0 12px rgba(255, 230, 140, 0.95), 0 0 20px rgba(212, 175, 55, 0.7);
+        }
+
+        /* Small screens */
+        @media (max-width: 360px) {
+            :root {
+                --side-btn-width: 62px;
+                --main-pad-height: 144px;
+                --controls-panel-height: 195px;
+            }
+            .main-pad-row {
+                max-width: 320px;
+                gap: 10px;
+            }
+            .dpad-8-grid {
+                width: 144px;
+                height: 144px;
+                gap: 3px;
+                padding: 5px;
+                border-radius: 16px;
+            }
+            .dpad-card {
+                font-size: 1.1em;
+            }
+            .dpad-diag {
+                font-size: 0.95em;
+            }
+            .combat-4-grid {
+                width: 144px;
+                height: 144px;
+                gap: 6px;
+                padding: 6px;
+                border-radius: 16px;
+            }
+            .combat-digit {
+                font-size: 1.5em;
+            }
+        }
             text-shadow: 0 0 12px rgba(56, 189, 248, 0.85);
         }
 
@@ -714,44 +644,46 @@
             </div>
         </div>
 
-        <!-- LOWER CONTROLS PANEL (CLEAN DEDICATED CONSOLE CONTROLLER) -->
+        <!-- LOWER CONTROLS PANEL (MORTAL KOMBAT PITCH BLACK ARCHITECTURE) -->
         <div class="mobile-controls-panel">
-            <!-- MAIN COMBAT CONTROLS: 360° JOYSTICK (LEFT) + 4-KEY RETRO KEYPAD (RIGHT) -->
+            <!-- MAIN COMBAT CONTROLS: 8-WAY D-PAD (LEFT) + A/B/C/D RETRO KEYPAD (RIGHT) -->
             <div class="main-pad-row">
-                <!-- Left: 360° Virtual Joystick with 8-Way Directional Feedback -->
-                <div class="joystick-zone" id="joystick-zone" aria-label="360 Directional Joystick">
-                    <div class="joy-dir-indicator joy-up" data-joy-dir="up" aria-hidden="true">▲</div>
-                    <div class="joy-dir-indicator joy-down" data-joy-dir="down" aria-hidden="true">▼</div>
-                    <div class="joy-dir-indicator joy-left" data-joy-dir="left" aria-hidden="true">◄</div>
-                    <div class="joy-dir-indicator joy-right" data-joy-dir="right" aria-hidden="true">►</div>
-                    <div class="joy-dir-indicator joy-up-left" data-joy-dir="up-left" aria-hidden="true">↖</div>
-                    <div class="joy-dir-indicator joy-up-right" data-joy-dir="up-right" aria-hidden="true">↗</div>
-                    <div class="joy-dir-indicator joy-down-left" data-joy-dir="down-left" aria-hidden="true">↙</div>
-                    <div class="joy-dir-indicator joy-down-right" data-joy-dir="down-right" aria-hidden="true">↘</div>
+                <!-- Left: 8-Directional Tactile D-Pad (Touch & Smooth Glide Pad) -->
+                <div class="dpad-8-grid" id="dpad-grid" aria-label="8-Directional Movement Pad">
+                    <!-- Row 1: Up-Left, Up, Up-Right -->
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="up-left" aria-label="Jump Up-Left">↖</button>
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="up" aria-label="Jump Up">▲</button>
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="up-right" aria-label="Jump Up-Right">↗</button>
 
-                    <div class="joy-base-ring" aria-hidden="true"></div>
-
-                    <div class="joystick-thumb btn-3d btn-3d-dark" id="joystick-thumb" aria-hidden="true">
-                        <div class="thumb-dimple"></div>
+                    <!-- Row 2: Left, Center Neutral Core, Right -->
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="left" aria-label="Move Left">◄</button>
+                    <div class="dpad-center-hub" data-dir="center" aria-label="Neutral Center">
+                        <div class="dpad-center-dimple"></div>
                     </div>
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="right" aria-label="Move Right">►</button>
+
+                    <!-- Row 3: Down-Left, Down, Down-Right -->
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-left" aria-label="Crouch-Left">↙</button>
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="down" aria-label="Crouch Down">▼</button>
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-right" aria-label="Crouch-Right">↘</button>
                 </div>
 
-                <!-- Right: 2x2 Combat Action Keypad (5, 7, 8, 9 - Numbers Only) -->
+                <!-- Right: 2x2 Combat Action Keypad (Buttons A, B, C, D) -->
                 <div class="combat-4-grid" id="combat-grid" aria-label="Combat Attack Keypad">
-                    <!-- Row 1: 5 (Punch / Select) and 7 (Kick) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit5,Numpad5" aria-label="Key 5">
-                        <span class="combat-digit">5</span>
+                    <!-- Row 1: Button A (Punch / Select) and Button B (Kick / Run) -->
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit5,Numpad5,KeyJ" aria-label="Button A (Punch)">
+                        <span class="combat-digit">A</span>
                     </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit7,Numpad7" aria-label="Key 7">
-                        <span class="combat-digit">7</span>
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit7,Numpad7,KeyK" aria-label="Button B (Kick / Run)">
+                        <span class="combat-digit">B</span>
                     </button>
 
-                    <!-- Row 2: 8 (Duck / Crouch) and 9 (Block / Special) -->
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit8,Numpad8" aria-label="Key 8">
-                        <span class="combat-digit">8</span>
+                    <!-- Row 2: Button C (Duck / Crouch) and Button D (Block / Special) -->
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit8,Numpad8,KeyI" aria-label="Button C (Crouch)">
+                        <span class="combat-digit">C</span>
                     </button>
-                    <button class="ctrl-btn btn-3d btn-3d-dark combat-btn" data-key="Digit9,Numpad9" aria-label="Key 9">
-                        <span class="combat-digit">9</span>
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit9,Numpad9,KeyU,KeyO" aria-label="Button D (Block)">
+                        <span class="combat-digit">D</span>
                     </button>
                 </div>
             </div>
@@ -773,10 +705,10 @@
             </div>
         </div>
         <ul class="kh-list">
-            <li><kbd class="wide">Space</kbd><kbd>Enter</kbd><span>OK / Punch (5)</span></li>
-            <li><kbd>Q</kbd><span>Options</span><kbd>E</kbd><span>Back</span></li>
-            <li><kbd>5</kbd><span>Punch</span><kbd>7</kbd><span>Kick</span></li>
-            <li><kbd>8</kbd><span>Duck</span><kbd>9</kbd><span>Block</span></li>
+            <li><kbd class="wide">Space</kbd><kbd>Enter</kbd><span>OK / Button A</span></li>
+            <li><kbd>Q</kbd><span>OPTNS</span><kbd>E</kbd><span>PAUSE</span></li>
+            <li><kbd>5</kbd><span>A (Punch)</span><kbd>7</kbd><span>B (Kick / Run)</span></li>
+            <li><kbd>8</kbd><span>C (Duck)</span><kbd>9</kbd><span>D (Block / Special)</span></li>
             <li><kbd>M</kbd><span>Mute</span></li>
         </ul>
     </aside>
@@ -842,7 +774,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load UMK3 pure JS engine
-        const APP_BUILD_HASH = "v20261030_umk3_diagonal_jump_fix";
+        const APP_BUILD_HASH = "v20261030_umk3_ui_complete_overhaul";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
