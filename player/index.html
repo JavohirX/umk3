@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:,">
-    <title>Ultimate Mortal Kombat 3 - Mobile Player</title>
+    <title>Immortal Combat - Mobile Player</title>
     <!-- Telegram Mini App WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -143,7 +143,7 @@
             transition: width 0.1s linear;
         }
 
-        /* --- MORTAL KOMBAT RETRO CONTROLS PANEL (PITCH BLACK BACKGROUND) --- */
+        /* --- IMMORTAL COMBAT RETRO CONTROLS PANEL (PITCH BLACK BACKGROUND) --- */
         .mobile-controls-panel {
             flex: 1 1 auto;
             min-height: 0;
@@ -159,7 +159,7 @@
             touch-action: none;
         }
 
-        /* --- MORTAL KOMBAT STONE/BRONZE 3D BEVELED BUTTON DESIGN CODE --- */
+        /* --- IMMORTAL COMBAT STONE/BRONZE 3D BEVELED BUTTON DESIGN CODE --- */
         .btn-mk {
             position: relative;
             outline: none;
@@ -644,7 +644,7 @@
             </div>
         </div>
 
-        <!-- LOWER CONTROLS PANEL (MORTAL KOMBAT PITCH BLACK ARCHITECTURE) -->
+        <!-- LOWER CONTROLS PANEL (IMMORTAL COMBAT PITCH BLACK ARCHITECTURE) -->
         <div class="mobile-controls-panel">
             <!-- MAIN COMBAT CONTROLS: 8-WAY D-PAD (LEFT) + A/B/C/D RETRO KEYPAD (RIGHT) -->
             <div class="main-pad-row">
@@ -773,8 +773,8 @@
         window.addEventListener('touchstart', ensureExpandedOnGesture, { passive: true });
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
-        // Load UMK3 pure JS engine
-        const APP_BUILD_HASH = "v20261030_umk3_advanced_mode_default";
+        // Load Immortal Combat pure JS engine
+        const APP_BUILD_HASH = "v20261030_immortal_combat_rebrand";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;

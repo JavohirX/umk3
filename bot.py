@@ -1,5 +1,5 @@
 """
-Ultimate Mortal Kombat 3 - Telegram Mini App Bot
+Immortal Combat - Telegram Mini App Bot
 Powered by aiogram 3.x
 """
 
@@ -32,7 +32,7 @@ dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def handle_start(message: types.Message):
-    """Handles /start command with UMK3 welcome message and play button."""
+    """Handles /start command with Immortal Combat welcome message and play button."""
     base_url = WEBAPP_URL.rstrip('/')
     player_base = base_url if base_url.endswith("/player") else f"{base_url}/player"
 
@@ -40,7 +40,7 @@ async def handle_start(message: types.Message):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🐉 FIGHT! (Play UMK3)",
+                    text="⚔️ FIGHT! (Play Immortal Combat)",
                     web_app=WebAppInfo(url=f"{player_base}/?v=1.0.0")
                 )
             ]
@@ -48,8 +48,8 @@ async def handle_start(message: types.Message):
     )
 
     text = (
-        "🐉 <b>Ultimate Mortal Kombat 3</b>\n\n"
-        "Enter the Kombat Arena directly inside Telegram!\n"
+        "⚔️ <b>Immortal Combat</b>\n\n"
+        "Enter the Combat Arena directly inside Telegram!\n"
         "Full arcade controls, sound, and classic roster.\n\n"
         "Tap below to begin:"
     )
@@ -72,14 +72,14 @@ async def handle_play(message: types.Message):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🐉 FIGHT!",
+                    text="⚔️ FIGHT!",
                     web_app=WebAppInfo(url=f"{player_base}/?v=1.0.0")
                 )
             ]
         ]
     )
     await message.answer(
-        "🐉 Tap below to enter Kombat:",
+        "⚔️ Tap below to enter Combat:",
         parse_mode="HTML",
         reply_markup=kb,
         link_preview_options=types.LinkPreviewOptions(is_disabled=True)
@@ -98,7 +98,7 @@ async def main():
         player_base = base_url if base_url.endswith("/player") else f"{base_url}/player"
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
-                text="🐉 Play UMK3",
+                text="⚔️ Play Immortal Combat",
                 web_app=WebAppInfo(url=f"{player_base}/?v=1.0.0")
             )
         )
