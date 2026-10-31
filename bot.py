@@ -44,10 +44,10 @@ def get_player_url(params: str = "") -> str:
     """Builds clean Telegram WebApp URL for player entry."""
     base_url = WEBAPP_URL.rstrip('/')
     player_base = base_url if base_url.endswith("/player") else f"{base_url}/player"
-    if params:
-        delim = "&" if "?" in player_base else "?"
-        return f"{player_base}/{delim}{params.lstrip('?')}"
-    return f"{player_base}/"
+    cache_tag = "v=20261031_v3"
+    all_params = f"{params}&{cache_tag}" if params else cache_tag
+    delim = "&" if "?" in player_base else "?"
+    return f"{player_base}/{delim}{all_params.lstrip('?')}"
 
 
 def format_leaderboard_text(chat_id: str, chat_title: str = "This Group") -> str:

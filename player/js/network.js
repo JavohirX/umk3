@@ -5,6 +5,8 @@
  * and local group leaderboards.
  */
 
+import { MultiplayerUI } from './multiplayer_ui.js';
+
 export class MultiplayerClient {
     constructor() {
         this.ws = null;
@@ -41,6 +43,7 @@ export class MultiplayerClient {
         this.rtt = 0;
 
         this.parseEnvironment();
+        this.ui = new MultiplayerUI(this);
     }
 
     parseEnvironment() {
@@ -140,7 +143,7 @@ export class MultiplayerClient {
         this.bindUIEvents();
 
         if (this.isMultiplayer) {
-            this.showLobbyWaiting(60);
+            this.ui.showLobby(60);
             this.connect();
         }
     }
@@ -863,18 +866,28 @@ export class MultiplayerClient {
                 this.opponent = data.opponent;
                 console.log(`[Multiplayer] Joined as role: ${this.role}. Match status: ${data.status}`);
                 this.updateHudBar();
-                this.showLobbyWaiting(data.remaining_seconds || 60);
+                if (this.role === 'p2') {
+                    this.ui.selectedHeroId = 1;
+                    this.ui.peerHeroId = 0;
+                } else {
+                    this.ui.selectedHeroId = 0;
+                    this.ui.peerHeroId = 1;
+                }
+                this.ui.showLobby(data.remaining_seconds || 60);
+                if (this.opponent) {
+                    this.ui.updateLobbyOpponent(this.opponent.name);
+                }
                 if (this.role === "p1" && data.status === "ACTIVE") {
                     this.initWebRTC(true);
                 }
                 break;
 
             case "waiting_opponent":
-                this.showLobbyWaiting(data.remaining_seconds || 60);
+                this.ui.showLobby(data.remaining_seconds || 60);
                 break;
 
             case "match_start":
-                this.dismissLobby();
+                this.status = "ACTIVE";
                 this.dismissDisconnectModal();
                 this.creator = data.p1;
                 this.opponent = data.p2;
@@ -882,27 +895,27 @@ export class MultiplayerClient {
                 if (this.role === "p1") {
                     this.initWebRTC(true);
                 }
-                if (data.stage === "hero_select") {
-                    this.status = "HERO_SELECT";
-                    this._heroSelected = false;
-                    this._heroId = null;
-                    console.log("[Multiplayer] Match ACTIVE! Entering native Character Selection.");
-                    if (typeof this.onHeroSelectStartCallback === 'function') {
-                        this.onHeroSelectStartCallback(data);
-                    }
+                if (this.role === 'p2') {
+                    this.ui.selectedHeroId = 1;
+                    this.ui.peerHeroId = 0;
                 } else {
-                    this.status = "ACTIVE";
-                    if (typeof this.onMatchStartCallback === 'function') {
-                        this.onMatchStartCallback(data);
-                    }
+                    this.ui.selectedHeroId = 0;
+                    this.ui.peerHeroId = 1;
+                }
+                console.log("[Multiplayer] Match ACTIVE! Starting hero selection.");
+                this.ui.startHeroSelect();
+                if (typeof this.onMatchStartCallback === 'function') {
+                    this.onMatchStartCallback(data);
                 }
                 break;
 
             case "peer_hero_hover":
+                this.ui.handlePeerHover(data.from_role, data.hero_id);
                 break;
 
             case "peer_hero_lock":
                 console.log(`[Multiplayer] Peer locked hero: ${data.hero_id} (Role: ${data.from_role})`);
+                this.ui.handlePeerLock(data.from_role, data.hero_id);
                 if (typeof this.onPeerHeroLockCallback === 'function') {
                     this.onPeerHeroLockCallback(data);
                 }
@@ -910,7 +923,6 @@ export class MultiplayerClient {
 
             case "versus_start":
                 this.status = "ACTIVE";
-                this.dismissLobby();
                 this.dismissDisconnectModal();
                 this.role = (data.p1.id === this.userId) ? "p1" : "p2";
                 this.opponent = (this.role === "p1") ? data.p2 : data.p1;
@@ -920,13 +932,18 @@ export class MultiplayerClient {
                 if (this.role === "p1" && !this.isP2PActive && !this.rtcPeer) {
                     this.initWebRTC(true);
                 }
-                if (typeof this.onVersusStartCallback === 'function') {
-                    this.onVersusStartCallback(data.p1.hero_id, data.p2.hero_id, data);
-                }
+                this.ui.showVersusScreen(data, (p1Hero, p2Hero) => {
+                    if (typeof this.onVersusStartCallback === 'function') {
+                        this.onVersusStartCallback(p1Hero, p2Hero, data);
+                    }
+                });
                 break;
 
             case "round_next":
                 console.log(`[Multiplayer] Starting Round ${data.round_num}! Scores: P1=${data.p1_rounds}, P2=${data.p2_rounds}`);
+                this.ui.updateRoundCoins(data.p1_rounds, data.p2_rounds);
+                this.ui.setRoundNumber(data.round_num);
+                this.ui.showRoundAnnounceBanner((data.round_num >= 3) ? "FINAL ROUND" : `ROUND ${data.round_num}`, "FIGHT!");
                 if (typeof this.onRoundNextCallback === 'function') {
                     this.onRoundNextCallback(data);
                 }
@@ -973,7 +990,7 @@ export class MultiplayerClient {
                 this._roundActive = false;
                 this.dismissDisconnectModal();
                 console.log("[Multiplayer] Match ended! Winner:", data.winner_name);
-                this.showMatchResultModal(data);
+                this.ui.showVictoryScreen(data);
                 if (typeof this.onMatchEndedCallback === 'function') {
                     this.onMatchEndedCallback(data);
                 }
@@ -981,6 +998,7 @@ export class MultiplayerClient {
 
             case "match_cancelled":
                 this.status = "CANCELLED";
+                this.ui.hideAllOverlays();
                 this.showMatchCancelled(data.message || "Match cancelled.");
                 break;
 
@@ -1176,6 +1194,8 @@ export class MultiplayerClient {
             this.sendPacket({ type: "rematch_accept" });
             const resultModal = document.getElementById('mp-result-modal');
             if (resultModal) resultModal.style.display = 'none';
+            const victoryView = document.getElementById('mp-view-victory');
+            if (victoryView) victoryView.style.display = 'none';
         }
     }
 

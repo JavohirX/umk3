@@ -764,9 +764,13 @@ function setupCanvas() {
             }
         }
 
-        // 2. Active combat check:
-        // When fighters are spawned and fighting (single-player or multiplayer), touches on the arena
-        // must NEVER trigger combat actions (like Punch / -5). Combat is controlled by the keypad.
+        // 2. Active combat check / Multiplayer check:
+        // In multiplayer, hero select, versus, and combat are coordinated through
+        // the synchronized MK UI overlay. Taps must NOT trigger single-player menus!
+        if (mpClient && mpClient.isMultiplayer) {
+            return;
+        }
+
         const isCombat = Boolean(
             CoreEngine.val_coreengine_b !== null ||
             (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE")
@@ -863,77 +867,45 @@ function startAnimationLoop() {
             try {
                 midlet.stepFrame();
 
-                if (mpClient && mpClient.isMultiplayer) {
-                    // 1. Hero Selection Phase on Native Canvas
-                    if (mpClient.status === "HERO_SELECT") {
-                        if (CoreEngine.val_bool_W && !mpClient._heroSelected) {
-                            mpClient._heroSelected = true;
-                            let hero = CoreEngine.exec_n_to_int();
-                            if (hero < 0 || hero > 6) {
-                                hero = Math.floor(Math.random() * 7);
-                            }
-                            mpClient._heroId = hero;
-                            console.log(`[Multiplayer] Local player locked hero: ${hero}`);
-                            mpClient.sendHeroLock(hero);
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") {
+                    const fighterB = CoreEngine.val_coreengine_b;
+                    const fighterC = CoreEngine.val_coreengine_c;
 
-                            // Hold selection state so single-player tower does not load
-                            CoreEngine.val_bool_W = false;
-                            CoreEngine.val_int_aA = CoreEngine.val_int_bF;
+                    if (fighterB && fighterC) {
+                        const p1Hp = fighterB.currentHealth;
+                        const p2Hp = fighterC.currentHealth;
+
+                        // Tick round timer down in multiplayer (val_int_e is frame delta in ms)
+                        if (CoreEngine.val_int_dS > 0) {
+                            CoreEngine.val_int_dS = Math.max(0, CoreEngine.val_int_dS - (CoreEngine.val_int_e || 33));
+                        }
+                        const timerSec = Math.max(0, Math.floor(CoreEngine.val_int_dS / 1000));
+
+                        // Real-time Top Combat HUD updates
+                        if (mpClient.ui) {
+                            mpClient.ui.updateHealthBars(p1Hp, p2Hp);
+                            mpClient.ui.setRoundClock(timerSec);
                         }
 
-                        // Draw native waiting banner on canvas if local player has selected
-                        if (mpClient._heroSelected && canvas && ctx) {
-                            ctx.save();
-                            const bH = 34;
-                            const bY = canvas.height - bH - 18;
-                            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-                            ctx.fillRect(0, bY, canvas.width, bH);
-                            ctx.strokeStyle = '#dcb450';
-                            ctx.lineWidth = 1.5;
-                            ctx.strokeRect(0, bY, canvas.width, bH);
-
-                            ctx.fillStyle = '#ffeedd';
-                            ctx.font = 'bold 12px monospace';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillText('WAITING FOR OPPONENT...', canvas.width / 2, bY + bH / 2);
-                            ctx.restore();
+                        // Periodic authoritative state sync every 30 frames (~1s) to prevent desync drift
+                        if (mpClient.role === "p1" && mpClient._roundActive) {
+                            if (!window._mpSyncFrame) window._mpSyncFrame = 0;
+                            window._mpSyncFrame++;
+                            if (window._mpSyncFrame % 30 === 0) {
+                                const p1X = (typeof fighterB.exec_a_to_int === 'function') ? fighterB.exec_a_to_int() : 0;
+                                const p2X = (typeof fighterC.exec_a_to_int === 'function') ? fighterC.exec_a_to_int() : 0;
+                                mpClient.sendSync(p1Hp, p2Hp, p1X, p2X, CoreEngine.val_int_dS);
+                            }
                         }
-                    }
 
-                    // 2. Active Combat Phase
-                    if (mpClient.status === "ACTIVE") {
-                        const fighterB = CoreEngine.val_coreengine_b;
-                        const fighterC = CoreEngine.val_coreengine_c;
-
-                        if (fighterB && fighterC) {
-                            const p1Hp = fighterB.currentHealth;
-                            const p2Hp = fighterC.currentHealth;
-
-                            // Tick round timer down in multiplayer (val_int_e is frame delta in ms)
-                            if (CoreEngine.val_int_dS > 0) {
-                                CoreEngine.val_int_dS = Math.max(0, CoreEngine.val_int_dS - (CoreEngine.val_int_e || 33));
-                            }
-
-                            // Periodic authoritative state sync every 30 frames (~1s) to prevent desync drift
-                            if (mpClient.role === "p1" && mpClient._roundActive) {
-                                if (!window._mpSyncFrame) window._mpSyncFrame = 0;
-                                window._mpSyncFrame++;
-                                if (window._mpSyncFrame % 30 === 0) {
-                                    const p1X = (typeof fighterB.exec_a_to_int === 'function') ? fighterB.exec_a_to_int() : 0;
-                                    const p2X = (typeof fighterC.exec_a_to_int === 'function') ? fighterC.exec_a_to_int() : 0;
-                                    mpClient.sendSync(p1Hp, p2Hp, p1X, p2X, CoreEngine.val_int_dS);
-                                }
-                            }
-
-                            // Best-of-3 Round Win Arbiter (P1 is authoritative to maintain 100% sync)
-                            if (mpClient.role === "p1" && mpClient._roundActive) {
-                                // Ensure stage is in live combat phase (val_int_dN === 2)
-                                if (CoreEngine.val_int_dN === 2) {
-                                    if (p1Hp <= 0 && p2Hp > 0) {
-                                        mpClient._roundActive = false;
-                                        console.log("[Multiplayer] P1 knocked out! Round won by P2.");
-                                        mpClient.sendRoundWin("p2");
+                        // Best-of-3 Round Win Arbiter (P1 is authoritative to maintain 100% sync)
+                        if (mpClient.role === "p1" && mpClient._roundActive) {
+                            // Ensure stage is in live combat phase (val_int_dN === 2)
+                            if (CoreEngine.val_int_dN === 2) {
+                                if (p1Hp <= 0 && p2Hp > 0) {
+                                    mpClient._roundActive = false;
+                                    console.log("[Multiplayer] P1 knocked out! Round won by P2.");
+                                    mpClient.sendRoundWin("p2");
                                     } else if (p2Hp <= 0 && p1Hp > 0) {
                                         mpClient._roundActive = false;
                                         console.log("[Multiplayer] P2 knocked out! Round won by P1.");
@@ -1006,14 +978,6 @@ async function bootstrap() {
         }
 
         // 7. Initialize Multiplayer Subsystem
-        mpClient.onHeroSelectStartCallback = (data) => {
-            console.log("[Multiplayer] Entering native hero select grid...");
-            mpClient._heroSelected = false;
-            mpClient._heroId = null;
-            // Switch engine to gameState 11 which opens the native character select grid
-            CoreEngine.setGameState(11);
-        };
-
         mpClient.onVersusStartCallback = (p1Hero, p2Hero, data) => {
             console.log(`[Multiplayer] Spawning fighters: P1=${p1Hero}, P2=${p2Hero}`);
             mpClient._roundActive = true;
@@ -1028,6 +992,13 @@ async function bootstrap() {
 
             // Transition engine to active combat
             CoreEngine.setGameState(11);
+
+            // Show top battle HUD with dragon win medallions
+            if (mpClient.ui) {
+                mpClient.ui.showCombatHud(p1Hero, p2Hero, data.p1?.name, data.p2?.name);
+                mpClient.ui.setRoundNumber(1);
+                mpClient.ui.showRoundAnnounceBanner("ROUND 1", "FIGHT!");
+            }
         };
 
         mpClient.onRoundNextCallback = (data) => {
@@ -1048,6 +1019,12 @@ async function bootstrap() {
 
             // Reset 99s timer
             CoreEngine.val_int_dS = 99000;
+
+            if (mpClient.ui) {
+                mpClient.ui.updateHealthBars(100, 100);
+                mpClient.ui.updateRoundCoins(data.p1_rounds, data.p2_rounds);
+                mpClient.ui.setRoundNumber(data.round_num);
+            }
         };
 
         mpClient.onPeerInputCallback = (keyCode, isDown) => {
