@@ -920,7 +920,6 @@ function startAnimationLoop() {
                             }
                         }
                     }
-                }
             } catch (err) {
                 console.error("[Game Loop Error]:", err);
             }

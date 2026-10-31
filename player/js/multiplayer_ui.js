@@ -976,9 +976,14 @@ export class MultiplayerUI {
                             <span class="slot-status-pill pill-wait" id="mp-lobby-p2-status">SEARCHING</span>
                         </div>
                     </div>
-                    <div class="mp-badge-tag" style="background: rgba(0,0,0,0.5);">
-                        <span>⏳ Auto-cancels in:</span>
-                        <b id="mp-lobby-clock" style="color: #ffd700; font-size: 16px;">60s</b>
+                    <div class="mp-badge-tag" style="background: rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box;">
+                        <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                            <span>⏳ Auto-cancels in:</span>
+                            <b id="mp-lobby-clock" style="color: #ffd700; font-size: 16px;">60s</b>
+                        </div>
+                        <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                            <div id="mp-lobby-progress" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff7518, #ffd700); transition: width 0.9s linear;"></div>
+                        </div>
                     </div>
                 </div>
                 <div style="width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 8px;">
@@ -1188,6 +1193,8 @@ export class MultiplayerUI {
     }
 
     hideAllOverlays() {
+        clearInterval(this.lobbyInterval);
+        clearInterval(this.selectionInterval);
         ['mp-view-lobby', 'mp-view-hero-select', 'mp-view-versus', 'mp-view-victory'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -1210,8 +1217,23 @@ export class MultiplayerUI {
                 : (this.mpClient.creator ? this.mpClient.creator.name : "Host Fighter");
         }
 
+        clearInterval(this.lobbyInterval);
+        let rem = remainingSeconds;
         const clock = document.getElementById('mp-lobby-clock');
-        if (clock) clock.textContent = `${remainingSeconds}s`;
+        const bar = document.getElementById('mp-lobby-progress');
+        if (clock) clock.textContent = `${rem}s`;
+        if (bar) bar.style.width = `${Math.max(0, (rem / 60) * 100)}%`;
+
+        this.lobbyInterval = setInterval(() => {
+            rem--;
+            if (clock) clock.textContent = `${Math.max(0, rem)}s`;
+            if (bar) bar.style.width = `${Math.max(0, (rem / 60) * 100)}%`;
+            if (rem <= 0) {
+                clearInterval(this.lobbyInterval);
+                if (clock) clock.textContent = 'EXPIRED';
+                if (bar) bar.style.width = '0%';
+            }
+        }, 1000);
     }
 
     updateLobbyOpponent(opponentName) {
