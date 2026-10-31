@@ -44,7 +44,7 @@ def get_player_url(params: str = "") -> str:
     """Builds clean Telegram WebApp URL for player entry."""
     base_url = WEBAPP_URL.rstrip('/')
     player_base = base_url if base_url.endswith("/player") else f"{base_url}/player"
-    cache_tag = "v=20261031_v3"
+    cache_tag = "v=20261031_v4"
     all_params = f"{params}&{cache_tag}" if params else cache_tag
     delim = "&" if "?" in player_base else "?"
     return f"{player_base}/{delim}{all_params.lstrip('?')}"
