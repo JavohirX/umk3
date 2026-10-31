@@ -343,10 +343,13 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     room.sockets[current_player_id] = ws
                     room.player_names[current_player_id] = user_name
 
-                    # Send acknowledgment to this player
+                    build_version = os.getenv("BUILD_VERSION", "5dc4ec3")
+
+                    # Send acknowledgment to this player with server build version
                     await ws.send_str(json.dumps({
                         "type": "joined",
                         "role": role,
+                        "build_version": build_version,
                         "player_id": current_player_id,
                         "player_name": user_name,
                         "match_id": match_id,

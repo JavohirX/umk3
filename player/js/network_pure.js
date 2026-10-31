@@ -853,7 +853,14 @@ export class MultiplayerClient {
 
     handlePacket(data) {
         switch (data.type) {
-            case "joined":
+            case "joined": {
+                // Version handshake — hard-reload if client is stale
+                const CURRENT_BUILD = "5dc4ec3";
+                if (data.build_version && data.build_version !== CURRENT_BUILD) {
+                    console.warn(`[Version Mismatch] Server=${data.build_version} Client=${CURRENT_BUILD}. Hard reloading...`);
+                    window.location.replace(window.location.pathname + "?_ts=" + Date.now());
+                    return;
+                }
                 this.role = data.role;
                 this.creator = data.creator;
                 this.opponent = data.opponent;
@@ -864,6 +871,7 @@ export class MultiplayerClient {
                     this.initWebRTC(true);
                 }
                 break;
+            }
 
             case "waiting_opponent":
                 this.showLobbyWaiting(data.remaining_seconds || 60);

@@ -536,11 +536,43 @@
 </head>
 <body>
     <script>
-        // Immediately purge any stale custom UI / neon elements cached by Telegram Webview
-        ['mk-multiplayer-root', 'mp-view-lobby', 'mp-view-hero-select', 'mp-view-versus', 'mp-view-victory', 'mp-combat-hud'].forEach(function(id) {
-            var el = document.getElementById(id);
-            if (el) el.remove();
-        });
+        // === NUCLEAR ANTI-NEON GUARD ===
+        // Kills any stale custom UI injected by a cached multiplayer_ui.js.
+        // Runs immediately + watches via MutationObserver for any late-injected elements.
+        (function() {
+            var FORBIDDEN_IDS = [
+                'mk-multiplayer-root','mp-view-lobby','mp-view-hero-select',
+                'mp-view-versus','mp-view-victory','mp-combat-hud','mp-fullscreen-overlay'
+            ];
+            var FORBIDDEN_CLASSES = ['mp-view-','mk-multiplayer','mp-overlay','neon-'];
+
+            function purgeNeonElements() {
+                FORBIDDEN_IDS.forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) { console.warn('[GUARD] Removed stale neon element:', id); el.remove(); }
+                });
+                FORBIDDEN_CLASSES.forEach(function(cls) {
+                    document.querySelectorAll('[class*="' + cls + '"]').forEach(function(el) {
+                        console.warn('[GUARD] Removed stale neon class element:', el.className);
+                        el.remove();
+                    });
+                });
+            }
+
+            // 1. Run immediately
+            purgeNeonElements();
+
+            // 2. Watch for any dynamic injections
+            var observer = new MutationObserver(function(mutations) {
+                for (var i = 0; i < mutations.length; i++) {
+                    if (mutations[i].addedNodes.length > 0) {
+                        purgeNeonElements();
+                        break;
+                    }
+                }
+            });
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+        })();
     </script>
     <!-- BINARY RETRO SPLASH SCREEN (PURE BLACK & PUMPKIN ORANGE) -->
     <div id="splash-screen">
