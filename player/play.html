@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0d0e14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:,">
+    <title>Immortal Combat - Mobile Player</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <!-- Telegram Mini App WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --side-btn-width: 74px;
+            --main-pad-height: 160px;
+            --controls-panel-height: 215px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: #050202;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            color: #e0e2ec;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #app-container {
+            width: 100%;
+            max-width: 480px;
+            height: 100%;
+            height: 100dvh;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            background: radial-gradient(circle at 50% 25%, #1c100a 0%, #0c0705 60%, #030101 100%);
+            position: relative;
+            box-shadow: 0 0 45px rgba(0, 0, 0, 0.95), 0 0 1px rgba(220, 180, 80, 0.3);
+            overflow: hidden;
+        }
+
+        /* --- SCREEN CONTAINER: PRESERVES 352:416 RATIO & FITS BY WIDTH --- */
+        #screen-wrapper {
+            width: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            background: radial-gradient(circle at 50% 50%, #150a06 0%, #080403 70%, #000000 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            border-bottom: 2px solid rgba(220, 180, 80, 0.22);
+            overflow: hidden;
+        }
+
+        #screen-container {
+            width: auto;
+            height: auto;
+            aspect-ratio: 352 / 416;
+            max-height: 100%;
+            max-width: 100%;
+            margin: auto;
+            position: relative;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 35px rgba(0, 0, 0, 0.95), 0 0 1px rgba(220, 180, 80, 0.35);
+        }
+
+        #display {
+            width: 100%;
+            height: 100%;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            background-color: #000;
+        }
+
+        #display:focus {
+            outline: none;
+        }
+
+        /* --- BINARY RETRO SPLASH SCREEN (PURE BLACK & PUMPKIN ORANGE) --- */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #000000;
+            z-index: 99999;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        #splash-screen.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .splash-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .progress-bar-wrap {
+            width: 320px;
+            max-width: 85vw;
+            height: 18px;
+            background: #000000;
+            border: 3px solid #ff7518;
+            border-radius: 0;
+            margin: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        #progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: #ff7518;
+            border-radius: 0;
+            transition: width 0.1s linear;
+        }
+
+        /* --- IMMORTAL COMBAT RETRO CONTROLS PANEL (ARCADE DECK) --- */
+        .mobile-controls-panel {
+            flex: 0 0 auto;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+            background: linear-gradient(180deg, #1b120c 0%, #110b07 40%, #080504 100%);
+            border-top: 2px solid rgba(220, 180, 80, 0.35);
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8), 0 -4px 20px rgba(0, 0, 0, 0.7);
+            position: relative;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        /* --- IMMORTAL COMBAT STONE/BRONZE 3D BEVELED BUTTON DESIGN CODE --- */
+        .btn-mk {
+            position: relative;
+            outline: none;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, #2c251b 0%, #1c1711 52%, #110e0a 100%);
+            color: #e5c687;
+            border-top: 1.5px solid rgba(220, 185, 110, 0.45);
+            border-left: 1px solid rgba(180, 145, 80, 0.25);
+            border-right: 1.5px solid rgba(0, 0, 0, 0.65);
+            border-bottom: 2.5px solid rgba(0, 0, 0, 0.85);
+            box-shadow: 
+                0 3px 0 #050403,
+                0 5px 10px rgba(0, 0, 0, 0.85),
+                inset 0 1px 0 rgba(240, 210, 140, 0.22);
+            transition: transform 0.04s ease-out, box-shadow 0.04s ease-out, background 0.04s ease-out, color 0.04s ease-out;
+            -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
+        }
+
+        /* Active / Pressed state - Burning Amber / Golden Glow */
+        .btn-mk:active, .btn-mk.active {
+            transform: translateY(2px);
+            box-shadow: 
+                0 1px 0 #050403,
+                0 2px 4px rgba(0, 0, 0, 0.9),
+                inset 0 2px 5px rgba(0, 0, 0, 0.8),
+                0 0 14px rgba(229, 198, 135, 0.75);
+            background: linear-gradient(180deg, #3a2e1d 0%, #241c10 100%);
+            color: #fff2b8;
+            text-shadow: 0 0 10px rgba(255, 230, 140, 0.95), 0 0 18px rgba(212, 175, 55, 0.7);
+        }
+
+        /* --- ON-SCREEN INTERACTIVE SOFTKEY ICONS (LSK / RSK) --- */
+        .on-screen-softkey {
+            position: absolute;
+            bottom: 0;
+            width: 27%;
+            height: 14%;
+            z-index: 20;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            outline: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .softkey-left {
+            left: 0;
+        }
+
+        .softkey-right {
+            right: 0;
+        }
+
+        /* Glowing touch ripple/halo matching MK Golden/Bronze button design code */
+        .softkey-pulse {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(229, 198, 135, 0);
+            background: radial-gradient(circle, rgba(229, 198, 135, 0.45) 0%, rgba(180, 140, 60, 0.15) 65%, transparent 100%);
+            opacity: 0;
+            transform: scale(0.75);
+            transition: opacity 0.08s ease, transform 0.08s ease, border-color 0.08s ease;
+            pointer-events: none;
+        }
+
+        .on-screen-softkey:active .softkey-pulse,
+        .on-screen-softkey.active .softkey-pulse {
+            opacity: 1;
+            transform: scale(1.18);
+            border-color: rgba(229, 198, 135, 0.9);
+            box-shadow: 0 0 16px rgba(229, 198, 135, 0.85);
+        }
+
+        /* --- MAIN COMBAT PAD ROW: LEFT 8-WAY D-PAD + RIGHT 2x2 COMBAT KEYPAD --- */
+        .main-pad-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            width: 100%;
+            max-width: 360px;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+
+        /* --- 1. LEFT SIDE: 8-DIRECTIONAL TACTILE D-PAD (TOUCH & GLIDE PAD) --- */
+        .dpad-8-grid {
+            width: var(--main-pad-height, 160px);
+            height: var(--main-pad-height, 160px);
+            aspect-ratio: 1 / 1;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 4px;
+            background: #080706;
+            padding: 6px;
+            border-radius: 20px;
+            border: 2px solid #3d3120;
+            box-shadow: 
+                0 6px 18px rgba(0, 0, 0, 0.95),
+                inset 0 2px 6px rgba(0, 0, 0, 0.85);
+            touch-action: none;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .dpad-btn {
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .dpad-card {
+            font-size: 1.25em;
+            font-weight: 900;
+        }
+
+        .dpad-diag {
+            font-size: 1.05em;
+            font-weight: 800;
+            opacity: 0.88;
+        }
+
+        .dpad-center-hub {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #1a150e 0%, #0d0a07 100%);
+            border-radius: 50%;
+            border: 1px solid rgba(180, 145, 80, 0.25);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .dpad-center-dimple {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 40% 35%, #3a2e1d 0%, #15110b 100%);
+            border: 1px solid rgba(220, 185, 110, 0.35);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+        }
+
+        /* --- 2. RIGHT SIDE: COMBAT KEYPAD (BUTTONS A, B, D) --- */
+        .combat-4-grid,
+        .combat-grid {
+            width: var(--main-pad-height, 160px);
+            height: var(--main-pad-height, 160px);
+            aspect-ratio: 1 / 1;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 8px;
+            background: #080706;
+            padding: 7px;
+            border-radius: 20px;
+            border: 2px solid #3d3120;
+            box-shadow: 
+                0 6px 18px rgba(0, 0, 0, 0.95),
+                inset 0 2px 6px rgba(0, 0, 0, 0.85);
+            touch-action: none;
+            flex-shrink: 0;
+            box-sizing: border-box;
+        }
+
+        .combat-btn {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+
+        .combat-btn-wide {
+            grid-column: 1 / -1;
+        }
+
+        .combat-digit {
+            font-size: 1.8em;
+            font-weight: 900;
+            line-height: 1;
+            color: #e5c687;
+            user-select: none;
+            -webkit-user-select: none;
+            display: block;
+        }
+
+        .combat-btn:active .combat-digit,
+        .combat-btn.active .combat-digit {
+            color: #fff2b8;
+            text-shadow: 0 0 12px rgba(255, 230, 140, 0.95), 0 0 20px rgba(212, 175, 55, 0.7);
+        }
+
+        /* Small screens */
+        @media (max-width: 360px) {
+            :root {
+                --side-btn-width: 62px;
+                --main-pad-height: 144px;
+                --controls-panel-height: 195px;
+            }
+            .main-pad-row {
+                max-width: 320px;
+                gap: 10px;
+            }
+            .dpad-8-grid {
+                width: 144px;
+                height: 144px;
+                gap: 3px;
+                padding: 5px;
+                border-radius: 16px;
+            }
+            .dpad-card {
+                font-size: 1.1em;
+            }
+            .dpad-diag {
+                font-size: 0.95em;
+            }
+            .combat-4-grid,
+            .combat-grid {
+                width: 144px;
+                height: 144px;
+                gap: 6px;
+                padding: 6px;
+                border-radius: 16px;
+            }
+            .combat-digit {
+                font-size: 1.5em;
+            }
+        }
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.85);
+        }
+
+        /* Small screens */
+        @media (max-width: 360px) {
+            :root {
+                --side-btn-width: 62px;
+                --main-pad-height: 144px;
+                --controls-panel-height: 195px;
+            }
+            .main-pad-row {
+                max-width: 320px;
+                gap: 10px;
+            }
+            .joystick-zone {
+                width: 144px;
+                height: 144px;
+            }
+            .joystick-thumb {
+                width: 48px;
+                height: 48px;
+            }
+            .thumb-dimple {
+                width: 18px;
+                height: 18px;
+            }
+            .combat-4-grid,
+            .combat-grid {
+                width: 144px;
+                height: 144px;
+                gap: 7px;
+                padding: 6px;
+                border-radius: 16px;
+            }
+            .combat-digit {
+                font-size: 1.45em;
+            }
+        }
+
+        /* Landscape adjustments if rotated */
+        @media (orientation: landscape) {
+            #app-container {
+                max-width: 100%;
+                max-height: 100%;
+                flex-direction: row;
+                border-radius: 0;
+            }
+            #screen-wrapper {
+                height: 100%;
+                width: auto;
+                max-height: 100%;
+                flex: 0 0 auto;
+                border-bottom: none;
+                border-right: 2px solid rgba(220, 180, 80, 0.22);
+            }
+            #screen-container {
+                height: 100%;
+                width: auto;
+                aspect-ratio: 352 / 416;
+                max-height: 100%;
+                max-width: calc(100vh * (352 / 416));
+            }
+            .mobile-controls-panel {
+                flex: 1;
+                height: 100%;
+                border-top: none;
+                overflow-y: auto;
+            }
+        }
+
+        /* Laptop / MacBook / desktop: no on-screen pad. The native 352:416 game fits the window. */
+        @media (hover: hover) and (pointer: fine) {
+            :root {
+                --controls-panel-height: 0px;
+            }
+
+            #app-container {
+                max-width: none;
+                width: 100%;
+                height: 100%;
+                height: 100dvh;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                box-shadow: none;
+                background: radial-gradient(circle at 50% 30%, #1f110a 0%, #0d0705 60%, #000000 100%);
+            }
+
+            #screen-wrapper {
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                flex: 1 1 auto;
+                border: none;
+                background: transparent;
+            }
+
+            #screen-container {
+                height: min(96vh, 96dvh);
+                width: auto;
+                max-width: 96vw;
+                aspect-ratio: 352 / 416;
+                margin: auto;
+                border-radius: 8px;
+                box-shadow: 0 0 50px rgba(0, 0, 0, 0.95), 0 0 2px rgba(220, 180, 80, 0.45);
+            }
+
+            .mobile-controls-panel {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Immediately purge any stale custom UI / neon elements cached by Telegram Webview
+        ['mk-multiplayer-root', 'mp-view-lobby', 'mp-view-hero-select', 'mp-view-versus', 'mp-view-victory', 'mp-combat-hud'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.remove();
+        });
+    </script>
+    <!-- BINARY RETRO SPLASH SCREEN (PURE BLACK & PUMPKIN ORANGE) -->
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="progress-bar-wrap">
+                <div id="progress-bar-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container">
+        <!-- 3:4 SCREEN CONTAINER (FIT BY WIDTH) -->
+        <div id="screen-wrapper">
+            <div id="screen-container">
+                <canvas id="display" tabindex="0"></canvas>
+                <!-- On-Screen Softkeys: Interactive Touch Targets Directly Over in-Game Left & Right Icons -->
+                <button id="screen-btn-lsk" class="ctrl-btn on-screen-softkey softkey-left" data-key="F1" aria-label="Left Soft Key / Options / Info">
+                    <span class="softkey-pulse"></span>
+                </button>
+                <button id="screen-btn-rsk" class="ctrl-btn on-screen-softkey softkey-right" data-key="F2" aria-label="Right Soft Key / Back / Pause">
+                    <span class="softkey-pulse"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- LOWER CONTROLS PANEL (IMMORTAL COMBAT PITCH BLACK ARCHITECTURE) -->
+        <div class="mobile-controls-panel">
+            <!-- MAIN COMBAT CONTROLS: 8-WAY D-PAD (LEFT) + A/B/C/D RETRO KEYPAD (RIGHT) -->
+            <div class="main-pad-row">
+                <!-- Left: 8-Directional Tactile D-Pad (Touch & Smooth Glide Pad) -->
+                <div class="dpad-8-grid" id="dpad-grid" aria-label="8-Directional Movement Pad">
+                    <!-- Row 1: Up-Left, Up, Up-Right -->
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="up-left" aria-label="Jump Up-Left">↖</button>
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="up" aria-label="Jump Up">▲</button>
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="up-right" aria-label="Jump Up-Right">↗</button>
+
+                    <!-- Row 2: Left, Center Neutral Core, Right -->
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="left" aria-label="Move Left">◄</button>
+                    <div class="dpad-center-hub" data-dir="center" aria-label="Neutral Center">
+                        <div class="dpad-center-dimple"></div>
+                    </div>
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="right" aria-label="Move Right">►</button>
+
+                    <!-- Row 3: Down-Left, Down, Down-Right -->
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-left" aria-label="Crouch Down">↙</button>
+                    <button class="dpad-btn btn-mk dpad-card" data-dir="down" aria-label="Crouch Down">▼</button>
+                    <button class="dpad-btn btn-mk dpad-diag" data-dir="down-right" aria-label="Crouch Down">↘</button>
+                </div>
+
+                <!-- Right: Combat Action Keypad. A (Punch / Select) is the wide thumb button. -->
+                <div class="combat-grid" id="combat-grid" aria-label="Combat Attack Keypad">
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit7,Numpad7,KeyK" aria-label="Button B (Kick)">
+                        <span class="combat-digit">B</span>
+                    </button>
+                    <button class="ctrl-btn btn-mk combat-btn" data-key="Digit9,Numpad9,KeyL,KeyU,KeyO" aria-label="Button D (Block / Special)">
+                        <span class="combat-digit">D</span>
+                    </button>
+                    <button class="ctrl-btn btn-mk combat-btn combat-btn-wide" data-key="Digit5,Numpad5,KeyJ,Space,Enter" aria-label="Button A (Punch / Select)">
+                        <span class="combat-digit">A</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 100% Pure Native JavaScript Engine Entrypoint -->
+    <script type="module">
+        window.addEventListener('error', (e) => console.error("Global Error:", e.message, e.filename, e.lineno, e.error));
+        window.addEventListener('unhandledrejection', (e) => console.error("Unhandled Rejection:", e.reason));
+
+        // Telegram Mini App Auto-Ready & Expanded Mode (middle mode)
+        function initTelegramWebApp() {
+            if (!window.Telegram?.WebApp) return;
+            try {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+
+                // 1. Expand to maximum height while preserving standard Telegram navigation header
+                tg.expand();
+
+                // 2. Disable vertical swipes to prevent pull-to-close dismiss during game taps
+                if (typeof tg.disableVerticalSwipes === 'function') {
+                    try { tg.disableVerticalSwipes(); } catch (_) {}
+                }
+
+                // 3. Lock orientation to portrait if supported
+                if (typeof tg.lockOrientation === 'function') {
+                    try { tg.lockOrientation('portrait'); } catch (_) {}
+                }
+
+                // 4. Immersive theme colors
+                try {
+                    if (tg.setHeaderColor) tg.setHeaderColor("#000000");
+                    if (tg.setBackgroundColor) tg.setBackgroundColor("#000000");
+                    if (tg.setBottomBarColor) tg.setBottomBarColor("#000000");
+                } catch (_) {}
+
+                // 5. Viewport change safety handler: keep expanded
+                tg.onEvent?.('viewportChanged', () => {
+                    if (!tg.isExpanded) {
+                        try { tg.expand(); } catch (_) {}
+                    }
+                });
+
+                console.log("Telegram Mini App SDK loaded in Expanded Mode (top navigation header preserved)!");
+            } catch (tgErr) {
+                console.warn("Telegram WebApp init warning:", tgErr);
+            }
+        }
+
+        initTelegramWebApp();
+
+        // Safety handler: Ensure expanded on first user gesture without forcing full-screen takeover
+        const ensureExpandedOnGesture = () => {
+            if (window.Telegram?.WebApp) {
+                const tg = window.Telegram.WebApp;
+                if (!tg.isExpanded) {
+                    try { tg.expand(); } catch (_) {}
+                }
+            }
+        };
+        window.addEventListener('pointerdown', ensureExpandedOnGesture, { passive: true });
+        window.addEventListener('touchstart', ensureExpandedOnGesture, { passive: true });
+        window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
+
+        // Load Immortal Combat pure JS engine
+        const APP_BUILD_HASH = "v20261031_pure_native_v3";
+        import(`./js/game_pure.js?v=${APP_BUILD_HASH}`).catch(err => {
+            console.error("Engine Start Error:", err);
+            window.__lastErr = err.message + '\n' + err.stack;
+        });
+    </script>
+</body>
+</html>

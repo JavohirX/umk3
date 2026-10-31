@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 import uuid
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
@@ -41,13 +42,18 @@ dp = Dispatcher()
 
 
 def get_player_url(params: str = "") -> str:
-    """Builds clean Telegram WebApp URL for player entry."""
+    """Builds clean Telegram WebApp URL for player entry with guaranteed zero-caching."""
     base_url = WEBAPP_URL.rstrip('/')
-    player_base = base_url if base_url.endswith("/player") else f"{base_url}/player"
-    cache_tag = "v=20261031_pure_native_v2"
+    if "/player" in base_url:
+        root_base = base_url.split("/player")[0]
+    else:
+        root_base = base_url
+    player_base = f"{root_base}/player/play.html"
+    ts = int(time.time())
+    cache_tag = f"v=20261031_pure_v3&_ts={ts}"
     all_params = f"{params}&{cache_tag}" if params else cache_tag
-    delim = "&" if "?" in player_base else "?"
-    return f"{player_base}/{delim}{all_params.lstrip('?')}"
+    delim = "?"
+    return f"{player_base}{delim}{all_params.lstrip('?')}"
 
 
 def format_leaderboard_text(chat_id: str, chat_title: str = "This Group") -> str:

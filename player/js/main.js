@@ -2,7 +2,7 @@ import { loadAllAssets } from './assets.js';
 import { Graphics, Display } from './j2me/graphics.js';
 import { Manager } from './j2me/audio.js';
 import { initEngine, SDKMIDlet, CoreEngine } from './engine/umk3.js';
-import { MultiplayerClient } from './network.js';
+import { MultiplayerClient } from './network_pure.js';
 import { stepMatchEnd } from './match_end.js';
 
 let midlet = null;
