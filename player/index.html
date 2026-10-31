@@ -9,6 +9,9 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:,">
     <title>Immortal Combat - Mobile Player</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <!-- Telegram Mini App WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -532,6 +535,13 @@
     </style>
 </head>
 <body>
+    <script>
+        // Immediately purge any stale custom UI / neon elements cached by Telegram Webview
+        ['mk-multiplayer-root', 'mp-view-lobby', 'mp-view-hero-select', 'mp-view-versus', 'mp-view-victory', 'mp-combat-hud'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.remove();
+        });
+    </script>
     <!-- BINARY RETRO SPLASH SCREEN (PURE BLACK & PUMPKIN ORANGE) -->
     <div id="splash-screen">
         <div class="splash-content">
@@ -657,7 +667,7 @@
         window.addEventListener('click', ensureExpandedOnGesture, { passive: true });
 
         // Load Immortal Combat pure JS engine
-        const APP_BUILD_HASH = "v20261031_pure_native_v1";
+        const APP_BUILD_HASH = "v20261031_pure_native_v2";
         import(`./js/main.js?v=${APP_BUILD_HASH}`).catch(err => {
             console.error("Engine Start Error:", err);
             window.__lastErr = err.message + '\n' + err.stack;
