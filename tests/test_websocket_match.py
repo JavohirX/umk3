@@ -310,14 +310,7 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         self.assertEqual(s1["type"], "match_start")
         self.assertEqual(s1["stage"], "hero_select")
 
-        # 2. P1 hovers Scorpion (0)
-        await ws1.send_json({"type": "hero_hover", "hero_id": 0})
-        p2_hover = await ws2.receive_json()
-        self.assertEqual(p2_hover["type"], "peer_hero_hover")
-        self.assertEqual(p2_hover["from_role"], "p1")
-        self.assertEqual(p2_hover["hero_id"], 0)
-
-        # 3. P1 locks Scorpion (0)
+        # 2. Independent character selection: P1 locks Scorpion (0)
         await ws1.send_json({"type": "hero_lock", "hero_id": 0})
         p1_lock_recv1 = await ws1.receive_json()
         p1_lock_recv2 = await ws2.receive_json()

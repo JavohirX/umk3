@@ -378,15 +378,6 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                 # -------------------------------------------------------------
                 # 2. HERO SELECTION & LOCK-IN SYNCHRONIZATION
                 # -------------------------------------------------------------
-                elif msg_type == "hero_hover":
-                    if room:
-                        hero_id = int(data.get("hero_id", 0))
-                        from_role = "p1" if current_player_id == room.creator_id else "p2"
-                        await room.broadcast({
-                            "type": "peer_hero_hover",
-                            "from_role": from_role,
-                            "hero_id": hero_id
-                        }, exclude_id=current_player_id)
 
                 elif msg_type in ("hero_lock", "select_hero"):
                     if room:

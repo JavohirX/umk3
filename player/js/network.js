@@ -842,10 +842,6 @@ export class MultiplayerClient {
         }
     }
 
-    sendHeroHover(heroId) {
-        this.sendPacket({ type: "hero_hover", hero_id: heroId });
-    }
-
     sendHeroLock(heroId) {
         this.sendPacket({ type: "hero_lock", hero_id: heroId });
     }
@@ -896,9 +892,6 @@ export class MultiplayerClient {
                         this.onMatchStartCallback(data);
                     }
                 }
-                break;
-
-            case "peer_hero_hover":
                 break;
 
             case "peer_hero_lock":
