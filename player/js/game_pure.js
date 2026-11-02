@@ -770,14 +770,18 @@ function setupCanvas() {
             const startX = CoreEngine.val_int_bT || 0;
             const startY = CoreEngine.val_int_bU || 0;
             const size = CoreEngine.val_int_bQ || 40;
+            const pad = Math.floor((CoreEngine.val_int_bR || 0) / 2); // half the gap, so neighbouring cells never overlap
 
             if (typeof PatternTable !== 'undefined' && PatternTable.val_arr_arr_byte_a) {
                 for (let i = 0; i < PatternTable.val_arr_arr_byte_a.length; i++) {
                     const entry = PatternTable.val_arr_arr_byte_a[i];
-                    const px = (entry[2] || 0) + startX;
-                    const py = (entry[3] || 0) + startY;
-                    if (cx >= px - 6 && cx <= px + size + 6 && cy >= py - 6 && cy <= py + size + 6) {
-                        CoreEngine.val_byte_n = i;
+                    // Entries hold grid columns/rows; the engine draws them at exec_a_byte_to_int (cell + gap) spacing
+                    const px = CoreEngine.exec_a_byte_to_int(entry[2]) + startX;
+                    const py = CoreEngine.exec_a_byte_to_int(entry[3]) + startY;
+                    if (cx >= px - pad && cx <= px + size + pad && cy >= py - pad && cy <= py + size + pad) {
+                        // Move the native cursor (name + preview), then the engine's select rules apply:
+                        // a fighter confirms, "?" spins the roulette, a locked fighter does nothing
+                        CoreEngine.exec_e_byte_to_void(i);
                         sendKeyEvent(-5, true);
                         setTimeout(() => sendKeyEvent(-5, false), 90);
                         return;
@@ -926,7 +930,9 @@ function startAnimationLoop() {
                             mpClient._heroSelected = true;
                             let hero = CoreEngine.exec_n_to_int();
                             if (hero < 0 || hero > 6) {
-                                hero = Math.floor(Math.random() * 7);
+                                // The "?" roulette normally settles on a real fighter first; if not, use the
+                                // engine's own pick, which skips fighters that are still locked
+                                hero = PatternTable.val_arr_arr_byte_a[CoreEngine.exec_c_to_byte()][0];
                             }
                             mpClient._heroId = hero;
                             console.log(`[Multiplayer] Local player locked hero: ${hero}`);
