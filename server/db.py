@@ -165,7 +165,7 @@ def finish_match(match_id: str, winner_id: Optional[str], finish_reason: str) ->
         if match["status"] in ("COMPLETED", "CANCELLED", "ABANDONED"):
             return match  # Already closed
 
-        status = "COMPLETED" if winner_id else "ABANDONED"
+        status = "COMPLETED" if winner_id or finish_reason == "DRAW" else "ABANDONED"
         conn.execute("""
             UPDATE matches
             SET status = ?, winner_id = ?, finish_reason = ?, ended_at = ?

@@ -412,5 +412,254 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         await ws2.close()
 
 
+    async def test_whoever_chooses_hero_first_is_assigned_p1(self):
+        """
+        Verify that whoever chooses a hero FIRST is assigned in the network as Player 1 (P1),
+        and whoever chooses SECOND is assigned as Player 2 (P2), regardless of who created the room.
+        """
+        match_id = "test_role_order_01"
+        chat_id = "group_order"
+
+        # 1. ws1 (creator) and ws2 (joiner) connect
+        ws1 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws1.send_json({"type": "join", "user_id": "user_creator", "user_name": "Creator", "chat_id": chat_id})
+        await ws1.receive_json() # joined
+        await ws1.receive_json() # waiting
+
+        ws2 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2.send_json({"type": "join", "user_id": "user_joiner", "user_name": "Joiner", "chat_id": chat_id})
+        await ws2.receive_json() # joined
+        await ws1.receive_json() # match_start / hero_select
+        await ws2.receive_json() # match_start / hero_select
+
+        # 2. Joiner (ws2) locks hero FIRST (hero_id=5, Liu Kang)
+        await ws2.send_json({"type": "hero_lock", "hero_id": 5})
+        lock1_ws1 = await ws1.receive_json()
+        lock1_ws2 = await ws2.receive_json()
+
+        # Both receive peer_hero_lock showing ws2 was assigned 'p1'
+        self.assertEqual(lock1_ws1["type"], "peer_hero_lock")
+        self.assertEqual(lock1_ws1["from_role"], "p1")
+        self.assertEqual(lock1_ws1["assigned_role"], "p1")
+        self.assertEqual(lock1_ws1["player_id"], "user_joiner")
+        self.assertEqual(lock1_ws1["hero_id"], 5)
+
+        self.assertEqual(lock1_ws2["type"], "peer_hero_lock")
+        self.assertEqual(lock1_ws2["from_role"], "p1")
+        self.assertEqual(lock1_ws2["assigned_role"], "p1")
+        self.assertEqual(lock1_ws2["player_id"], "user_joiner")
+        self.assertEqual(lock1_ws2["hero_id"], 5)
+
+        # 3. Creator (ws1) locks hero SECOND (hero_id=2, Sonya)
+        await ws1.send_json({"type": "hero_lock", "hero_id": 2})
+        lock2_ws1 = await ws1.receive_json()
+        lock2_ws2 = await ws2.receive_json()
+
+        # Both receive peer_hero_lock showing ws1 was assigned 'p2'
+        self.assertEqual(lock2_ws1["from_role"], "p2")
+        self.assertEqual(lock2_ws1["assigned_role"], "p2")
+        self.assertEqual(lock2_ws1["player_id"], "user_creator")
+        self.assertEqual(lock2_ws1["hero_id"], 2)
+
+        # 4. versus_start triggers with P1=Joiner (hero 5) and P2=Creator (hero 2)
+        vs1 = await ws1.receive_json()
+        vs2 = await ws2.receive_json()
+        self.assertEqual(vs1["type"], "versus_start")
+        self.assertEqual(vs2["type"], "versus_start")
+
+        # Verify P1 is ws2 (user_joiner, hero 5) and P2 is ws1 (user_creator, hero 2)
+        self.assertEqual(vs1["p1"]["id"], "user_joiner")
+        self.assertEqual(vs1["p1"]["hero_id"], 5)
+        self.assertEqual(vs1["p2"]["id"], "user_creator")
+        self.assertEqual(vs1["p2"]["hero_id"], 2)
+
+        await ws1.close()
+        await ws2.close()
+
+    async def _connect_and_lock(self, match_id, chat_id, p1_hero, p2_hero, p1_control=1, p2_control=1):
+        """
+        Creator ('creator', ws1) and joiner ('joiner', ws2) connect; the joiner locks first so it
+        fights as P1 with p1_hero. Drains both sockets up to versus_start.
+        """
+        ws1 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws1.send_json({"type": "join", "user_id": "creator", "user_name": "Creator", "chat_id": chat_id})
+        await ws1.receive_json()  # joined
+        await ws1.receive_json()  # waiting
+
+        ws2 = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2.send_json({"type": "join", "user_id": "joiner", "user_name": "Joiner", "chat_id": chat_id})
+        await ws2.receive_json()  # joined
+        await ws1.receive_json()  # match_start
+        await ws2.receive_json()  # match_start
+
+        await ws2.send_json({"type": "hero_lock", "hero_id": p1_hero, "control": p1_control})
+        await ws1.receive_json()  # peer_hero_lock
+        await ws2.receive_json()  # peer_hero_lock
+        await ws1.send_json({"type": "hero_lock", "hero_id": p2_hero, "control": p2_control})
+        await ws1.receive_json()  # peer_hero_lock
+        await ws2.receive_json()  # peer_hero_lock
+        vs1 = await ws1.receive_json()
+        vs2 = await ws2.receive_json()
+        return ws1, ws2, vs1, vs2
+
+    async def test_versus_start_shares_one_stage_for_both_players(self):
+        """Mirror match: both phones must get the same arena index, independent of the heroes."""
+        ws1, ws2, vs1, vs2 = await self._connect_and_lock("test_stage_01", "group_stage", 3, 3)
+
+        self.assertEqual(vs1["type"], "versus_start")
+        self.assertIn(vs1["stage"], range(5))
+        self.assertEqual(vs1["stage"], vs2["stage"])
+
+        await ws1.close()
+        await ws2.close()
+
+    async def test_reconnect_mid_bout_resumes_without_restarting_hero_select(self):
+        """
+        A fighter who drops mid-bout and rejoins gets the same versus setup back, keeps their
+        lock-order side, and the player who stayed is not sent back to hero select.
+        """
+        match_id = "test_reconnect_bout_01"
+        chat_id = "group_reconnect"
+        ws1, ws2, vs1, _ = await self._connect_and_lock(match_id, chat_id, 4, 6)
+        await ws2.send_json({"type": "round_win", "winner_role": "p1"})
+        await ws1.receive_json()  # round_next
+        await ws2.receive_json()  # round_next
+        await ws2.close()  # the joiner, P1 by lock order, drops mid-bout
+
+        disc = await ws1.receive_json()
+        self.assertEqual(disc["type"], "opponent_disconnected")
+
+        ws2_new = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2_new.send_json({"type": "join", "user_id": "joiner", "user_name": "Joiner", "chat_id": chat_id})
+
+        joined = await ws2_new.receive_json()
+        self.assertEqual(joined["type"], "joined")
+        self.assertEqual(joined["role"], "p1")  # side follows lock order, not room creation
+
+        resume = await ws2_new.receive_json()
+        self.assertEqual(resume["type"], "versus_start")
+        self.assertTrue(resume["resume"])
+        self.assertEqual(resume["p1"]["id"], "joiner")
+        self.assertEqual(resume["p1"]["hero_id"], 4)
+        self.assertEqual(resume["p2"]["hero_id"], 6)
+        self.assertEqual(resume["stage"], vs1["stage"])
+        self.assertEqual((resume["p1_rounds"], resume["p2_rounds"]), (1, 0))
+
+        recon = await ws1.receive_json()
+        self.assertEqual(recon["type"], "opponent_reconnected")
+
+        # Nothing else (e.g. a match_start that resets hero select) is queued for the staying player
+        await ws1.send_json({"type": "ping", "time": 1})
+        self.assertEqual((await ws1.receive_json())["type"], "pong")
+
+        # The stayer hands over its view of the fight; the rejoiner says when it is fighting again
+        await ws1.send_json({"type": "state_snapshot", "p1_hp": 55, "p2_hp": 30, "round_timer": 61000})
+        snapshot = await ws2_new.receive_json()
+        self.assertEqual(snapshot["type"], "state_snapshot")
+        self.assertEqual((snapshot["p1_hp"], snapshot["p2_hp"], snapshot["round_timer"]), (55, 30, 61000))
+        self.assertEqual(snapshot["from_role"], "p2")
+        await ws2_new.send_json({"type": "bout_ready"})
+        self.assertEqual((await ws1.receive_json())["type"], "bout_ready")
+
+        await ws2_new.close()
+        await ws1.close()
+
+    async def test_versus_start_carries_each_players_control_type(self):
+        """Each fighter must use its own player's key layout on both phones."""
+        ws1, ws2, vs1, vs2 = await self._connect_and_lock("test_control_01", "group_ctl", 2, 3, p1_control=0, p2_control=1)
+
+        self.assertEqual(vs1["p1"]["control"], 0)
+        self.assertEqual(vs1["p2"]["control"], 1)
+        self.assertEqual(vs2["p1"]["control"], 0)
+
+        await ws1.close()
+        await ws2.close()
+
+    async def test_round_win_ignored_while_opponent_disconnected(self):
+        """The player who stayed cannot score rounds against an opponent who dropped."""
+        match_id = "test_idle_round_01"
+        ws1, ws2, _, _ = await self._connect_and_lock(match_id, "group_idle", 0, 1)
+        await ws2.close()
+        self.assertEqual((await ws1.receive_json())["type"], "opponent_disconnected")
+
+        await ws1.send_json({"type": "round_win", "winner_role": "p2"})
+        await ws1.send_json({"type": "ping", "time": 1})
+        self.assertEqual((await ws1.receive_json())["type"], "pong")
+
+        room = coordinator.rooms[match_id]
+        self.assertEqual((room.p1_rounds, room.p2_rounds), (0, 0))
+        await ws1.close()
+
+    async def test_two_drawn_rounds_end_the_match_as_a_draw(self):
+        """Time-outs on equal health score both sides, as the engine does; 2-2 is a drawn match."""
+        match_id = "test_draw_01"
+        chat_id = "group_draw"
+        ws1, ws2, _, _ = await self._connect_and_lock(match_id, chat_id, 0, 1)
+
+        await ws2.send_json({"type": "round_win", "winner_role": "draw"})
+        r1 = await ws1.receive_json()
+        await ws2.receive_json()
+        self.assertEqual(r1["type"], "round_next")
+        self.assertEqual((r1["p1_rounds"], r1["p2_rounds"]), (1, 1))
+
+        await ws2.send_json({"type": "round_win", "winner_role": "draw"})
+        end = await ws1.receive_json()
+        await ws2.receive_json()
+        self.assertEqual(end["type"], "match_ended")
+        self.assertIsNone(end["winner_id"])
+        self.assertEqual(end["reason"], "DRAW")
+
+        self.assertEqual(db.get_match(match_id)["status"], "COMPLETED")
+        for p in db.get_local_leaderboard(chat_id):
+            self.assertEqual((p["wins"], p["losses"], p["draws"]), (0, 0, 1))
+
+        await ws1.close()
+        await ws2.close()
+
+    async def test_rejoin_before_server_noticed_the_drop_replaces_the_socket(self):
+        """
+        A phone that reconnects while its old socket still looks open takes over that slot: the old
+        socket is closed and its late close must not start a forfeit against the reconnected player.
+        """
+        match_id = "test_replace_socket_01"
+        chat_id = "group_replace"
+        ws1, ws2, _, _ = await self._connect_and_lock(match_id, chat_id, 0, 1)
+
+        ws2_new = await self.client.ws_connect(f"/ws/match/{match_id}")
+        await ws2_new.send_json({"type": "join", "user_id": "joiner", "user_name": "Joiner", "chat_id": chat_id})
+        self.assertEqual((await ws2_new.receive_json())["type"], "joined")
+        self.assertEqual((await ws2_new.receive_json())["type"], "versus_start")
+        self.assertEqual((await ws1.receive_json())["type"], "opponent_reconnected")
+
+        # Let the old socket's close run through the server
+        await ws2.receive()
+        await asyncio.sleep(0.05)
+
+        await ws1.send_json({"type": "ping", "time": 1})
+        self.assertEqual((await ws1.receive_json())["type"], "pong")
+        room = coordinator.rooms[match_id]
+        self.assertEqual(room.disconnect_tasks, {})
+        self.assertIn("joiner", room.sockets)
+
+        await ws2_new.close()
+        await ws1.close()
+
+    async def test_hero_lock_after_versus_is_ignored(self):
+        """Once both heroes are locked, a late lock must not change heroes or re-broadcast versus."""
+        match_id = "test_late_lock_01"
+        ws1, ws2, _, _ = await self._connect_and_lock(match_id, "group_late", 0, 1)
+
+        await ws1.send_json({"type": "hero_lock", "hero_id": 5})
+        await ws1.send_json({"type": "ping", "time": 1})
+        self.assertEqual((await ws1.receive_json())["type"], "pong")
+
+        room = coordinator.rooms[match_id]
+        self.assertEqual(room.p1_hero, 0)
+        self.assertEqual(room.p2_hero, 1)
+
+        await ws1.close()
+        await ws2.close()
+
+
 if __name__ == "__main__":
     unittest.main()

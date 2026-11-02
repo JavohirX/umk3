@@ -4460,6 +4460,12 @@ export class CoreEngine {
     static val_int_dI = 0;
     static val_int_dJ = 0;
     static val_int_dK = 0;
+    // Online versus, null offline. While set, fighter C is a second human instead of the CPU:
+    //   p2Masks        - C's keypad masks, latched each frame like dI/dJ/dK -> dF/dG/dH
+    //   routeLocalBits - (bits, isDown) receives this phone's keypad mask changes instead of P1's masks
+    //   healthFromPeer - true on the follower phone: damage comes only from the authority's sync
+    //   stage, controlTypes [p1, p2] (val_int_bw values), resumeRounds [p1, p2] or null
+    static onlineVersus = null;
     static val_bool_an = false;
     static val_bool_ao = false;
     static val_bool_ap = false;
@@ -4777,7 +4783,9 @@ export class CoreEngine {
         }
     }
     getActiveComboByte() {
-        if ((this.facingDirectionFlag) === (0)) {
+        // Only the slot-0 fighter reads the keypad, except online where fighter C reads its own masks
+        let p2Masks = (CoreEngine.onlineVersus && (this) === (CoreEngine.val_coreengine_c)) ? CoreEngine.onlineVersus.p2Masks : null;
+        if ((this.facingDirectionFlag) === (0) || p2Masks) {
             let var3 = 0;
             if ((this.actorCurrentAnimIndex) === (1)) {
                 if ((this.playerSideIndex) === (0)) {
@@ -4796,9 +4804,9 @@ export class CoreEngine {
             for (let var4 = 0; (var4 < var1.length); var4++) {
                 let var2 = 0;
                 if (((((var4) !== (0) && (var4) !== (1)) && (var4) !== (2)) && (var4) !== (3))) {
-                    (var2 = CoreEngine.val_int_dH);
+                    (var2 = p2Masks ? p2Masks.dH : CoreEngine.val_int_dH);
                 } else {
-                    (var2 = CoreEngine.val_int_dF);
+                    (var2 = p2Masks ? p2Masks.dF : CoreEngine.val_int_dF);
                 }
                 if (((var1[var4] & var2)) !== (0)) {
                     return var4;
@@ -7219,6 +7227,10 @@ export class CoreEngine {
         return false;
     }
     exec_s_int_to_void(var1) {
+        // The follower phone shows hits but takes health only from the authority's sync, so both phones agree on KOs
+        if (CoreEngine.onlineVersus && CoreEngine.onlineVersus.healthFromPeer) {
+            return;
+        }
         if (((CoreEngine.exec_b_coreengine_to_coreengine(this)) === (null) || (CoreEngine.exec_b_coreengine_to_coreengine(this).currentHealth > 0))) {
             if ((this.characterId) === (6)) {
                 (var1 = Math.trunc(var1 / (2)));
@@ -8885,7 +8897,9 @@ export class CoreEngine {
                     if ((CoreEngine.val_coreengine_b) === (null)) {
                         let var33 = CoreEngine.val_int_dQ;
                         let var25 = 0;
-                        if ((CoreEngine.val_int_bw) === (1)) {
+                        // Online, each fighter keeps its own player's control type on both phones
+                        let bwB = CoreEngine.onlineVersus ? CoreEngine.onlineVersus.controlTypes[0] : CoreEngine.val_int_bw;
+                        if ((bwB) === (1)) {
                             (var25 = 0);
                         } else {
                             (var25 = 1);
@@ -9128,13 +9142,15 @@ export class CoreEngine {
                         if ((CoreEngine.val_coreengine_c) === (null)) {
                             let var4 = CoreEngine.val_int_dR;
                             let var3 = 0;
-                            if (CoreEngine.val_bool_am) {
+                            // Controller 0 is human input, 2 is the CPU; online C is the remote human
+                            if (CoreEngine.val_bool_am || CoreEngine.onlineVersus) {
                                 (var3 = 0);
                             } else {
                                 (var3 = 2);
                             }
                             let var2 = 0;
-                            if ((CoreEngine.val_int_bw) === (1)) {
+                            let bwC = CoreEngine.onlineVersus ? CoreEngine.onlineVersus.controlTypes[1] : CoreEngine.val_int_bw;
+                            if ((bwC) === (1)) {
                                 (var2 = 0);
                             } else {
                                 (var2 = 1);
@@ -9159,7 +9175,7 @@ export class CoreEngine {
             case 3:
             default:
                 (CoreEngine.val_int_ej = (CoreEngine.val_int_ej - CoreEngine.val_int_e));
-                if (((CoreEngine.val_bool_h && (CoreEngine.val_coreengine_b) !== (null)) && (CoreEngine.val_coreengine_b.scratchpadBuffer) !== (null))) {
+                if (((CoreEngine.val_bool_h && !CoreEngine.onlineVersus && (CoreEngine.val_coreengine_b) !== (null)) && (CoreEngine.val_coreengine_b.scratchpadBuffer) !== (null))) {
                     if (CoreEngine.val_bool_aD) {
                         (CoreEngine.val_coreengine_b.currentHealth = 100);
                     }
@@ -9801,6 +9817,10 @@ export class CoreEngine {
                 }
                 break;
             case 15:
+                // Online the bout ends here; the server announces the result instead of continue or ladder screens
+                if (CoreEngine.onlineVersus) {
+                    break;
+                }
                 if (CoreEngine.exec_x_to_bool()) {
                     (CoreEngine.val_bool_ax = true);
                 } else {
@@ -14080,6 +14100,15 @@ export class CoreEngine {
         (CoreEngine.val_int_dI = 0);
         (CoreEngine.val_int_dJ = 0);
         (CoreEngine.val_int_dK = (CoreEngine.val_int_dK & ~CoreEngine.val_int_dG));
+        let p2Masks = CoreEngine.onlineVersus && CoreEngine.onlineVersus.p2Masks;
+        if (p2Masks) {
+            p2Masks.dF = p2Masks.dI;
+            p2Masks.dG = p2Masks.dJ;
+            p2Masks.dH = p2Masks.dK;
+            p2Masks.dI = 0;
+            p2Masks.dJ = 0;
+            p2Masks.dK = (p2Masks.dK & ~p2Masks.dG);
+        }
         let var0 = false;
         if (((CoreEngine.val_int_dF & 32)) !== (0)) {
             (var0 = true);
@@ -16315,6 +16344,12 @@ export class CoreEngine {
                 (CoreEngine.val_int_dU = 0);
                 (CoreEngine.val_int_dV = 0);
                 (CoreEngine.val_int_dT = 0);
+                // Rejoining an online bout: continue from the server's round score ("ROUND n" counts on from it)
+                if (CoreEngine.onlineVersus && CoreEngine.onlineVersus.resumeRounds) {
+                    (CoreEngine.val_int_dU = CoreEngine.onlineVersus.resumeRounds[0]);
+                    (CoreEngine.val_int_dV = CoreEngine.onlineVersus.resumeRounds[1]);
+                    (CoreEngine.val_int_dT = (CoreEngine.val_int_dU + CoreEngine.val_int_dV));
+                }
                 if (CoreEngine.val_bool_am) {
                     (CoreEngine.val_int_eh = 0);
                 }
@@ -16327,6 +16362,9 @@ export class CoreEngine {
         (CoreEngine.val_int_dO = 0);
     }
     static exec_b_to_byte() {
+        if (CoreEngine.onlineVersus) {
+            return CoreEngine.onlineVersus.stage;
+        }
         if (CoreEngine.val_bool_am) {
             return (((CoreEngine.exec_a_int_int_to_int(0, 4)) << 24) >> 24);
         }
@@ -17594,8 +17632,32 @@ export class CoreEngine {
         }
     }
     static exec_g_int_to_void(var0) {
+        if (CoreEngine.onlineVersus && CoreEngine.onlineVersus.routeLocalBits) {
+            CoreEngine.onlineVersus.routeLocalBits(var0, true);
+            return;
+        }
         (CoreEngine.val_int_dI |= var0);
         (CoreEngine.val_int_dK |= var0);
+    }
+    // side 0 writes P1's masks (fighter B), side 1 writes fighter C's online masks
+    static applyInputBits(side, bits, isDown) {
+        if (side === 1) {
+            let masks = CoreEngine.onlineVersus && CoreEngine.onlineVersus.p2Masks;
+            if (!masks) return;
+            if (isDown) {
+                masks.dI |= bits;
+                masks.dK |= bits;
+            } else {
+                masks.dJ |= bits;
+            }
+            return;
+        }
+        if (isDown) {
+            (CoreEngine.val_int_dI |= bits);
+            (CoreEngine.val_int_dK |= bits);
+        } else {
+            (CoreEngine.val_int_dJ |= bits);
+        }
     }
     static exec_a_int_to_encodedtextbuffer(var0) {
         let var1 = null;
@@ -17837,6 +17899,10 @@ export class CoreEngine {
         (CoreEngine.val_spritepartsequence_p = null);
     }
     static exec_j_int_to_void(var0) {
+        if (CoreEngine.onlineVersus && CoreEngine.onlineVersus.routeLocalBits) {
+            CoreEngine.onlineVersus.routeLocalBits(var0, false);
+            return;
+        }
         (CoreEngine.val_int_dJ |= var0);
     }
     static exec_ai_to_void() {

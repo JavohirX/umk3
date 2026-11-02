@@ -13,12 +13,10 @@ export class MultiplayerClient {
         this.userId = null;
         this.userName = "Fighter";
         this.role = null; // 'p1' or 'p2'
-        this.status = "DISCONNECTED"; // WAITING, ACTIVE, COMPLETED, CANCELLED
+        this.status = "DISCONNECTED"; // HERO_SELECT, ACTIVE, COMPLETED, CANCELLED
         this.opponent = null;
         this.creator = null;
         this.inputSeq = 0;
-        this.joinTimerInterval = null;
-        this.disconnectTimerInterval = null;
         this.onPeerInputCallback = null;
         this.onMatchStartCallback = null;
         this.onHeroSelectStartCallback = null;
@@ -27,11 +25,17 @@ export class MultiplayerClient {
         this.onRoundNextCallback = null;
         this.onMatchEndedCallback = null;
         this.onPeerSyncCallback = null;
+        this.onPeerRejoinedCallback = null;
+        this.onPeerSnapshotCallback = null;
         this.isMultiplayer = false;
-        this._roundActive = false;
         this._boutLive = false;
         this._heroSelected = false;
         this._heroId = null;
+        this.opponentDropDeadline = 0; // Date.now() when the opponent's 60s reconnect grace runs out; 0 while connected
+        this.result = null; // match_ended packet once the bout is decided
+        // The bout is frozen while either side is offline, so nobody can beat an idle fighter
+        this.waitingForPeer = false; // opponent dropped, or rejoined and is still loading back in
+        this.selfOffline = false;
 
         // Ultra-low-latency WebRTC P2P DataChannel & Latency Monitoring
         this.rtcPeer = null;
@@ -39,6 +43,7 @@ export class MultiplayerClient {
         this.isP2PActive = false;
         this.pingInterval = null;
         this.rtt = 0;
+        this.outgoingQueue = [];
 
         this.parseEnvironment();
     }
@@ -136,384 +141,8 @@ export class MultiplayerClient {
     }
 
     initUI() {
-        this.injectMultiplayerDOM();
-        this.bindUIEvents();
-
         if (this.isMultiplayer) {
-            this.showLobbyWaiting(60);
             this.connect();
-        }
-    }
-
-    injectMultiplayerDOM() {
-        if (document.getElementById('mp-container')) return;
-
-        const mpHTML = `
-        <!-- MULTIPLAYER HEADS-UP OVERLAY -->
-        <div id="mp-hud-bar" class="mp-hud-bar" style="display: none;">
-            <div class="mp-player-badge mp-badge-p1">
-                <span class="mp-role-dot dot-p1"></span>
-                <span id="mp-hud-p1-name">P1: Loading...</span>
-            </div>
-            <div class="mp-center-hud">
-                <span id="mp-net-badge" class="mp-net-badge mp-net-relay" title="Connection mode">🌐 Relay</span>
-                <button id="mp-btn-leaderboard" class="mp-btn-hud">🏆 Leaderboard</button>
-            </div>
-            <div class="mp-player-badge mp-badge-p2">
-                <span class="mp-role-dot dot-p2"></span>
-                <span id="mp-hud-p2-name">P2: Waiting...</span>
-            </div>
-        </div>
-
-        <!-- 1. LOBBY WAITING MODAL (60s COUNTDOWN) -->
-        <div id="mp-lobby-modal" class="mp-modal" style="display: none;">
-            <div class="mp-modal-box">
-                <div class="mp-modal-header">⚔️ ARENA CHALLENGE LOBBY</div>
-                <div class="mp-modal-body">
-                    <p class="mp-highlight" id="mp-lobby-match-id">Match: #------</p>
-                    <p id="mp-lobby-status-text">Waiting for opponent to join...</p>
-                    <div class="mp-timer-wrap">
-                        <div id="mp-lobby-timer" class="mp-timer-display">60s</div>
-                        <div class="mp-progress-bar"><div id="mp-lobby-bar" class="mp-progress-fill"></div></div>
-                    </div>
-                    <p class="mp-subtext">If opponent does not join within 1 minute, the challenge cancels automatically.</p>
-                </div>
-                <div class="mp-modal-footer">
-                    <button id="mp-lobby-cancel-btn" class="mp-btn mp-btn-secondary">Cancel Challenge</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 2. OPPONENT DISCONNECTED FORFEIT MODAL (60s COUNTDOWN) -->
-        <div id="mp-disconnect-modal" class="mp-modal" style="display: none;">
-            <div class="mp-modal-box mp-box-warning">
-                <div class="mp-modal-header">⚠️ OPPONENT DISCONNECTED</div>
-                <div class="mp-modal-body">
-                    <p id="mp-disc-message">Your opponent lost connection!</p>
-                    <div class="mp-timer-wrap">
-                        <div id="mp-disc-timer" class="mp-timer-display">60s</div>
-                        <div class="mp-progress-bar"><div id="mp-disc-bar" class="mp-progress-fill mp-bar-warning"></div></div>
-                    </div>
-                    <p class="mp-subtext">Waiting 1 minute for opponent to reconnect.<br><b>AUTOWIN</b> awarded to you if they do not return.<br><i>(If you exit too, match is cancelled without a win)</i></p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. MATCH RESULT / VICTORY / AUTOWIN MODAL -->
-        <div id="mp-result-modal" class="mp-modal" style="display: none;">
-            <div class="mp-modal-box">
-                <div id="mp-result-header" class="mp-modal-header">🏆 BATTLE CONCLUDED</div>
-                <div class="mp-modal-body">
-                    <div id="mp-result-title" class="mp-result-title">VICTORY!</div>
-                    <p id="mp-result-reason" class="mp-subtext">Reason: Knockout</p>
-                    <div id="mp-result-stats" class="mp-stats-card"></div>
-                </div>
-                <div class="mp-modal-footer">
-                    <button id="mp-rematch-btn" class="mp-btn mp-btn-primary">⚔️ Rematch</button>
-                    <button id="mp-close-result-btn" class="mp-btn mp-btn-secondary">Close</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 4. LOCAL GROUP LEADERBOARD MODAL -->
-        <div id="mp-leaderboard-modal" class="mp-modal" style="display: none;">
-            <div class="mp-modal-box mp-lb-box">
-                <div class="mp-modal-header">🏆 LOCAL ARENA LEADERBOARD</div>
-                <div class="mp-modal-body">
-                    <p class="mp-subtext">Local group standings. Tracks Wins, Losses & Total Battles.</p>
-                    <div id="mp-lb-table-wrap" class="mp-table-wrap">
-                        <div class="mp-loading">Loading standings...</div>
-                    </div>
-                </div>
-                <div class="mp-modal-footer">
-                    <button id="mp-lb-close-btn" class="mp-btn mp-btn-secondary">Back to Arena</button>
-                </div>
-            </div>
-        </div>
-        `;
-
-        const div = document.createElement('div');
-        div.id = 'mp-container';
-        div.innerHTML = mpHTML;
-        document.body.appendChild(div);
-        this.injectStyles();
-    }
-
-    injectStyles() {
-        if (document.getElementById('mp-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'mp-styles';
-        style.textContent = `
-            .mp-hud-bar {
-                position: absolute;
-                top: 4px;
-                left: 6px;
-                right: 6px;
-                height: 28px;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                z-index: 1000;
-                background: rgba(0, 0, 0, 0.75);
-                border: 1px solid #333;
-                border-radius: 4px;
-                padding: 0 8px;
-                font-size: 11px;
-                color: #e0e2ec;
-                backdrop-filter: blur(4px);
-            }
-            .mp-player-badge {
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                font-weight: bold;
-                max-width: 110px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .mp-role-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-            }
-            .dot-p1 { background: #ff7518; box-shadow: 0 0 6px #ff7518; }
-            .dot-p2 { background: #00d2ff; box-shadow: 0 0 6px #00d2ff; }
-            .mp-center-hud {
-                display: flex;
-                align-items: center;
-                gap: 5px;
-            }
-            .mp-net-badge {
-                font-size: 9px;
-                font-weight: 700;
-                padding: 1px 5px;
-                border-radius: 3px;
-                background: #252836;
-                color: #8c9ba5;
-                border: 1px solid #3c4254;
-                letter-spacing: 0.3px;
-                display: inline-flex;
-                align-items: center;
-                gap: 3px;
-                user-select: none;
-            }
-            .mp-net-p2p {
-                background: rgba(0, 230, 118, 0.15);
-                color: #00e676;
-                border-color: #00e676;
-                box-shadow: 0 0 6px rgba(0, 230, 118, 0.3);
-            }
-            .mp-net-relay {
-                background: rgba(255, 170, 0, 0.15);
-                color: #ffaa00;
-                border-color: #ffaa00;
-            }
-            .mp-btn-hud {
-                background: #1a1a1a;
-                border: 1px solid #ff7518;
-                color: #ff7518;
-                font-size: 10px;
-                font-weight: bold;
-                padding: 2px 7px;
-                border-radius: 3px;
-                cursor: pointer;
-            }
-            .mp-modal {
-                position: fixed;
-                inset: 0;
-                background: rgba(0, 0, 0, 0.85);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 10000;
-                backdrop-filter: blur(5px);
-                animation: mpFadeIn 0.2s ease-out;
-            }
-            @keyframes mpFadeIn {
-                from { opacity: 0; transform: scale(0.96); }
-                to { opacity: 1; transform: scale(1); }
-            }
-            .mp-modal-box {
-                width: 90%;
-                max-width: 360px;
-                background: #0f1015;
-                border: 2px solid #ff7518;
-                box-shadow: 0 0 25px rgba(255, 117, 24, 0.4);
-                color: #fff;
-                font-family: inherit;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-            }
-            .mp-box-warning {
-                border-color: #ff3333;
-                box-shadow: 0 0 25px rgba(255, 51, 51, 0.4);
-            }
-            .mp-modal-header {
-                background: #181920;
-                padding: 10px 14px;
-                font-weight: 900;
-                font-size: 13px;
-                letter-spacing: 1px;
-                color: #ff7518;
-                border-bottom: 1px solid #222;
-                text-align: center;
-            }
-            .mp-box-warning .mp-modal-header {
-                color: #ff4444;
-            }
-            .mp-modal-body {
-                padding: 16px 14px;
-                text-align: center;
-            }
-            .mp-modal-footer {
-                padding: 10px 14px;
-                background: #14151b;
-                display: flex;
-                gap: 8px;
-                justify-content: center;
-                border-top: 1px solid #222;
-            }
-            .mp-highlight {
-                font-size: 15px;
-                font-weight: bold;
-                color: #ffaa33;
-                margin-bottom: 8px;
-            }
-            .mp-timer-wrap {
-                margin: 14px 0;
-            }
-            .mp-timer-display {
-                font-size: 32px;
-                font-weight: 900;
-                color: #ff7518;
-                font-variant-numeric: tabular-nums;
-                margin-bottom: 6px;
-            }
-            .mp-box-warning .mp-timer-display {
-                color: #ff4444;
-            }
-            .mp-progress-bar {
-                width: 100%;
-                height: 8px;
-                background: #222;
-                border: 1px solid #444;
-                overflow: hidden;
-            }
-            .mp-progress-fill {
-                width: 100%;
-                height: 100%;
-                background: #ff7518;
-                transition: width 1s linear;
-            }
-            .mp-bar-warning {
-                background: #ff3333;
-            }
-            .mp-subtext {
-                font-size: 11px;
-                color: #888;
-                line-height: 1.4;
-            }
-            .mp-btn {
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 12px;
-                cursor: pointer;
-                border: none;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            .mp-btn-primary {
-                background: #ff7518;
-                color: #000;
-            }
-            .mp-btn-secondary {
-                background: #222;
-                color: #ccc;
-                border: 1px solid #444;
-            }
-            .mp-result-title {
-                font-size: 26px;
-                font-weight: 900;
-                color: #ffaa00;
-                margin-bottom: 6px;
-            }
-            .mp-stats-card {
-                margin: 12px 0;
-                background: #181920;
-                padding: 10px;
-                border: 1px solid #333;
-                font-size: 12px;
-                color: #ddd;
-            }
-            /* LEADERBOARD TABLE */
-            .mp-table-wrap {
-                max-height: 260px;
-                overflow-y: auto;
-                margin-top: 10px;
-            }
-            .mp-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 11px;
-                text-align: left;
-            }
-            .mp-table th {
-                background: #181920;
-                color: #ff7518;
-                padding: 6px 8px;
-                border-bottom: 1px solid #333;
-            }
-            .mp-table td {
-                padding: 6px 8px;
-                border-bottom: 1px solid #1c1d24;
-            }
-            .mp-table tr:hover {
-                background: #1a1b22;
-            }
-            .mp-rank-1 { color: #ffd700; font-weight: bold; }
-            .mp-rank-2 { color: #c0c0c0; font-weight: bold; }
-            .mp-rank-3 { color: #cd7f32; font-weight: bold; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    bindUIEvents() {
-        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', () => {
-                this.closeLobby();
-                if (this.ws) this.ws.close();
-            });
-        }
-
-        const lbBtn = document.getElementById('mp-btn-leaderboard');
-        if (lbBtn) {
-            lbBtn.addEventListener('click', () => this.showLeaderboard());
-        }
-
-        const lbCloseBtn = document.getElementById('mp-lb-close-btn');
-        if (lbCloseBtn) {
-            lbCloseBtn.addEventListener('click', () => {
-                document.getElementById('mp-leaderboard-modal').style.display = 'none';
-            });
-        }
-
-        const closeResultBtn = document.getElementById('mp-close-result-btn');
-        if (closeResultBtn) {
-            closeResultBtn.addEventListener('click', () => {
-                document.getElementById('mp-result-modal').style.display = 'none';
-            });
-        }
-
-        const rematchBtn = document.getElementById('mp-rematch-btn');
-        if (rematchBtn) {
-            rematchBtn.addEventListener('click', () => {
-                this.sendPacket({ type: "rematch_request" });
-                rematchBtn.textContent = "Waiting for Opponent...";
-                rematchBtn.disabled = true;
-            });
         }
     }
 
@@ -542,24 +171,20 @@ export class MultiplayerClient {
         const wsUrl = `${protocol}//${host}/ws/match/${this.matchId}`;
 
         console.log(`[Multiplayer] Connecting to ${wsUrl}...`);
-        const statusText = document.getElementById('mp-lobby-status-text');
-        if (statusText) statusText.textContent = "Connecting to combat arena...";
 
         try {
             this.ws = new WebSocket(wsUrl);
             this.ws.binaryType = "arraybuffer"; // Zero-copy binary transport
         } catch (e) {
             console.error("[Multiplayer] WebSocket creation error:", e);
-            if (statusText) statusText.innerHTML = "⚠️ <b>Connection error!</b> Retrying in 3s...";
             setTimeout(() => {
-                if (this.status === "WAITING" && !this.isTimeout) this.connect();
+                if (this.shouldReconnect()) this.connect();
             }, 3000);
             return;
         }
 
         this.ws.onopen = () => {
             console.log("[Multiplayer] WebSocket connected. Sending join packet...");
-            if (statusText) statusText.textContent = "Connected to Arena! Waiting for opponent to join...";
             this.sendPacket({
                 type: "join",
                 match_id: this.matchId,
@@ -567,6 +192,13 @@ export class MultiplayerClient {
                 user_id: this.userId,
                 user_name: this.userName
             });
+
+            while (this.outgoingQueue.length > 0) {
+                const pkt = this.outgoingQueue.shift();
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(pkt));
+                }
+            }
 
             // Start latency monitoring ping every 5 seconds
             clearInterval(this.pingInterval);
@@ -593,25 +225,39 @@ export class MultiplayerClient {
         this.ws.onclose = () => {
             console.log("[Multiplayer] WebSocket closed.");
             clearInterval(this.pingInterval);
-            if (this.rtcPeer) {
-                try { this.rtcPeer.close(); } catch (_) {}
-                this.rtcPeer = null;
+            this.resetP2P();
+            if (this._boutLive && this.status === "ACTIVE") {
+                this.selfOffline = true;
             }
-            this.isP2PActive = false;
-            this.updateNetBadge(false);
 
-            if (this.status === "WAITING" && !this.isTimeout) {
-                if (statusText) statusText.textContent = "Reconnecting to arena...";
+            if (this.shouldReconnect()) {
                 setTimeout(() => {
-                    if (this.status === "WAITING" && !this.isTimeout) this.connect();
+                    if (this.shouldReconnect()) this.connect();
                 }, 2000);
             }
         };
 
         this.ws.onerror = (err) => {
             console.error("[Multiplayer] WebSocket error:", err);
-            if (statusText && this.status === "WAITING") statusText.textContent = "Connecting to arena server...";
         };
+    }
+
+    // Keep retrying through hero select and the bout so the server's 60s grace can resume us
+    shouldReconnect() {
+        return this.isMultiplayer && this.status !== "COMPLETED" && this.status !== "CANCELLED";
+    }
+
+    resetP2P() {
+        if (this.rtcPeer) {
+            try { this.rtcPeer.close(); } catch (_) {}
+            this.rtcPeer = null;
+        }
+        this.dataChannel = null;
+        this.isP2PActive = false;
+    }
+
+    get paused() {
+        return this.waitingForPeer || this.selfOffline;
     }
 
     handleBinaryPacket(buffer) {
@@ -619,11 +265,11 @@ export class MultiplayerClient {
         const view = new DataView(buffer);
         const packetType = view.getUint8(0);
 
-        if (packetType === 1) { // 0x01: PACKET_INPUT
-            const keyCode = view.getInt8(1);
-            const isDown = view.getUint8(2) === 1;
+        if (packetType === 3 && buffer.byteLength >= 8) { // 0x03: PACKET_INPUT_BITS
+            const isDown = view.getUint8(1) === 1;
+            const bits = view.getUint32(4);
             if (typeof this.onPeerInputCallback === 'function') {
-                this.onPeerInputCallback(keyCode, isDown);
+                this.onPeerInputCallback(bits, isDown);
             }
         } else if (packetType === 2 && buffer.byteLength >= 11) { // 0x02: PACKET_SYNC
             const p1Hp = view.getUint8(1);
@@ -674,11 +320,8 @@ export class MultiplayerClient {
             };
 
             if (isInitiator) {
-                // High-performance unordered, un-retransmitted DataChannel (UDP-like)
-                const dc = this.rtcPeer.createDataChannel("combat_input", {
-                    ordered: false,
-                    maxRetransmits: 0
-                });
+                // Ordered and reliable: inputs are press/release events, so a lost release would leave a key held
+                const dc = this.rtcPeer.createDataChannel("combat_input", { ordered: true });
                 this.setupDataChannel(dc);
 
                 const offer = await this.rtcPeer.createOffer();
@@ -699,7 +342,8 @@ export class MultiplayerClient {
 
     async handleRtcSignal(signal) {
         if (!signal) return;
-        if (!this.rtcPeer && signal.type === "offer") {
+        // Every offer starts a fresh negotiation, replacing any peer left over from before a reconnect
+        if (signal.type === "offer") {
             await this.initWebRTC(false);
         }
         if (!this.rtcPeer) return;
@@ -728,22 +372,23 @@ export class MultiplayerClient {
         this.dataChannel = dc;
         dc.binaryType = "arraybuffer";
 
+        // A channel replaced after a reconnect must not flip the state of its successor
         dc.onopen = () => {
+            if (this.dataChannel !== dc) return;
             console.log("[Multiplayer] ⚡ WebRTC P2P DataChannel OPEN! Direct low-latency UDP combat active.");
             this.isP2PActive = true;
-            this.updateNetBadge(true);
         };
 
         dc.onclose = () => {
+            if (this.dataChannel !== dc) return;
             console.log("[Multiplayer] WebRTC DataChannel closed. Falling back to WebSocket relay.");
             this.isP2PActive = false;
-            this.updateNetBadge(false);
         };
 
         dc.onerror = (err) => {
+            if (this.dataChannel !== dc) return;
             console.warn("[Multiplayer] WebRTC DataChannel error:", err);
             this.isP2PActive = false;
-            this.updateNetBadge(false);
         };
 
         dc.onmessage = (event) => {
@@ -753,37 +398,27 @@ export class MultiplayerClient {
         };
     }
 
-    updateNetBadge(isP2P) {
-        const badge = document.getElementById('mp-net-badge');
-        if (!badge) return;
-        if (isP2P) {
-            badge.className = 'mp-net-badge mp-net-p2p';
-            badge.textContent = '⚡ P2P (UDP)';
-            badge.title = 'Direct Peer-to-Peer WebRTC DataChannel active';
-        } else {
-            badge.className = 'mp-net-badge mp-net-relay';
-            badge.textContent = this.rtt > 0 ? `🌐 ${this.rtt}ms` : '🌐 Relay';
-            badge.title = 'Connected via low-latency WebSocket relay';
-        }
-    }
-
     sendPacket(data) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
+        } else {
+            console.log("[Multiplayer] Queuing packet until connected:", data.type);
+            this.outgoingQueue.push(data);
         }
     }
 
-    sendInput(keyCode, isDown) {
+    // Streams the engine's keypad mask change (not the raw key) so the peer feeds it straight to our fighter
+    sendInput(bits, isDown) {
         if (!this.isMultiplayer || this.status !== "ACTIVE") return;
         this.inputSeq = (this.inputSeq + 1) & 0xFF;
 
-        // Compact 4-byte binary payload: [0x01, keyCode, isDown, seq]
-        const buffer = new ArrayBuffer(4);
+        // 8-byte binary payload: [0x03, isDown, seq, 0, bits (uint32)]
+        const buffer = new ArrayBuffer(8);
         const view = new DataView(buffer);
-        view.setUint8(0, 1);
-        view.setInt8(1, keyCode);
-        view.setUint8(2, isDown ? 1 : 0);
-        view.setUint8(3, this.inputSeq);
+        view.setUint8(0, 3);
+        view.setUint8(1, isDown ? 1 : 0);
+        view.setUint8(2, this.inputSeq);
+        view.setUint32(4, bits >>> 0);
 
         // 1. Direct WebRTC P2P DataChannel (0ms server bounce, UDP transport)
         if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
@@ -792,25 +427,16 @@ export class MultiplayerClient {
                 return;
             } catch (_) {
                 this.isP2PActive = false;
-                this.updateNetBadge(false);
             }
         }
 
-        // 2. Binary WebSocket relay (TCP_NODELAY enabled)
+        // 2. Binary WebSocket relay (TCP_NODELAY enabled). While disconnected, presses are
+        // dropped rather than queued so a reconnect does not replay stale inputs to the peer.
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
                 this.ws.send(buffer);
-                return;
             } catch (_) {}
         }
-
-        // 3. Fallback text JSON
-        this.sendPacket({
-            type: "input",
-            key: keyCode,
-            down: isDown,
-            seq: this.inputSeq
-        });
     }
 
     sendSync(p1Hp, p2Hp, p1X, p2X, roundTimer) {
@@ -831,7 +457,6 @@ export class MultiplayerClient {
                 return;
             } catch (_) {
                 this.isP2PActive = false;
-                this.updateNetBadge(false);
             }
         }
 
@@ -842,13 +467,25 @@ export class MultiplayerClient {
         }
     }
 
-    sendHeroLock(heroId) {
-        this.sendPacket({ type: "hero_lock", hero_id: heroId });
+    // controlType is the engine's val_int_bw, so both phones give our fighter the same key layout
+    sendHeroLock(heroId, controlType) {
+        this.sendPacket({ type: "hero_lock", hero_id: heroId, control: controlType });
     }
 
     sendRoundWin(winnerRole) {
         if (!this.isMultiplayer || this.status !== "ACTIVE") return;
         this.sendPacket({ type: "round_win", winner_role: winnerRole });
+    }
+
+    // Fighter state for an opponent who reloaded mid-bout and is loading back in
+    sendSnapshot(snapshot) {
+        this.sendPacket({ type: "state_snapshot", ...snapshot });
+    }
+
+    // Our side of the bout is live again; the opponent can unfreeze
+    sendBoutReady() {
+        this.selfOffline = false;
+        this.sendPacket({ type: "bout_ready" });
     }
 
     handlePacket(data) {
@@ -862,34 +499,30 @@ export class MultiplayerClient {
                     return;
                 }
                 this.role = data.role;
+                // The server renames a second tab that reuses the creator's id; match on what it assigned
+                if (data.player_id) this.userId = data.player_id;
                 this.creator = data.creator;
                 this.opponent = data.opponent;
                 console.log(`[Multiplayer] Joined as role: ${this.role}. Match status: ${data.status}`);
-                this.updateHudBar();
-                this.showLobbyWaiting(data.remaining_seconds || 60);
+                // Rejoining a running match as P1: we own the WebRTC offer
                 if (this.role === "p1" && data.status === "ACTIVE") {
                     this.initWebRTC(true);
                 }
                 break;
             }
 
-            case "waiting_opponent":
-                this.showLobbyWaiting(data.remaining_seconds || 60);
-                break;
-
             case "match_start":
-                this.dismissLobby();
-                this.dismissDisconnectModal();
                 this.creator = data.p1;
                 this.opponent = data.p2;
-                this.updateHudBar();
-                if (this.role === "p1") {
+                if (this.role === "p1" && !this.rtcPeer) {
                     this.initWebRTC(true);
                 }
                 if (data.stage === "hero_select") {
                     this.status = "HERO_SELECT";
                     this._heroSelected = false;
                     this._heroId = null;
+                    this._boutLive = false;
+                    this.result = null;
                     console.log("[Multiplayer] Match ACTIVE! Entering native Character Selection.");
                     if (typeof this.onHeroSelectStartCallback === 'function') {
                         this.onHeroSelectStartCallback(data);
@@ -903,7 +536,14 @@ export class MultiplayerClient {
                 break;
 
             case "peer_hero_lock":
-                console.log(`[Multiplayer] Peer locked hero: ${data.hero_id} (Role: ${data.from_role})`);
+                console.log(`[Multiplayer] Hero locked: ${data.hero_id} by ${data.player_id} (assigned role: ${data.from_role || data.assigned_role})`);
+                if (data.player_id === this.userId) {
+                    this.role = data.from_role || data.assigned_role;
+                    console.log(`[Multiplayer] Confirmed role assignment: I am ${this.role.toUpperCase()}`);
+                } else if ((data.from_role || data.assigned_role) === "p1") {
+                    // Opponent took the left side first, so we fight as P2 even before locking
+                    this.role = "p2";
+                }
                 if (typeof this.onPeerHeroLockCallback === 'function') {
                     this.onPeerHeroLockCallback(data);
                 }
@@ -911,12 +551,9 @@ export class MultiplayerClient {
 
             case "versus_start":
                 this.status = "ACTIVE";
-                this.dismissLobby();
-                this.dismissDisconnectModal();
                 this.role = (data.p1.id === this.userId) ? "p1" : "p2";
                 this.opponent = (this.role === "p1") ? data.p2 : data.p1;
                 this.creator = data.p1;
-                this.updateHudBar();
                 console.log(`[Multiplayer] Fight starting: P1=${data.p1.hero_id}, P2=${data.p2.hero_id}. Local role=${this.role}`);
                 if (this.role === "p1" && !this.isP2PActive && !this.rtcPeer) {
                     this.initWebRTC(true);
@@ -952,29 +589,52 @@ export class MultiplayerClient {
             case "pong":
                 if (data.time) {
                     this.rtt = Math.max(1, Math.round(performance.now() - data.time));
-                    this.updateNetBadge(this.isP2PActive);
                 }
                 break;
 
             case "opponent_disconnected":
-                this.showOpponentDisconnectModal(data.remaining_seconds || 60, data.disconnected_name || "Opponent");
+                // Their end of the DataChannel is gone; relay inputs until a fresh one is negotiated
+                this.resetP2P();
+                this.opponentDropDeadline = Date.now() + (data.remaining_seconds || 60) * 1000;
+                this.waitingForPeer = this._boutLive;
                 break;
 
             case "disconnect_countdown":
-                this.updateDisconnectTimer(data.remaining_seconds);
+                if (this.opponentDropDeadline) {
+                    this.opponentDropDeadline = Date.now() + data.remaining_seconds * 1000;
+                }
                 break;
 
             case "opponent_reconnected":
-                this.dismissDisconnectModal();
+                this.opponentDropDeadline = 0;
                 console.log("[Multiplayer] Opponent reconnected. Battle resumed.");
+                // A staying P1 owns the WebRTC offer; a rejoining P1 starts it from "joined" instead
+                if (this.role === "p1") {
+                    this.initWebRTC(true);
+                }
+                // Stay frozen until they send bout_ready; hand them our view of the fight in case they reloaded
+                if (this._boutLive && typeof this.onPeerRejoinedCallback === 'function') {
+                    this.onPeerRejoinedCallback(data);
+                }
+                break;
+
+            case "state_snapshot":
+                if (typeof this.onPeerSnapshotCallback === 'function') {
+                    this.onPeerSnapshotCallback(data);
+                }
+                break;
+
+            case "bout_ready":
+                this.waitingForPeer = false;
                 break;
 
             case "match_ended":
                 this.status = "COMPLETED";
-                this._roundActive = false;
-                this.dismissDisconnectModal();
+                this.opponentDropDeadline = 0;
+                this.waitingForPeer = false;
+                this.selfOffline = false;
+                this.result = data;
                 console.log("[Multiplayer] Match ended! Winner:", data.winner_name);
-                this.showMatchResultModal(data);
                 if (typeof this.onMatchEndedCallback === 'function') {
                     this.onMatchEndedCallback(data);
                 }
@@ -982,263 +642,29 @@ export class MultiplayerClient {
 
             case "match_cancelled":
                 this.status = "CANCELLED";
-                this.showMatchCancelled(data.message || "Match cancelled.");
-                break;
-
-            case "rematch_offered":
-                this.handleRematchOffered(data);
+                console.warn("[Multiplayer] Match cancelled:", data.message);
                 break;
         }
     }
 
-    showLobbyWaiting(seconds = 60) {
-        const modal = document.getElementById('mp-lobby-modal');
-        const matchLabel = document.getElementById('mp-lobby-match-id');
-        const timerDisplay = document.getElementById('mp-lobby-timer');
-        const bar = document.getElementById('mp-lobby-bar');
-        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
-        const statusText = document.getElementById('mp-lobby-status-text');
-
-        if (!modal) return;
-        modal.style.display = 'flex';
-        this.status = "WAITING";
-        this.isTimeout = false;
-        if (matchLabel) matchLabel.textContent = `Match: #${this.matchId}`;
-        if (statusText) statusText.textContent = "Waiting for opponent to join...";
-        if (cancelBtn) {
-            cancelBtn.textContent = "Cancel Challenge";
-            cancelBtn.onclick = () => {
-                this.closeLobby();
-                if (this.ws) this.ws.close();
-            };
+    // Status line the game loop draws on the canvas (no DOM overlays), or null when there is nothing to say
+    bannerText() {
+        if (this.status === "COMPLETED" && this.result) {
+            if (!this.result.winner_id) return "DRAW";
+            if (this.result.winner_id !== this.userId) return "DEFEAT";
+            return this.result.reason === "AUTOWIN_DISCONNECT" ? "VICTORY - OPPONENT FORFEITED" : "VICTORY!";
         }
-
-        let remaining = seconds;
-        if (timerDisplay) timerDisplay.textContent = `${remaining}s`;
-        if (bar) bar.style.width = '100%';
-
-        clearInterval(this.joinTimerInterval);
-        this.joinTimerInterval = setInterval(() => {
-            remaining--;
-            if (timerDisplay) timerDisplay.textContent = `${Math.max(0, remaining)}s`;
-            if (bar) bar.style.width = `${Math.max(0, (remaining / 60) * 100)}%`;
-
-            if (remaining <= 0) {
-                clearInterval(this.joinTimerInterval);
-                this.handleJoinTimeout();
-            }
-        }, 1000);
-    }
-
-    handleJoinTimeout() {
-        this.isTimeout = true;
-        this.status = "CANCELLED";
-        if (this.ws) {
-            try { this.ws.close(); } catch (_) {}
+        if (this.status === "CANCELLED") return "CHALLENGE EXPIRED - START A NEW ONE";
+        if (this.selfOffline) return "CONNECTION LOST - RECONNECTING...";
+        if (this.opponentDropDeadline) {
+            const secs = Math.max(0, Math.ceil((this.opponentDropDeadline - Date.now()) / 1000));
+            return `OPPONENT DISCONNECTED - AUTOWIN IN ${secs}s`;
         }
-        const statusText = document.getElementById('mp-lobby-status-text');
-        const timerDisplay = document.getElementById('mp-lobby-timer');
-        const bar = document.getElementById('mp-lobby-bar');
-        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
-
-        if (statusText) statusText.innerHTML = "⏱️ <b>Join window expired!</b><br>Opponent did not join within 1 minute. Match cancelled.";
-        if (timerDisplay) timerDisplay.textContent = "EXPIRED";
-        if (bar) bar.style.width = '0%';
-        if (cancelBtn) {
-            cancelBtn.textContent = "Close";
-            cancelBtn.onclick = () => this.closeLobby();
+        if (this.waitingForPeer) return "OPPONENT REJOINING...";
+        if (this.status === "HERO_SELECT" && this._heroSelected) {
+            const roleText = this.role ? `[${this.role.toUpperCase()}] ` : '';
+            return `${roleText}HERO LOCKED - WAITING FOR OPPONENT...`;
         }
+        return null;
     }
-
-    dismissLobby() {
-        clearInterval(this.joinTimerInterval);
-        const modal = document.getElementById('mp-lobby-modal');
-        if (modal) modal.style.display = 'none';
-        const hud = document.getElementById('mp-hud-bar');
-        if (hud) hud.style.display = 'flex';
-    }
-
-    closeLobby() {
-        clearInterval(this.joinTimerInterval);
-        const modal = document.getElementById('mp-lobby-modal');
-        if (modal) modal.style.display = 'none';
-        this.isMultiplayer = false;
-        if (this.ws) {
-            try { this.ws.close(); } catch (_) {}
-        }
-    }
-
-    showOpponentDisconnectModal(seconds = 60, oppName = "Opponent") {
-        const modal = document.getElementById('mp-disconnect-modal');
-        const msgEl = document.getElementById('mp-disc-message');
-        const timerDisplay = document.getElementById('mp-disc-timer');
-        const bar = document.getElementById('mp-disc-bar');
-
-        if (!modal) return;
-        modal.style.display = 'flex';
-        if (msgEl) msgEl.textContent = `${oppName} has lost connection!`;
-
-        let remaining = seconds;
-        if (timerDisplay) timerDisplay.textContent = `${remaining}s`;
-        if (bar) bar.style.width = '100%';
-
-        clearInterval(this.disconnectTimerInterval);
-        this.disconnectTimerInterval = setInterval(() => {
-            remaining--;
-            if (timerDisplay) timerDisplay.textContent = `${Math.max(0, remaining)}s`;
-            if (bar) bar.style.width = `${Math.max(0, (remaining / 60) * 100)}%`;
-
-            if (remaining <= 0) {
-                clearInterval(this.disconnectTimerInterval);
-            }
-        }, 1000);
-    }
-
-    updateDisconnectTimer(seconds) {
-        const timerDisplay = document.getElementById('mp-disc-timer');
-        const bar = document.getElementById('mp-disc-bar');
-        if (timerDisplay) timerDisplay.textContent = `${seconds}s`;
-        if (bar) bar.style.width = `${Math.max(0, (seconds / 60) * 100)}%`;
-    }
-
-    dismissDisconnectModal() {
-        clearInterval(this.disconnectTimerInterval);
-        const modal = document.getElementById('mp-disconnect-modal');
-        if (modal) modal.style.display = 'none';
-    }
-
-    showMatchResultModal(data) {
-        const modal = document.getElementById('mp-result-modal');
-        const titleEl = document.getElementById('mp-result-title');
-        const reasonEl = document.getElementById('mp-result-reason');
-        const statsEl = document.getElementById('mp-result-stats');
-
-        if (!modal) return;
-        modal.style.display = 'flex';
-
-        const isWinner = data.winner_id === this.userId;
-        if (titleEl) {
-            if (isWinner) {
-                titleEl.textContent = "🏆 VICTORY!";
-                titleEl.style.color = "#ffaa00";
-            } else {
-                titleEl.textContent = "💀 DEFEAT";
-                titleEl.style.color = "#ff4444";
-            }
-        }
-
-        if (reasonEl) {
-            if (data.reason === "AUTOWIN_DISCONNECT") {
-                reasonEl.textContent = isWinner
-                    ? "Opponent failed to reconnect within 1 minute. Autowin awarded!"
-                    : "Match forfeit due to disconnection timeout.";
-            } else {
-                reasonEl.textContent = data.message || "Match finished.";
-            }
-        }
-
-        if (statsEl) {
-            statsEl.innerHTML = `
-                <div>Winner: <b>${data.winner_name || 'Champion'}</b></div>
-                <div style="margin-top: 4px;">Local leaderboard updated for this chat!</div>
-            `;
-        }
-    }
-
-    showMatchCancelled(msg) {
-        clearInterval(this.joinTimerInterval);
-        this.status = "CANCELLED";
-        this.isTimeout = true;
-        if (this.ws) {
-            try { this.ws.close(); } catch (_) {}
-        }
-
-        const modal = document.getElementById('mp-lobby-modal');
-        const statusText = document.getElementById('mp-lobby-status-text');
-        const timerDisplay = document.getElementById('mp-lobby-timer');
-        const bar = document.getElementById('mp-lobby-bar');
-        const cancelBtn = document.getElementById('mp-lobby-cancel-btn');
-
-        if (modal) {
-            modal.style.display = 'flex';
-            if (statusText) statusText.innerHTML = `⚠️ <b>${escapeHtml(msg)}</b>`;
-            if (timerDisplay) timerDisplay.textContent = "CANCELLED";
-            if (bar) bar.style.width = "0%";
-            if (cancelBtn) {
-                cancelBtn.textContent = "Close";
-                cancelBtn.onclick = () => this.closeLobby();
-            }
-        }
-    }
-
-    handleRematchOffered(data) {
-        const accept = confirm(`${data.from_name || 'Opponent'} has requested a rematch! Do you accept?`);
-        if (accept) {
-            this.sendPacket({ type: "rematch_accept" });
-            const resultModal = document.getElementById('mp-result-modal');
-            if (resultModal) resultModal.style.display = 'none';
-        }
-    }
-
-    updateHudBar() {
-        const p1Name = document.getElementById('mp-hud-p1-name');
-        const p2Name = document.getElementById('mp-hud-p2-name');
-        if (p1Name) p1Name.textContent = `P1: ${this.creator?.name || 'Waiting...'}`;
-        if (p2Name) p2Name.textContent = `P2: ${this.opponent?.name || 'Waiting...'}`;
-    }
-
-    async showLeaderboard() {
-        const modal = document.getElementById('mp-leaderboard-modal');
-        const wrap = document.getElementById('mp-lb-table-wrap');
-        if (!modal || !wrap) return;
-
-        modal.style.display = 'flex';
-        wrap.innerHTML = `<div class="mp-loading" style="padding: 10px; color: #ff7518;">Loading arena leaderboard...</div>`;
-
-        try {
-            const resp = await fetch(`/api/leaderboard?chat_id=${encodeURIComponent(this.chatId)}`);
-            const data = await resp.json();
-            const list = data.leaderboard || [];
-
-            if (list.length === 0) {
-                wrap.innerHTML = `<p style="padding: 10px; color: #888;">No matches recorded in this arena yet.<br>Fight to claim the #1 spot!</p>`;
-                return;
-            }
-
-            let rows = list.map(p => `
-                <tr>
-                    <td class="mp-rank-${p.rank}">${p.rank}</td>
-                    <td><b>${escapeHtml(p.first_name)}</b></td>
-                    <td>${p.wins}</td>
-                    <td>${p.losses}</td>
-                    <td>${p.games_played}</td>
-                    <td>${p.win_rate}%</td>
-                </tr>
-            `).join('');
-
-            wrap.innerHTML = `
-                <table class="mp-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Fighter</th>
-                            <th>W</th>
-                            <th>L</th>
-                            <th>Total</th>
-                            <th>Win%</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            `;
-        } catch (err) {
-            wrap.innerHTML = `<p style="color: #ff4444;">Failed to load leaderboard: ${err.message}</p>`;
-        }
-    }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }

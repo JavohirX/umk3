@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import socket
 import time
 import uuid
@@ -45,11 +46,29 @@ class MatchRoom:
         self.p2_name: Optional[str] = None
         self.p1_hero: Optional[int] = None
         self.p2_hero: Optional[int] = None
+        self.p1_control: int = 1  # Engine control type (val_int_bw) each player fights with
+        self.p2_control: int = 1
         self.p1_rounds: int = 0
         self.p2_rounds: int = 0
+        self.stage: Optional[int] = None  # Arena index 0-4, shared so both phones load the same one
+        self.hero_select_started = False
 
     def is_expired(self) -> bool:
         return self.status == "WAITING" and time.time() > self.expires_at
+
+    def versus_payload(self) -> dict:
+        return {
+            "type": "versus_start",
+            "p1": {"id": self.p1_id or self.creator_id, "name": self.p1_name or self.creator_name,
+                   "hero_id": self.p1_hero, "control": self.p1_control},
+            "p2": {"id": self.p2_id or self.opponent_id, "name": self.p2_name or self.opponent_name,
+                   "hero_id": self.p2_hero, "control": self.p2_control},
+            "stage": self.stage,
+            "p1_rounds": self.p1_rounds,
+            "p2_rounds": self.p2_rounds,
+            "countdown": 3,
+            "message": "VERSUS"
+        }
 
     async def broadcast(self, message: dict, exclude_id: Optional[str] = None):
         """Sends a JSON message to all connected players in the room."""
@@ -125,7 +144,7 @@ class MatchCoordinator:
         except asyncio.CancelledError:
             pass
 
-    async def handle_player_disconnect(self, room: MatchRoom, player_id: str):
+    async def handle_player_disconnect(self, room: MatchRoom, player_id: str, ws: Optional[web.WebSocketResponse] = None):
         """
         Handles disconnection of a player during an active match.
         Rules:
@@ -134,6 +153,9 @@ class MatchCoordinator:
         - If other player also disconnects while waiting: both exited -> ABANDONED, no win.
         - If 60 seconds expire without reconnect: remaining player gets AUTOWIN!
         """
+        if ws is not None and room.sockets.get(player_id) is not ws:
+            # A newer connection already replaced this one (rejoined before the old socket closed)
+            return
         if player_id in room.sockets:
             del room.sockets[player_id]
 
@@ -297,10 +319,19 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         }))
                         continue
 
+                    # A rejoin can arrive before the server noticed the old socket drop; that socket is replaced
+                    old_ws = room.sockets.get(current_player_id)
+                    replaces_live_socket = (
+                        room.status == "ACTIVE" and old_ws is not None and old_ws is not ws and not old_ws.closed
+                    )
+                    if replaces_live_socket:
+                        room.sockets.pop(current_player_id, None)
+                        await old_ws.close()
+
                     # If this player was disconnected, cancel forfeit timer
-                    if current_player_id in room.disconnect_tasks:
-                        room.disconnect_tasks[current_player_id].cancel()
-                        del room.disconnect_tasks[current_player_id]
+                    if current_player_id in room.disconnect_tasks or replaces_live_socket:
+                        if current_player_id in room.disconnect_tasks:
+                            room.disconnect_tasks.pop(current_player_id).cancel()
                         logging.info(f"[{match_id}] Player {current_player_id} ({user_name}) reconnected!")
                         await room.broadcast({
                             "type": "opponent_reconnected",
@@ -311,9 +342,11 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
 
                     # Determine player role (P1 = creator, P2 = opponent)
                     # If creator is ALREADY connected with an active socket and another join arrives with same ID:
+                    # Only while the lobby waits; once the match runs, the same id joining again is a rejoin
                     existing_creator_socket = room.sockets.get(room.creator_id)
                     is_duplicate_creator = (
                         current_player_id == room.creator_id
+                        and room.status == "WAITING"
                         and existing_creator_socket is not None
                         and existing_creator_socket is not ws
                         and not existing_creator_socket.closed
@@ -338,6 +371,10 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         room.status = "ACTIVE"
                         if room.join_timeout_task:
                             room.join_timeout_task.cancel()
+
+                    # Once a hero is locked, sides follow lock order rather than who created the room
+                    if room.p1_id:
+                        role = "p1" if current_player_id == room.p1_id else "p2"
 
                     # Store socket and player metadata
                     room.sockets[current_player_id] = ws
@@ -367,9 +404,14 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                             "remaining_seconds": remaining_join_time,
                             "message": "Waiting for opponent to join... (Cancels in 1 minute if nobody joins)"
                         }))
-                    elif room.status == "ACTIVE" and len(room.sockets) >= 2:
+                    elif room.status == "ACTIVE" and room.p1_hero is not None and room.p2_hero is not None:
+                        # Rejoined mid-bout: resend the fight setup to this player only, so the
+                        # player who stayed connected is not pulled back to hero select
+                        await room.send_to(current_player_id, {**room.versus_payload(), "resume": True})
+                    elif room.status == "ACTIVE" and len(room.sockets) >= 2 and not room.hero_select_started:
                         # Both players connected! Notify both to enter Character Selection
                         logging.info(f"[{match_id}] Match ACTIVE! Both fighters joined. Entering Hero Select.")
+                        room.hero_select_started = True
                         await room.broadcast({
                             "type": "match_start",
                             "stage": "hero_select",
@@ -383,66 +425,81 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                 # -------------------------------------------------------------
 
                 elif msg_type in ("hero_lock", "select_hero"):
-                    if room:
+                    # Ignore late locks once the bout is set up (e.g. a reloaded page tapping the grid)
+                    if room and (room.p1_hero is None or room.p2_hero is None):
                         hero_id = int(data.get("hero_id", 0))
+                        control = 0 if data.get("control") == 0 else 1
                         player_name = room.player_names.get(current_player_id, "Player")
                         # First player to select becomes P1 (Left), second becomes P2 (Right)
                         if room.p1_hero is None:
                             room.p1_id = current_player_id
                             room.p1_name = player_name
                             room.p1_hero = hero_id
+                            room.p1_control = control
                             from_role = "p1"
                         elif room.p2_hero is None and current_player_id != room.p1_id:
                             room.p2_id = current_player_id
                             room.p2_name = player_name
                             room.p2_hero = hero_id
+                            room.p2_control = control
                             from_role = "p2"
                         else:
                             from_role = "p1" if current_player_id == room.p1_id else "p2"
                             if from_role == "p1":
                                 room.p1_hero = hero_id
+                                room.p1_control = control
                             else:
                                 room.p2_hero = hero_id
+                                room.p2_control = control
 
-                        logging.info(f"[{match_id}] Player {from_role} ({player_name}) locked hero {hero_id} (P1={room.p1_hero}, P2={room.p2_hero})")
+                        logging.info(f"[{match_id}] Player {from_role} ({player_name}, id={current_player_id}) locked hero {hero_id} (P1={room.p1_hero}, P2={room.p2_hero})")
 
                         await room.broadcast({
                             "type": "peer_hero_lock",
                             "from_role": from_role,
+                            "assigned_role": from_role,
+                            "player_id": current_player_id,
+                            "player_name": player_name,
                             "hero_id": hero_id
                         })
 
                         # When BOTH fighters are locked in, start the fight!
                         if room.p1_hero is not None and room.p2_hero is not None:
-                            p1_id = room.p1_id or room.creator_id
-                            p2_id = room.p2_id or room.opponent_id
-                            p1_name = room.p1_name or room.creator_name
-                            p2_name = room.p2_name or room.opponent_name
-                            logging.info(f"[{match_id}] Both heroes locked! Initiating match.")
-                            await room.broadcast({
-                                "type": "versus_start",
-                                "p1": {"id": p1_id, "name": p1_name, "hero_id": room.p1_hero},
-                                "p2": {"id": p2_id, "name": p2_name, "hero_id": room.p2_hero},
-                                "countdown": 3,
-                                "message": "VERSUS"
-                            })
+                            # Native 2P versus picks a random arena 0-4; choosing it here keeps both phones identical
+                            room.stage = random.randint(0, 4)
+                            logging.info(f"[{match_id}] Both heroes locked! Initiating match on stage {room.stage}.")
+                            await room.broadcast(room.versus_payload())
 
                 # -------------------------------------------------------------
                 # 3. ROUND PROGRESSION & BEST-OF-THREE RESOLUTION
                 # -------------------------------------------------------------
                 elif msg_type == "round_win":
-                    if room and room.status == "ACTIVE":
+                    # Rounds only count while both fighters are connected, so a dropped opponent can't be beaten idle
+                    if room and room.status == "ACTIVE" and len(room.sockets) >= 2:
                         winner_role = str(data.get("winner_role", "p1")).lower()
-                        if winner_role == "p1":
+                        # A draw round (time out on equal health) scores for both, as the engine does
+                        if winner_role in ("p1", "draw"):
                             room.p1_rounds += 1
-                        elif winner_role == "p2":
+                        if winner_role in ("p2", "draw"):
                             room.p2_rounds += 1
 
                         logging.info(f"[{match_id}] Round won by {winner_role}! Score: P1={room.p1_rounds}, P2={room.p2_rounds}")
 
-                        if room.p1_rounds >= 2 or room.p2_rounds >= 2:
+                        if room.p1_rounds >= 2 and room.p1_rounds == room.p2_rounds:
+                            room.status = "COMPLETED"
+                            db.finish_match(room.match_id, winner_id=None, finish_reason="DRAW")
+                            await room.broadcast({
+                                "type": "match_ended",
+                                "winner_id": None,
+                                "winner_name": None,
+                                "p1_rounds": room.p1_rounds,
+                                "p2_rounds": room.p2_rounds,
+                                "reason": "DRAW",
+                                "message": f"DRAW! ({room.p1_rounds} - {room.p2_rounds})"
+                            })
+                        elif room.p1_rounds >= 2 or room.p2_rounds >= 2:
                             # 2 round wins achieved -> Match Won!
-                            winner_role = "p1" if room.p1_rounds >= 2 else "p2"
+                            winner_role = "p1" if room.p1_rounds > room.p2_rounds else "p2"
                             p1_id = room.p1_id or room.creator_id
                             p2_id = room.p2_id or room.opponent_id
                             p1_name = room.p1_name or room.creator_name
@@ -483,7 +540,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         # Relay input immediately to the peer with zero added overhead
                         await room.broadcast({
                             "type": "peer_input",
-                            "from_role": "p1" if current_player_id == room.creator_id else "p2",
+                            "from_role": "p1" if current_player_id == (room.p1_id or room.creator_id) else "p2",
                             "key": data.get("key"),
                             "down": bool(data.get("down")),
                             "seq": data.get("seq", 0)
@@ -496,7 +553,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     if room and room.status == "ACTIVE":
                         await room.broadcast({
                             "type": "peer_sync",
-                            "from_role": "p1" if current_player_id == room.creator_id else "p2",
+                            "from_role": "p1" if current_player_id == (room.p1_id or room.creator_id) else "p2",
                             "p1_hp": data.get("p1_hp"),
                             "p2_hp": data.get("p2_hp"),
                             "p1_x": data.get("p1_x"),
@@ -544,6 +601,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         room.p2_name = None
                         room.p1_hero = None
                         room.p2_hero = None
+                        room.stage = None
                         room.p1_rounds = 0
                         room.p2_rounds = 0
                         await room.broadcast({
@@ -565,19 +623,28 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                 # -------------------------------------------------------------
                 elif msg_type == "rtc_signal":
                     if room:
-                        from_role = "p1" if current_player_id == room.creator_id else "p2"
+                        from_role = "p1" if current_player_id == (room.p1_id or room.creator_id) else "p2"
                         await room.broadcast({
                             "type": "rtc_signal",
                             "from_role": from_role,
                             "signal": data.get("signal")
                         }, exclude_id=current_player_id)
 
+                # -------------------------------------------------------------
+                # 8. MID-BOUT RESUME (fighter state handed to a rejoining player, then unpause)
+                # -------------------------------------------------------------
+                elif msg_type in ("state_snapshot", "bout_ready"):
+                    if room and room.status == "ACTIVE":
+                        relay = dict(data)
+                        relay["from_role"] = "p1" if current_player_id == (room.p1_id or room.creator_id) else "p2"
+                        await room.broadcast(relay, exclude_id=current_player_id)
+
             elif msg.type == WSMsgType.ERROR:
                 logging.warning(f"WebSocket connection closed with error: {ws.exception()}")
 
     finally:
         if room and current_player_id:
-            await coordinator.handle_player_disconnect(room, current_player_id)
+            await coordinator.handle_player_disconnect(room, current_player_id, ws)
 
     return ws
 
