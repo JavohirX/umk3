@@ -108,6 +108,46 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(u1_b["wins"], 0)
         self.assertEqual(u1_b["losses"], 1)
 
+    def test_inline_challenge_results_join_the_group_they_were_played_in(self):
+        # An inline challenge only knows Telegram's chat_instance for the chat it was opened in
+        db.create_match("m_inline", "inline", "user1", "P1")
+        db.join_match("m_inline", "user2", "P2")
+        db.set_match_chat_instance("m_inline", "-8800")
+        finished = db.finish_match("m_inline", winner_id="user1", finish_reason="KNOCKOUT")
+        self.assertEqual(finished["leaderboard_chat_id"], "ci:-8800")
+
+        # Not yet known as any group: kept apart
+        db.create_match("m_group", "-100500", "user1", "P1")
+        db.join_match("m_group", "user2", "P2")
+        db.finish_match("m_group", winner_id="user2", finish_reason="KNOCKOUT")
+        self.assertEqual({p["user_id"]: p["wins"] for p in db.get_local_leaderboard("-100500")}, {"user1": 0, "user2": 1})
+
+        # Once a button press there tells us the chat_instance is that group, both results count for it
+        db.remember_chat_instance("-8800", "-100500")
+        merged = {p["user_id"]: p for p in db.get_local_leaderboard("-100500")}
+        self.assertEqual((merged["user1"]["wins"], merged["user1"]["games_played"]), (1, 2))
+        self.assertEqual(db.get_user_totals("user1")["wins"], 1)
+
+    def test_room_state_and_replays_round_trip(self):
+        db.create_match("m_state", "chat", "a", "A")
+        db.save_room_state("m_state", {"seed": 7, "p1_rounds": 1})
+        self.assertEqual(db.load_room_state(db.get_match("m_state")), {"seed": 7, "p1_rounds": 1})
+        db.save_replay("m_state", b"\x01\x02")
+        self.assertEqual(db.get_replay("m_state"), b"\x01\x02")
+        self.assertIsNone(db.get_replay("missing"))
+
+    def test_older_databases_gain_the_new_columns(self):
+        with db.get_db_connection() as conn:
+            conn.execute("DROP TABLE matches")
+            conn.execute("CREATE TABLE matches (match_id TEXT PRIMARY KEY, chat_id TEXT NOT NULL, creator_id TEXT NOT NULL, "
+                         "creator_name TEXT NOT NULL, opponent_id TEXT, opponent_name TEXT, status TEXT NOT NULL DEFAULT 'WAITING', "
+                         "winner_id TEXT, finish_reason TEXT, created_at REAL NOT NULL, expires_at REAL NOT NULL, "
+                         "started_at REAL, ended_at REAL)")
+            conn.commit()
+        db.init_db()
+        db.create_match("m_new", "chat", "a", "A")
+        self.assertIn("room_state", db.get_match("m_new"))
+
 
 if __name__ == "__main__":
     unittest.main()

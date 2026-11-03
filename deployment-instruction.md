@@ -85,10 +85,10 @@ If you plan to launch the game as a **Telegram Mini App**:
 ## 5. How to Redeploy
 
 ### Option A: Automatic Push Deployment
-Whenever you push code changes to the `main` branch, the workflow [`.github/workflows/deploy-vps.yml`](.github/workflows/deploy-vps.yml) automatically triggers, pulls the new code on the VPS, reloads Nginx, and restarts the bot.
+Whenever you push code changes to the `main` branch, the workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs the tests and, if they pass, deploys GitHub Pages and the VPS: it waits for live matches to finish, pulls the new code, reloads Nginx, restarts the bot and checks that it came back up.
 
 ### Option B: Manual Trigger in GitHub UI
-1. Go to **Actions ➔ Deploy to VPS Server**.
+1. Go to **Actions ➔ Test and Deploy**.
 2. Click **Run workflow** ➔ Select branch `main` ➔ Click **Run workflow**.
 
 ---

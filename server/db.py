@@ -1,14 +1,30 @@
 """
 Immortal Combat - Local SQLite Database & Leaderboard Engine
-Manages matches, player stats, and group-isolated leaderboards.
+Manages matches, player stats, group-isolated leaderboards and match replays.
 """
 
+import json
 import sqlite3
 import os
 import time
 from typing import Optional, Dict, Any, List
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "immortal_combat.db")
+
+# How long an open challenge waits for someone to accept it. The creator is notified when it's accepted.
+CHALLENGE_WINDOW_SECONDS = 600
+# Replays kept on disk; older ones are pruned
+REPLAYS_KEPT = 500
+
+# Columns added after the first release; init_db adds any that an older database lacks
+MATCH_EXTRA_COLUMNS = {
+    "room_state": "TEXT",          # JSON fight setup + score, so a restarted server can resume the bout
+    "chat_instance": "TEXT",       # Telegram chat_instance of the chat an inline challenge was played in
+    "message_chat_id": "TEXT",     # where the bot posted the challenge message, to edit it later
+    "message_id": "INTEGER",
+    "inline_message_id": "TEXT",   # the same for a challenge sent through inline mode
+    "rematch_of": "TEXT",
+}
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -41,6 +57,10 @@ def init_db():
                 ended_at REAL
             )
         """)
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(matches)")}
+        for column, sql_type in MATCH_EXTRA_COLUMNS.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE matches ADD COLUMN {column} {sql_type}")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS local_leaderboard (
@@ -57,22 +77,45 @@ def init_db():
             )
         """)
 
+        # Telegram's chat_instance -> chat id, learned from button presses in chats the bot is in. Inline
+        # challenges only know the chat_instance, so this lets their results join that group's leaderboard.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_instances (
+                chat_instance TEXT PRIMARY KEY,
+                chat_id TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS replays (
+                match_id TEXT PRIMARY KEY,
+                created_at REAL NOT NULL,
+                data BLOB NOT NULL
+            )
+        """)
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_chat ON matches(chat_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_lb_chat_wins ON local_leaderboard(chat_id, wins DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_instances_chat ON chat_instances(chat_id)")
         conn.commit()
 
 
-def create_match(match_id: str, chat_id: str, creator_id: str, creator_name: str, opponent_id: Optional[str] = None, opponent_name: Optional[str] = None, timeout_seconds: int = 60) -> Dict[str, Any]:
-    """Creates a new match with a 60-second lobby expiration."""
+def create_match(match_id: str, chat_id: str, creator_id: str, creator_name: str, opponent_id: Optional[str] = None,
+                 opponent_name: Optional[str] = None, timeout_seconds: int = CHALLENGE_WINDOW_SECONDS,
+                 rematch_of: Optional[str] = None) -> Dict[str, Any]:
+    """Creates a new open challenge that waits `timeout_seconds` for an opponent."""
     now = time.time()
     expires_at = now + timeout_seconds
 
     with get_db_connection() as conn:
         conn.execute("""
-            INSERT INTO matches (match_id, chat_id, creator_id, creator_name, opponent_id, opponent_name, status, created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'WAITING', ?, ?)
-        """, (match_id, str(chat_id), str(creator_id), creator_name, str(opponent_id) if opponent_id else None, opponent_name, now, expires_at))
+            INSERT INTO matches (match_id, chat_id, creator_id, creator_name, opponent_id, opponent_name, status,
+                                 created_at, expires_at, rematch_of)
+            VALUES (?, ?, ?, ?, ?, ?, 'WAITING', ?, ?, ?)
+        """, (match_id, str(chat_id), str(creator_id), creator_name, str(opponent_id) if opponent_id else None,
+              opponent_name, now, expires_at, rematch_of))
         conn.commit()
 
     return {
@@ -84,7 +127,8 @@ def create_match(match_id: str, chat_id: str, creator_id: str, creator_name: str
         "opponent_name": opponent_name,
         "status": "WAITING",
         "created_at": now,
-        "expires_at": expires_at
+        "expires_at": expires_at,
+        "rematch_of": rematch_of,
     }
 
 
@@ -123,7 +167,7 @@ def join_match(match_id: str, user_id: str, user_name: str) -> Optional[Dict[str
             return None
 
         conn.execute("""
-            UPDATE matches 
+            UPDATE matches
             SET opponent_id = ?, opponent_name = ?, status = 'ACTIVE', started_at = ?
             WHERE match_id = ?
         """, (str(user_id), user_name, now, match_id))
@@ -141,7 +185,7 @@ def cancel_match(match_id: str, reason: str = "JOIN_TIMEOUT") -> bool:
     now = time.time()
     with get_db_connection() as conn:
         cur = conn.execute("""
-            UPDATE matches 
+            UPDATE matches
             SET status = 'CANCELLED', finish_reason = ?, ended_at = ?
             WHERE match_id = ? AND status = 'WAITING'
         """, (reason, now, match_id))
@@ -149,10 +193,25 @@ def cancel_match(match_id: str, reason: str = "JOIN_TIMEOUT") -> bool:
         return cur.rowcount > 0
 
 
-def finish_match(match_id: str, winner_id: Optional[str], finish_reason: str) -> Optional[Dict[str, Any]]:
+def leaderboard_chat_id(conn: sqlite3.Connection, match: Dict[str, Any]) -> str:
+    """
+    The leaderboard a match's result belongs to: its chat, or for an inline challenge (chat "inline") the chat
+    it was opened in, when known - the group's id once learned, else a bucket for its chat_instance.
+    """
+    chat_id = str(match["chat_id"])
+    chat_instance = match.get("chat_instance")
+    if chat_id != "inline" or not chat_instance:
+        return chat_id
+    row = conn.execute("SELECT chat_id FROM chat_instances WHERE chat_instance = ?", (chat_instance,)).fetchone()
+    return str(row["chat_id"]) if row else f"ci:{chat_instance}"
+
+
+def finish_match(match_id: str, winner_id: Optional[str], finish_reason: str,
+                 record_stats: bool = True) -> Optional[Dict[str, Any]]:
     """
     Finishes an active match, sets outcome, and updates local leaderboard.
     If finish_reason is 'BOTH_DISCONNECTED' or 'DRAW', winner_id is None and neither player gets a win.
+    record_stats=False closes the match without touching the leaderboard (e.g. a stale match after a restart).
     """
     now = time.time()
     with get_db_connection() as conn:
@@ -172,14 +231,14 @@ def finish_match(match_id: str, winner_id: Optional[str], finish_reason: str) ->
             WHERE match_id = ?
         """, (status, str(winner_id) if winner_id else None, finish_reason, now, match_id))
 
-        chat_id = match["chat_id"]
+        chat_id = leaderboard_chat_id(conn, match)
         creator_id = str(match["creator_id"])
         creator_name = match["creator_name"]
         opponent_id = str(match["opponent_id"]) if match["opponent_id"] else None
         opponent_name = match["opponent_name"] or "Opponent"
 
         # Update leaderboard only if match actually had two players
-        if opponent_id:
+        if opponent_id and record_stats:
             if winner_id:
                 winner_id_str = str(winner_id)
                 loser_id_str = opponent_id if winner_id_str == creator_id else creator_id
@@ -198,6 +257,7 @@ def finish_match(match_id: str, winner_id: Optional[str], finish_reason: str) ->
         match["winner_id"] = str(winner_id) if winner_id else None
         match["finish_reason"] = finish_reason
         match["ended_at"] = now
+        match["leaderboard_chat_id"] = chat_id
         return match
 
 
@@ -221,26 +281,40 @@ def _record_player_stat(conn: sqlite3.Connection, chat_id: str, user_id: str, na
     """, (str(chat_id), str(user_id), name, w, l, d, now, w, l, d, now))
 
 
+def _leaderboard_buckets(conn: sqlite3.Connection, chat_id: str) -> List[str]:
+    """A chat's own leaderboard plus the inline-challenge buckets of chat_instances known to belong to it."""
+    rows = conn.execute("SELECT chat_instance FROM chat_instances WHERE chat_id = ?", (str(chat_id),)).fetchall()
+    return [str(chat_id)] + [f"ci:{r['chat_instance']}" for r in rows]
+
+
+def _with_win_rate(d: Dict[str, Any]) -> Dict[str, Any]:
+    gp = d["games_played"]
+    d["win_rate"] = round((d["wins"] / gp) * 100, 1) if gp > 0 else 0.0
+    return d
+
+
 def get_local_leaderboard(chat_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Returns the local leaderboard for a specific chat/group.
     Sorted by wins DESC, games_played DESC.
     """
     with get_db_connection() as conn:
-        cur = conn.execute("""
-            SELECT user_id, first_name, username, wins, losses, draws, games_played, last_played_at
+        buckets = _leaderboard_buckets(conn, chat_id)
+        marks = ",".join("?" * len(buckets))
+        cur = conn.execute(f"""
+            SELECT user_id, MAX(first_name) AS first_name, MAX(username) AS username,
+                   SUM(wins) AS wins, SUM(losses) AS losses, SUM(draws) AS draws,
+                   SUM(games_played) AS games_played, MAX(last_played_at) AS last_played_at
             FROM local_leaderboard
-            WHERE chat_id = ?
-            ORDER BY wins DESC, games_played DESC, (wins * 1.0 / MAX(games_played, 1)) DESC
+            WHERE chat_id IN ({marks})
+            GROUP BY user_id
+            ORDER BY wins DESC, games_played DESC, (SUM(wins) * 1.0 / MAX(SUM(games_played), 1)) DESC
             LIMIT ?
-        """, (str(chat_id), limit))
-        rows = cur.fetchall()
+        """, (*buckets, limit))
         result = []
-        for rank, r in enumerate(rows, start=1):
-            d = dict(r)
+        for rank, r in enumerate(cur.fetchall(), start=1):
+            d = _with_win_rate(dict(r))
             d["rank"] = rank
-            gp = d["games_played"]
-            d["win_rate"] = round((d["wins"] / gp) * 100, 1) if gp > 0 else 0.0
             result.append(d)
         return result
 
@@ -254,11 +328,122 @@ def get_user_stats(chat_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """, (str(chat_id), str(user_id)))
         row = cur.fetchone()
         if row:
-            d = dict(row)
-            gp = d["games_played"]
-            d["win_rate"] = round((d["wins"] / gp) * 100, 1) if gp > 0 else 0.0
-            return d
+            return _with_win_rate(dict(row))
     return None
+
+
+def get_user_totals(user_id: str) -> Optional[Dict[str, Any]]:
+    """A player's record summed over every chat they have fought in."""
+    with get_db_connection() as conn:
+        row = conn.execute("""
+            SELECT user_id, MAX(first_name) AS first_name, SUM(wins) AS wins, SUM(losses) AS losses,
+                   SUM(draws) AS draws, SUM(games_played) AS games_played
+            FROM local_leaderboard WHERE user_id = ? GROUP BY user_id
+        """, (str(user_id),)).fetchone()
+        return _with_win_rate(dict(row)) if row else None
+
+
+# -------------------------------------------------------------------------
+# Live match state, challenge messages and chat instances
+# -------------------------------------------------------------------------
+
+def save_room_state(match_id: str, state: Dict[str, Any]):
+    """Stores the fight setup and score, so a restarted server can put both players back into the bout."""
+    with get_db_connection() as conn:
+        conn.execute("UPDATE matches SET room_state = ? WHERE match_id = ?", (json.dumps(state), match_id))
+        conn.commit()
+
+
+def load_room_state(match: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(match["room_state"]) if match.get("room_state") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def set_challenge_message(match_id: str, chat_id: str, message_id: int):
+    with get_db_connection() as conn:
+        conn.execute("UPDATE matches SET message_chat_id = ?, message_id = ? WHERE match_id = ?",
+                     (str(chat_id), int(message_id), match_id))
+        conn.commit()
+
+
+def set_inline_message(match_id: str, inline_message_id: str):
+    with get_db_connection() as conn:
+        conn.execute("UPDATE matches SET inline_message_id = ? WHERE match_id = ?", (inline_message_id, match_id))
+        conn.commit()
+
+
+def set_match_chat_instance(match_id: str, chat_instance: str):
+    """Records which chat an inline challenge was opened in (only the first one counts)."""
+    with get_db_connection() as conn:
+        conn.execute("UPDATE matches SET chat_instance = ? WHERE match_id = ? AND chat_instance IS NULL",
+                     (chat_instance, match_id))
+        conn.commit()
+
+
+def remember_chat_instance(chat_instance: str, chat_id: str):
+    """Maps a chat_instance to its chat id, from a button pressed under a message the bot sent there."""
+    if not chat_instance or not chat_id:
+        return
+    with get_db_connection() as conn:
+        conn.execute("""
+            INSERT INTO chat_instances (chat_instance, chat_id, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(chat_instance) DO UPDATE SET chat_id = excluded.chat_id, updated_at = excluded.updated_at
+        """, (str(chat_instance), str(chat_id), time.time()))
+        conn.commit()
+
+
+def count_active_matches() -> int:
+    with get_db_connection() as conn:
+        return conn.execute("SELECT COUNT(*) FROM matches WHERE status = 'ACTIVE'").fetchone()[0]
+
+
+def close_stale_matches(active_idle_seconds: float, live_match_ids: List[str]) -> Dict[str, List[str]]:
+    """
+    Housekeeping after restarts: waiting challenges past their window become CANCELLED, and ACTIVE matches
+    that started more than `active_idle_seconds` ago with nobody connected become ABANDONED without stats.
+    """
+    now = time.time()
+    closed = {"cancelled": [], "abandoned": []}
+    with get_db_connection() as conn:
+        for row in conn.execute("SELECT match_id FROM matches WHERE status = 'WAITING' AND expires_at < ?", (now,)):
+            if row["match_id"] not in live_match_ids:
+                closed["cancelled"].append(row["match_id"])
+        for row in conn.execute("SELECT match_id FROM matches WHERE status = 'ACTIVE' AND COALESCE(started_at, created_at) < ?",
+                                (now - active_idle_seconds,)):
+            if row["match_id"] not in live_match_ids:
+                closed["abandoned"].append(row["match_id"])
+        for match_id in closed["cancelled"]:
+            conn.execute("UPDATE matches SET status = 'CANCELLED', finish_reason = 'JOIN_TIMEOUT', ended_at = ? "
+                         "WHERE match_id = ? AND status = 'WAITING'", (now, match_id))
+        for match_id in closed["abandoned"]:
+            conn.execute("UPDATE matches SET status = 'ABANDONED', finish_reason = 'STALE', ended_at = ? "
+                         "WHERE match_id = ? AND status = 'ACTIVE'", (now, match_id))
+        conn.commit()
+    return closed
+
+
+# -------------------------------------------------------------------------
+# Replays
+# -------------------------------------------------------------------------
+
+def save_replay(match_id: str, data: bytes):
+    with get_db_connection() as conn:
+        conn.execute("INSERT OR REPLACE INTO replays (match_id, created_at, data) VALUES (?, ?, ?)",
+                     (match_id, time.time(), sqlite3.Binary(data)))
+        conn.execute("""
+            DELETE FROM replays WHERE match_id NOT IN (
+                SELECT match_id FROM replays ORDER BY created_at DESC LIMIT ?
+            )
+        """, (REPLAYS_KEPT,))
+        conn.commit()
+
+
+def get_replay(match_id: str) -> Optional[bytes]:
+    with get_db_connection() as conn:
+        row = conn.execute("SELECT data FROM replays WHERE match_id = ?", (match_id,)).fetchone()
+        return bytes(row["data"]) if row else None
 
 
 # Initialize DB on module import

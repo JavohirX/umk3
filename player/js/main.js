@@ -105,12 +105,25 @@ function unlockAudio() {
     } catch (_) {}
 }
 
+// Keys that confirm on the result screens: the centre/OK key and the A (punch) button
+const CONFIRM_KEYS = [-5, 53];
+
 function sendKeyEvent(keyCode, isDown) {
     if (!CoreEngine.val_maincanvasbridge_a) return;
 
+    // Watching a match (live or replay): the fight isn't ours, keys only work the result screen
+    if (mpClient.isReplay || (mpClient.isMultiplayer && mpClient.isSpectator)) {
+        if (isDown) handleViewerKey(keyCode);
+        return;
+    }
     if (mpClient && mpClient.isMultiplayer) {
-        // A decided or expired online match stays on its result banner; keys must not start single-player
-        if (mpClient.status === "COMPLETED" || mpClient.status === "CANCELLED") return;
+        // A decided or expired online match stays on its result screen; keys must not start single-player
+        if (["COMPLETED", "CANCELLED", "REJECTED"].includes(mpClient.status)) {
+            if (isDown) handleResultKey(keyCode);
+            return;
+        }
+        // The menu softkeys would open the pause menu or the move list on this screen only, mid-fight
+        if (keyCode === -6 || keyCode === -7) return;
         // A frozen bout would replay queued presses on resume; releases still pass so no key sticks
         if (mpClient.paused && isDown) return;
     }
@@ -715,6 +728,13 @@ function setupCanvas() {
         const cx = (e.clientX - rect.left) * scaleX;
         const cy = (e.clientY - rect.top) * scaleY;
 
+        // 0. A result screen (online match over, replay over): tapping the picture confirms, like A
+        if (resultScreenShown() && cy < 355) {
+            triggerHaptic(12);
+            sendKeyEvent(-5, true);
+            return;
+        }
+
         // 1. Softkey zone at the bottom of the screen (OPTNS / BACK / PAUSE)
         // Canvas is 352 x 416. The bottom softkey bar occupies cy >= 355.
         // LSK is on the left (cx <= 105), RSK is on the right (cx >= 247).
@@ -890,6 +910,7 @@ function startOnlineSegment(setup, segment, resume) {
         delayChange: 0, peerHintSeq: 0, advice: { hint: 0, seq: 0 },
         window: { stalls: 0, stallMs: 0, minLead: Infinity, since: now }, goodSeconds: [],
         peerTick: 0, peerTickAt: 0, heardFromPeer: false, stallStart: null,
+        hashes: new Map(), peerHashes: new Map(), lastResyncAt: 0,
         stats: newNetStats(now, delay)
     };
     for (let t = 0; t < delay; t++) {
@@ -897,11 +918,22 @@ function startOnlineSegment(setup, segment, resume) {
         mpClient.sendLockstepInput(segment, t, 0, 0);
     }
     mpClient.selfOffline = false;
+    mpClient._boutLive = true;
+    resetHaptics();
     console.log(`[Multiplayer] Lockstep segment ${segment}: input delay ${delay} ticks (opponent round trip ${Math.round(peerRtt)}ms)`);
 
-    // Start from the same engine state on both phones: same seed, first frame delta, round-intro timer
-    // offset (left over from the select screen), no keys held, and no fight phase or clock left over from
-    // an interrupted bout (a reloaded phone starts with none)
+    resetEngineForBout(setup, segment, resume, (bits, isDown) => {
+        onlineBout.pending[isDown ? 0 : 1] |= bits;
+    });
+    // The score this segment starts from, so the server sees both phones agree on it
+    mpClient.sendRoundScore(onlineBout.rounds[0], onlineBout.rounds[1]);
+}
+
+// Puts the engine into the versus screen for this fight, from the same state on every device that runs it
+// (both players, and anyone watching or replaying): same seed, first frame delta, round-intro timer offset
+// (left over from the select screen), no keys held, and no fight phase or clock left over from an
+// interrupted bout (a reloaded phone starts with none)
+function resetEngineForBout(setup, segment, resume, routeLocalBits) {
     CoreEngine.val_bool_am = false;
     CoreEngine.globalRandom.setSeed(setup.seed + segment);
     CoreEngine.val_long_a = 0;
@@ -912,17 +944,17 @@ function startOnlineSegment(setup, segment, resume) {
     CoreEngine.val_int_dI = CoreEngine.val_int_dJ = CoreEngine.val_int_dK = 0;
     CoreEngine.onlineVersus = {
         p2Masks: { dI: 0, dJ: 0, dK: 0, dF: 0, dG: 0, dH: 0 },
-        routeLocalBits: (bits, isDown) => {
-            onlineBout.pending[isDown ? 0 : 1] |= bits;
-        },
+        routeLocalBits,
         stage: setup.stage,
         controlTypes: setup.controlTypes,
-        resume
+        resume,
+        // The engine calls this when it loads fighter C's sprites (see exec_f_to_bool)
+        recolorMirror: setup.p1Hero === setup.p2Hero ? recolorMirrorSheets : null
     };
 
     // Native versus: a one-rung tower with P2 as the next opponent shows both fighters, then the engine
-    // loads the arcade fight for P1 (left) vs P2 (right). Mirror matches need nothing extra: the engine
-    // skins fighter C from val_arr_int_aT when both heroes are the same.
+    // loads the arcade fight for P1 (left) vs P2 (right). Mirror matches get the engine's alternate
+    // palette for fighter C (val_arr_int_aT), pushed further apart by recolorMirrorSheets if needed.
     const VERSUS_HEADER_TEXT = 24; // "FIGHT!" in the engine's text table (towers use NOVICE/WARRIOR/MASTER)
     const rung = [VERSUS_HEADER_TEXT, setup.p2Hero];
     CoreEngine.val_arr_arr_int_d = [rung, rung.slice(), rung.slice()];
@@ -930,6 +962,18 @@ function startOnlineSegment(setup, segment, resume) {
     CoreEngine.val_int_cz = 0;
     CoreEngine.val_int_cA = 0;
     CoreEngine.exec_u_int_to_void(4);
+}
+
+// The versus info both phones (and viewers) build the fight from, out of a versus_start message
+function setupFromVersus(data) {
+    return {
+        p1Hero: data.p1.hero_id,
+        p2Hero: data.p2.hero_id,
+        stage: data.stage ?? 0,
+        seed: data.seed ?? 1,
+        controlTypes: [data.p1.control === 0 ? 0 : 1, data.p2.control === 0 ? 0 : 1],
+        names: [data.p1.name || "P1", data.p2.name || "P2"]
+    };
 }
 
 // Restart point for both phones after a reconnect: the round score, plus health and clock if mid-round
@@ -947,9 +991,21 @@ function boutRestartState() {
     return resume;
 }
 
+// We hold the bout's state: send it and restart our side from it; the opponent restarts on receiving it
+function restartBoutFromHere(segment) {
+    const setup = (onlineBout && onlineBout.setup) || (onlineResume && onlineResume.setup);
+    if (!setup) return;
+    const snapshot = { segment, resume: boutRestartState() };
+    onlineResume = null;
+    mpClient.sendSnapshot(snapshot);
+    startOnlineSegment(setup, segment, snapshot.resume);
+}
+
 function resumeOnlineBout() {
-    if (!onlineResume || !onlineResume.setup || !onlineResume.snapshot) return;
-    const { setup, snapshot } = onlineResume;
+    if (!onlineResume || !onlineResume.snapshot) return;
+    const setup = onlineResume.setup || (onlineBout && onlineBout.setup);
+    if (!setup) return;
+    const { snapshot } = onlineResume;
     onlineResume = null;
     startOnlineSegment(setup, snapshot.segment, snapshot.resume);
 }
@@ -1013,6 +1069,7 @@ function runOnlineBout(now) {
             bout.pending = [0, 0];
         } else {
             scheduleLocalInput(bout);
+            if (bout.tick % HASH_EVERY_TICKS === 0) shareStateHash(bout, bout.tick);
         }
         bout.tick++;
         bout.acc -= LOCKSTEP_TICK_MS;
@@ -1020,10 +1077,66 @@ function runOnlineBout(now) {
         stats.ticks++;
         ran++;
         reportScoredRounds();
+        if (onlineBout !== bout) return; // a desync restarted the bout
     }
     if (ran > 1) stats.catchUpFrames++;
     if (!decided) updateDelayAdvice(bout, now);
     if (now - stats.since >= 10000) reportNetStats(bout, now);
+}
+
+// Desync check: both phones fingerprint their simulation once a second and compare. The fights only ever
+// differ if the engine isn't deterministic somewhere (an untested browser, say); then P1 restarts both
+// from its own state, the way a reconnect does, and the count goes into the net stats.
+const HASH_EVERY_TICKS = 60;
+// Times the two simulations differed this match (a restart starts a new bout, so this lives outside it)
+let totalDesyncs = 0;
+
+function simulationHash() {
+    const E = CoreEngine;
+    let h = 0x811c9dc5;
+    const mix = (value) => {
+        h = Math.imul(h ^ (value | 0), 0x01000193) >>> 0;
+    };
+    [E.val_int_dL, E.val_int_dM, E.val_int_dS, E.val_int_dU, E.val_int_dV].forEach(mix);
+    const seed = E.globalRandom.seed;
+    mix(Number(seed & 0xFFFFFFFFn));
+    mix(Number(seed >> 32n));
+    for (const fighter of [E.val_coreengine_b, E.val_coreengine_c]) {
+        if (!fighter) { mix(-1); continue; }
+        mix(fighter.actorPhysicsArray[0]);
+        mix(fighter.actorPhysicsArray[1]);
+        mix(fighter.currentHealth);
+        mix(fighter.actorTimerW);
+        mix(fighter.actorTimerX);
+    }
+    return h;
+}
+
+function shareStateHash(bout, tick) {
+    const hash = simulationHash();
+    bout.hashes.set(tick, hash);
+    mpClient.sendStateHash(bout.segment, tick, hash);
+    compareStateHash(bout, tick);
+}
+
+function compareStateHash(bout, tick) {
+    const ours = bout.hashes.get(tick);
+    const theirs = bout.peerHashes.get(tick);
+    if (ours === undefined || theirs === undefined) return;
+    bout.hashes.delete(tick);
+    bout.peerHashes.delete(tick);
+    // Keep the maps small if a hash never arrives
+    for (const map of [bout.hashes, bout.peerHashes]) {
+        for (const t of map.keys()) if (t < tick - 10 * HASH_EVERY_TICKS) map.delete(t);
+    }
+    if (ours === theirs) return;
+    totalDesyncs++;
+    console.warn(`[Multiplayer] Simulations differ at tick ${tick} (segment ${bout.segment}); restarting from P1's state`);
+    const now = performance.now();
+    if (mpClient.role === "p1" && mpClient.status === "ACTIVE" && now - bout.lastResyncAt > 3000) {
+        bout.lastResyncAt = now;
+        restartBoutFromHere(bout.segment + 1);
+    }
 }
 
 // Schedules what we pressed during this tick `delay` ticks ahead, applying the opponent's advice on our
@@ -1129,22 +1242,480 @@ function reportNetStats(bout, now) {
         tick_ms: s.ticks ? Math.round(s.tickMs / s.ticks * 10) / 10 : null,
         paints_skipped: s.paintsSkipped,
         catch_up_frames: s.catchUpFrames,
+        desyncs: totalDesyncs,
         device: navigator.userAgent.slice(0, 160)
     });
     bout.stats = newNetStats(now, bout.delay);
 }
 
-// Both simulations score the same rounds; P1's phone reports them (a time-out on equal health scores both)
+// Both phones report the engine's round score whenever it changes; the server counts a round once both
+// reports agree (a time-out on equal health scores both)
 function reportScoredRounds() {
-    if (mpClient.role !== "p1" || CoreEngine.val_int_dN !== 2) return;
+    if (CoreEngine.val_int_dN !== 2) return;
     const roundsB = CoreEngine.val_int_dU;
     const roundsC = CoreEngine.val_int_dV;
-    const wonB = roundsB > onlineBout.rounds[0];
-    const wonC = roundsC > onlineBout.rounds[1];
-    if (wonB || wonC) {
-        mpClient.sendRoundWin(wonB && wonC ? "draw" : (wonB ? "p1" : "p2"));
+    if (roundsB !== onlineBout.rounds[0] || roundsC !== onlineBout.rounds[1]) {
+        mpClient.sendRoundScore(roundsB, roundsC);
     }
     onlineBout.rounds = [roundsB, roundsC];
+}
+
+// =========================================================================
+// WATCHING: live spectating and replays
+// =========================================================================
+
+// A fight we don't play: someone else's live match, or a recorded one. Both players' inputs come from the
+// server and the same engine replays them tick by tick, so the picture matches what the players saw.
+//   setup, segment - the fight and which bout segment is running; tick - next tick to simulate
+//   inputs[side]   - tick -> [pressed, released] for the ticks where that player's keys changed
+//   avail[side]    - how many ticks of that player's input have arrived (a replay has them all)
+//   final          - no more input will come (replay's last segment, or the live match ended): once the
+//                    inputs run out the fight plays on by itself, as it did on the players' phones
+//   replay         - for replays: the recording, the segment index, and when the playback finished
+let viewer = null;
+
+function startViewerSegment(setup, seg, extra = {}) {
+    const now = performance.now();
+    viewer = {
+        setup, segment: seg.segment, tick: 0,
+        inputs: [new Map(seg.p1.map(([t, p, r]) => [t, [p, r]])), new Map(seg.p2.map(([t, p, r]) => [t, [p, r]]))],
+        avail: seg.ticks.slice(),
+        acc: 0, last: now, final: false, freeTicks: 0, over: false,
+        ...extra
+    };
+    mpClient._watching = true;
+    window.__muteVibration = true;
+    resetEngineForBout(setup, seg.segment, seg.resume, () => {});
+}
+
+function viewerFrontier(v) {
+    return Math.min(v.avail[0], v.avail[1]);
+}
+
+function viewerTickReady(v, t) {
+    return t < viewerFrontier(v) || v.final;
+}
+
+function stepViewerTick(v, skipPaint) {
+    for (let side = 0; side < 2; side++) {
+        const input = v.inputs[side].get(v.tick);
+        if (input) {
+            applyTickInput(side, input);
+            v.inputs[side].delete(v.tick);
+        }
+    }
+    if (v.tick >= viewerFrontier(v)) v.freeTicks++;
+    midlet.stepFrame(1000 + Math.floor(v.tick * 1000 / 60), skipPaint);
+    v.tick++;
+}
+
+function runViewer(now) {
+    const v = viewer;
+    if (v.over) return;
+    const frameMs = now - v.last;
+    v.last = now;
+
+    // Replays: at the end of a segment's recording, go on to the next one (a restart after a reconnect)
+    if (v.replay && !v.final && v.tick >= viewerFrontier(v)) {
+        const next = v.replay.index + 1;
+        const segments = v.replay.data.segments;
+        if (next < segments.length) {
+            startReplaySegment(v.replay.data, next);
+            return;
+        }
+        v.final = true;
+    }
+    // After the last input the fight plays out for a few seconds (the knockout and win pose), then ends
+    if (v.replay && v.final && v.freeTicks >= 300) {
+        v.over = true;
+        return;
+    }
+
+    const behind = viewerFrontier(v) - v.tick;
+    if (!v.replay && !v.final && behind > 30) {
+        // Joined a live fight late: fast-forward through what we missed, drawing only each frame's last tick
+        const until = performance.now() + 14;
+        while (viewerFrontier(v) - v.tick > 12 && performance.now() < until) {
+            stepViewerTick(v, true);
+        }
+        stepViewerTick(v, false);
+        v.acc = 0;
+        return;
+    }
+
+    // Live: stay a few ticks behind the latest input so network jitter doesn't stall the picture
+    const pace = v.replay || v.final ? 1 : (behind < 4 ? 0.9 : (behind > 16 ? 1.15 : 1));
+    v.acc = Math.min(v.acc + frameMs * pace, LOCKSTEP_TICK_MS * 4);
+    while (v.acc >= LOCKSTEP_TICK_MS) {
+        if (!viewerTickReady(v, v.tick)) {
+            v.acc = Math.min(v.acc, LOCKSTEP_TICK_MS);
+            break;
+        }
+        if (v.replay && !v.final && v.tick >= viewerFrontier(v)) break; // next segment, next frame
+        const another = v.acc >= 2 * LOCKSTEP_TICK_MS && viewerTickReady(v, v.tick + 1);
+        stepViewerTick(v, another);
+        v.acc -= LOCKSTEP_TICK_MS;
+    }
+}
+
+// Spectators: a fight (or a restart of it) to watch from the start of its segment, with the inputs so far
+function onSpectate(data) {
+    if (!data.setup || !data.segment) return;
+    const setup = setupFromVersus(data.setup);
+    startViewerSegment(setup, data.segment);
+    console.log(`[Multiplayer] Watching segment ${data.segment.segment}: ${viewerFrontier(viewer)} ticks to catch up`);
+}
+
+// Spectators: one tick of a player's input, as the server relays it
+function onSpectatorInput(side, segment, tick, pressed, released) {
+    const v = viewer;
+    if (!v || v.replay || (v.segment & 0xFF) !== segment || tick !== v.avail[side]) return;
+    if (pressed || released) v.inputs[side].set(tick, [pressed, released]);
+    v.avail[side] = tick + 1;
+}
+
+function startReplaySegment(data, index) {
+    const setup = setupFromVersus(data.setup);
+    startViewerSegment(setup, data.segments[index], { replay: { data, index } });
+}
+
+async function startReplay() {
+    try {
+        const data = await mpClient.fetchReplay();
+        if (!data || !data.segments || !data.segments.length) throw new Error("empty replay");
+        replayData = data;
+        startReplaySegment(data, 0);
+    } catch (err) {
+        console.error("[Replay] Could not load:", err);
+        replayError = "REPLAY NOT AVAILABLE";
+    }
+}
+
+let replayData = null;
+let replayError = null;
+
+// =========================================================================
+// RESULT SCREENS, EXIT, HAPTICS, CLOSE CONFIRMATION, MIRROR COLOURS
+// =========================================================================
+
+function closeGame() {
+    const tg = window.Telegram?.WebApp;
+    if (tg && typeof tg.close === 'function' && tg.initData) {
+        tg.close();
+    } else {
+        window.location.href = 'play.html';
+    }
+}
+
+function openReplay(matchId) {
+    if (!matchId) return;
+    window.location.href = `play.html?replay=${encodeURIComponent(matchId)}${window.location.hash || ''}`;
+}
+
+// The match is over on this screen and a result panel is up
+function resultScreenShown() {
+    if (mpClient.isReplay) return !!(viewer && viewer.over) || !!replayError;
+    return mpClient.isMultiplayer && ["COMPLETED", "CANCELLED", "REJECTED"].includes(mpClient.status);
+}
+
+// A finished online match: A asks for a rematch, OPTNS opens its replay, BACK leaves the game
+function handleResultKey(keyCode) {
+    if (CONFIRM_KEYS.includes(keyCode) && mpClient.status === "COMPLETED") {
+        mpClient.requestRematch();
+    } else if (keyCode === -6 && mpClient.status === "COMPLETED" && mpClient.result && mpClient.result.replay) {
+        openReplay(mpClient.matchId);
+    } else if (keyCode === -7) {
+        closeGame();
+    }
+}
+
+// Watching: BACK leaves; a finished replay replays on A; a finished live match offers its replay on OPTNS
+function handleViewerKey(keyCode) {
+    if (keyCode === -7) {
+        closeGame();
+    } else if (mpClient.isReplay && CONFIRM_KEYS.includes(keyCode) && viewer && viewer.over && replayData) {
+        startReplaySegment(replayData, 0);
+    } else if (keyCode === -6 && mpClient.isSpectator && mpClient.status === "COMPLETED"
+               && mpClient.result && mpClient.result.replay) {
+        openReplay(mpClient.matchId);
+    }
+}
+
+function short(name, n = 10) {
+    return String(name || "").toUpperCase().slice(0, n);
+}
+
+// The lines of the result panel drawn over the last frame of a finished match or replay
+function resultPanelLines() {
+    if (mpClient.isReplay) {
+        if (replayError) return [replayError, "", "BACK: EXIT"];
+        const result = replayData && replayData.result;
+        return ["REPLAY OVER", result ? scoreLine(result) : "", "A: WATCH AGAIN    BACK: EXIT"];
+    }
+    if (mpClient.status !== "COMPLETED" || !mpClient.result) return null;
+    const result = mpClient.result;
+    const replayHint = result.replay ? "OPTNS: REPLAY    " : "";
+    if (mpClient.isSpectator) {
+        const title = result.winner_id ? `${short(result.winner_name, 14)} WINS!` : "DRAW";
+        return [title, scoreLine(result), `${replayHint}BACK: EXIT`];
+    }
+    let title = "DRAW";
+    if (result.winner_id) {
+        title = result.winner_id !== mpClient.userId ? "DEFEAT"
+            : (result.reason === "AUTOWIN_DISCONNECT" ? "VICTORY - OPPONENT FORFEITED" : "VICTORY!");
+    }
+    const opponent = short(mpClient.opponentName(), 12);
+    const rematch = mpClient.rematch || { requested: [] };
+    const iAsked = rematch.requested.includes(mpClient.userId);
+    const theyAsked = rematch.requested.some((id) => id !== mpClient.userId);
+    let rematchLine = "A: REMATCH";
+    if (rematch.opponentLeft) rematchLine = `${opponent} LEFT THE ARENA`;
+    else if (iAsked) rematchLine = `WAITING FOR ${opponent}...`;
+    else if (theyAsked) rematchLine = `${opponent} WANTS A REMATCH - PRESS A`;
+    return [title, scoreLine(result), rematchLine, `${replayHint}BACK: EXIT`];
+}
+
+function scoreLine(result) {
+    const p1 = result.p1 ? short(result.p1.name, 12) : "P1";
+    const p2 = result.p2 ? short(result.p2.name, 12) : "P2";
+    return `${p1} ${result.p1_rounds ?? 0} - ${result.p2_rounds ?? 0} ${p2}`;
+}
+
+function drawResultPanel(lines) {
+    const w = canvas.width - 40;
+    const lineH = 22;
+    const h = 24 + lines.length * lineH;
+    const x = 20;
+    const y = Math.round((canvas.height - h) / 2) - 20;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#dcb450';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    lines.forEach((line, i) => {
+        ctx.fillStyle = i === 0 ? '#ffd76a' : '#ffeedd';
+        ctx.font = i === 0 ? 'bold 17px monospace' : 'bold 12px monospace';
+        ctx.fillText(line, canvas.width / 2, y + 12 + lineH * i + lineH / 2);
+    });
+    ctx.restore();
+}
+
+function drawBanner(text) {
+    ctx.save();
+    const bH = 34;
+    const bY = canvas.height - bH - 18;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, bY, canvas.width, bH);
+    ctx.strokeStyle = '#dcb450';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(0, bY, canvas.width, bH);
+    ctx.fillStyle = '#ffeedd';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, bY + bH / 2);
+    ctx.restore();
+}
+
+// "2 WATCHING" in the softkey bar while people spectate our fight
+function drawSpectatorCount(count) {
+    ctx.save();
+    ctx.fillStyle = '#ffeedd';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${count} WATCHING`, canvas.width / 2, canvas.height - 12);
+    ctx.restore();
+}
+
+// Haptics: a knock when our fighter takes a hit (heavier for big ones), success/error when a round ends
+let hapticState = { fighter: null, health: null, rounds: null, lastAt: 0 };
+
+function resetHaptics() {
+    hapticState = { fighter: null, health: null, rounds: null, lastAt: 0 };
+}
+
+function updateHaptics() {
+    const haptics = window.Telegram?.WebApp?.HapticFeedback;
+    if (!haptics || mpClient.isReplay) return;
+    let side = 0; // single player fights as B
+    if (mpClient.isMultiplayer) {
+        if (mpClient.isSpectator || !onlineBout || mpClient.status !== "ACTIVE") return;
+        side = mpClient.role === "p1" ? 0 : 1;
+    }
+    const own = side === 0 ? CoreEngine.val_coreengine_b : CoreEngine.val_coreengine_c;
+    if (!own || CoreEngine.val_int_dN !== 2) {
+        hapticState.health = null;
+        return;
+    }
+    try {
+        const now = performance.now();
+        const health = own.currentHealth;
+        // Only hits during a live round, on the same fighter: between rounds the engine swaps in a new
+        // fighter object that starts at 0 health, which isn't a hit
+        const sameFighter = hapticState.fighter === own;
+        hapticState.fighter = own;
+        if (sameFighter && CoreEngine.val_int_dL === 2 && hapticState.health !== null && health < hapticState.health
+            && now - hapticState.lastAt > 90) {
+            haptics.impactOccurred(hapticState.health - health >= 10 ? 'heavy' : 'medium');
+            hapticState.lastAt = now;
+        }
+        hapticState.health = health;
+        const rounds = [CoreEngine.val_int_dU, CoreEngine.val_int_dV];
+        if (hapticState.rounds && (rounds[0] !== hapticState.rounds[0] || rounds[1] !== hapticState.rounds[1])) {
+            haptics.notificationOccurred(rounds[side] > hapticState.rounds[side] ? 'success' : 'error');
+        }
+        hapticState.rounds = rounds;
+    } catch (_) {}
+}
+
+// While an online match is on, Telegram asks before closing the game, so a stray swipe doesn't forfeit it
+let closingConfirmationOn = false;
+
+function updateClosingConfirmation() {
+    const tg = window.Telegram?.WebApp;
+    if (!tg || typeof tg.enableClosingConfirmation !== 'function') return;
+    const want = mpClient.isMultiplayer && !mpClient.isSpectator
+        && (mpClient.status === "ACTIVE" || mpClient.status === "HERO_SELECT");
+    if (want === closingConfirmationOn) return;
+    closingConfirmationOn = want;
+    try {
+        if (want) tg.enableClosingConfirmation();
+        else tg.disableClosingConfirmation();
+    } catch (_) {}
+}
+
+// Mirror matches: the engine skins fighter C with the arcade's alternate palette, which for some fighters
+// (Cyrax) is nearly the same colour as the original. If the two costumes are that close, C's costume
+// colours are turned around the colour wheel. Only the pictures change; the fight itself is untouched.
+function recolorMirrorSheets(animSet) {
+    try {
+        const sheetsOf = (set) => ((set && set.spriteImages) || [])
+            .map((si) => si && si.sourceImage && si.sourceImage.underlyingImage && si.sourceImage.underlyingImage.canvas)
+            .filter((c) => c && c.getContext);
+        const cSheets = sheetsOf(animSet);
+        const fighterB = CoreEngine.val_coreengine_b;
+        const bSheets = sheetsOf(fighterB && fighterB.currentAnimSet);
+        if (!cSheets.length || !bSheets.length || bSheets[0] === cSheets[0]) return;
+        const hueB = costumeHue(bSheets[0]);
+        const hueC = costumeHue(cSheets[0]);
+        if (hueB === null || hueC === null) return;
+        const distance = Math.abs(((hueB - hueC + 540) % 360) - 180);
+        if (distance >= 35) return;
+        cSheets.forEach((sheet) => rotateCostumeHue(sheet, 150));
+        console.log(`[Multiplayer] Mirror match: fighter C recoloured (costume hues ${Math.round(hueB)} / ${Math.round(hueC)})`);
+    } catch (err) {
+        console.warn("[Multiplayer] Mirror recolour skipped:", err);
+    }
+}
+
+function rgbToHsv(r, g, b) {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d) {
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+    }
+    return [h, max ? d / max : 0, max / 255];
+}
+
+function hsvToRgb(h, s, v) {
+    const c = v * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = v - c;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+        : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+// Saturated pixels are costume; skin and greys stay as they are
+const COSTUME_SATURATION = 0.55;
+
+// Average hue of a sheet's costume pixels (a circular mean), or null if it has none
+function costumeHue(sheet) {
+    const data = sheet.getContext('2d').getImageData(0, 0, sheet.width, sheet.height).data;
+    let x = 0, y = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 128) continue;
+        const [h, s, v] = rgbToHsv(data[i], data[i + 1], data[i + 2]);
+        if (s < COSTUME_SATURATION || v < 0.2) continue;
+        x += Math.cos(h * Math.PI / 180);
+        y += Math.sin(h * Math.PI / 180);
+        n++;
+    }
+    if (n < 50) return null;
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function rotateCostumeHue(sheet, degrees) {
+    const sctx = sheet.getContext('2d');
+    const img = sctx.getImageData(0, 0, sheet.width, sheet.height);
+    const data = img.data;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        const [h, s, v] = rgbToHsv(data[i], data[i + 1], data[i + 2]);
+        if (s < COSTUME_SATURATION || v < 0.2) continue;
+        const [r, g, b] = hsvToRgb((h + degrees) % 360, s, v);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+    }
+    sctx.putImageData(img, 0, 0);
+}
+
+// A finished match keeps playing its knockout for a moment before the result panel covers it
+function showResultPanelNow() {
+    if (mpClient.isReplay) return !!(viewer && viewer.over) || !!replayError;
+    if (!mpClient.isMultiplayer || mpClient.status !== "COMPLETED") return false;
+    if (!onlineBout && !viewer) return true;
+    return CoreEngine.val_int_dL === 15 || Date.now() - (mpClient.resultAt || 0) > 3500;
+}
+
+// Overlays drawn on the canvas over the native frame (no DOM): result panel, status banner, footer note
+function drawOnlineOverlays(now) {
+    if (!canvas || !ctx) return;
+    if (showResultPanelNow()) {
+        const lines = resultPanelLines();
+        if (lines) drawResultPanel(lines);
+        return;
+    }
+    if (mpClient.isReplay) {
+        drawFooterText(viewer ? "REPLAY" : "LOADING REPLAY...");
+        return;
+    }
+    let bannerText = mpClient.bannerText();
+    if (!bannerText && mpClient.status === "ACTIVE" && onlineBout && now - (onlineBout.lastTickAt || now) > 500) {
+        bannerText = "WAITING FOR OPPONENT...";
+    }
+    if (bannerText) {
+        drawBanner(bannerText);
+    } else if (mpClient.isSpectator && viewer && !viewer.final && viewerFrontier(viewer) - viewer.tick > 30) {
+        drawFooterText("CATCHING UP...");
+    } else if (mpClient.isSpectator && viewer) {
+        drawFooterText(mpClient.spectatorCount > 1 ? `SPECTATING - ${mpClient.spectatorCount} WATCHING` : "SPECTATING");
+    } else if (mpClient.status === "ACTIVE" && mpClient.spectatorCount > 0) {
+        drawFooterText(`${mpClient.spectatorCount} WATCHING`);
+    }
+}
+
+function drawFooterText(text) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(canvas.width / 2 - 90, canvas.height - 22, 180, 18);
+    ctx.fillStyle = '#ffeedd';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height - 13);
+    ctx.restore();
 }
 
 function startAnimationLoop() {
@@ -1152,60 +1723,43 @@ function startAnimationLoop() {
         if (midlet && !midlet.isExitRequested) {
             try {
                 const now = performance.now();
-                if (mpClient && mpClient.isMultiplayer && onlineBout && mpClient.status !== "HERO_SELECT") {
+                if (viewer) {
+                    runViewer(now);
+                } else if (mpClient && mpClient.isMultiplayer && onlineBout && mpClient.status !== "HERO_SELECT") {
                     // A frozen bout keeps its last frame on screen; the banner below says why
                     if (mpClient.paused) {
                         onlineBout.last = now;
                     } else {
                         runOnlineBout(now);
                     }
-                } else {
+                } else if (!mpClient.isReplay) {
                     midlet.stepFrame();
                 }
+                updateHaptics();
+                updateClosingConfirmation();
 
-                if (mpClient && mpClient.isMultiplayer) {
-                    // 1. Hero Selection Phase on Native Canvas
-                    if (mpClient.status === "HERO_SELECT") {
-                        if (CoreEngine.val_bool_W && !mpClient._heroSelected) {
-                            mpClient._heroSelected = true;
-                            let hero = CoreEngine.exec_n_to_int();
-                            if (hero < 0 || hero > 6) {
-                                // The "?" roulette normally settles on a real fighter first; if not, use the
-                                // engine's own pick, which skips fighters that are still locked
-                                hero = PatternTable.val_arr_arr_byte_a[CoreEngine.exec_c_to_byte()][0];
-                            }
-                            mpClient._heroId = hero;
-                            console.log(`[Multiplayer] Local player locked hero: ${hero}`);
-                            mpClient.sendHeroLock(hero, CoreEngine.val_int_bw);
-                            CoreEngine.val_int_aA = CoreEngine.val_int_bF;
+                // Hero Selection Phase on Native Canvas
+                if (mpClient && mpClient.isMultiplayer && mpClient.status === "HERO_SELECT") {
+                    if (CoreEngine.val_bool_W && !mpClient._heroSelected) {
+                        mpClient._heroSelected = true;
+                        let hero = CoreEngine.exec_n_to_int();
+                        if (hero < 0 || hero > 6) {
+                            // The "?" roulette normally settles on a real fighter first; if not, use the
+                            // engine's own pick, which skips fighters that are still locked
+                            hero = PatternTable.val_arr_arr_byte_a[CoreEngine.exec_c_to_byte()][0];
                         }
-                        // Online the grid only locks a hero: never continue to the arcade tower or back to the menu
-                        CoreEngine.val_bool_W = false;
-                        CoreEngine.val_bool_X = false;
+                        mpClient._heroId = hero;
+                        console.log(`[Multiplayer] Local player locked hero: ${hero}`);
+                        mpClient.sendHeroLock(hero, CoreEngine.val_int_bw);
+                        CoreEngine.val_int_aA = CoreEngine.val_int_bF;
                     }
+                    // Online the grid only locks a hero: never continue to the arcade tower or back to the menu
+                    CoreEngine.val_bool_W = false;
+                    CoreEngine.val_bool_X = false;
+                }
 
-                    // 2. Status banner (hero locked, opponent dropped, result) drawn over the native frame
-                    let bannerText = mpClient.bannerText();
-                    if (!bannerText && mpClient.status === "ACTIVE" && onlineBout && now - (onlineBout.lastTickAt || now) > 500) {
-                        bannerText = "WAITING FOR OPPONENT...";
-                    }
-                    if (bannerText && canvas && ctx) {
-                        ctx.save();
-                        const bH = 34;
-                        const bY = canvas.height - bH - 18;
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-                        ctx.fillRect(0, bY, canvas.width, bH);
-                        ctx.strokeStyle = '#dcb450';
-                        ctx.lineWidth = 1.5;
-                        ctx.strokeRect(0, bY, canvas.width, bH);
-
-                        ctx.fillStyle = '#ffeedd';
-                        ctx.font = 'bold 12px monospace';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText(bannerText, canvas.width / 2, bY + bH / 2);
-                        ctx.restore();
-                    }
+                if (mpClient && (mpClient.isMultiplayer || mpClient.isReplay)) {
+                    drawOnlineOverlays(now);
                 }
             } catch (err) {
                 console.error("[Game Loop Error]:", err);
@@ -1263,10 +1817,10 @@ async function bootstrap() {
             canvasEl.focus();
         }
 
-        // 7. Initialize Multiplayer Subsystem
-        if (mpClient && mpClient.isMultiplayer) {
+        // 7. Initialize Multiplayer Subsystem (a match link or a replay link both start from the select screen)
+        if (mpClient && (mpClient.isMultiplayer || mpClient.isReplay)) {
             console.log("[Multiplayer] Entering Character Selection directly on load...");
-            mpClient.status = "HERO_SELECT";
+            if (mpClient.isMultiplayer) mpClient.status = "HERO_SELECT";
             mpClient._heroSelected = false;
             mpClient._heroId = null;
             CoreEngine.setGameState(11);
@@ -1286,20 +1840,15 @@ async function bootstrap() {
         };
 
         mpClient.onVersusStartCallback = (p1Hero, p2Hero, data) => {
-            const setup = {
-                p1Hero,
-                p2Hero,
-                stage: data.stage ?? 0,
-                seed: data.seed ?? 1,
-                controlTypes: [data.p1.control === 0 ? 0 : 1, data.p2.control === 0 ? 0 : 1]
-            };
+            const setup = setupFromVersus(data);
             console.log(`[Multiplayer] Versus: P1=${p1Hero}, P2=${p2Hero}, stage=${setup.stage}, resume=${!!data.resume}`);
             mpClient._boutLive = true;
             if (!data.resume) {
                 startOnlineSegment(setup, 0, null);
                 return;
             }
-            // Rejoining: both phones restart from the opponent's snapshot, which may arrive before or after this
+            // Rejoining: both phones restart from one state (ours, the opponent's, or the server's), which may
+            // arrive before or after this
             onlineResume = { ...onlineResume, setup };
             resumeOnlineBout();
         };
@@ -1327,20 +1876,74 @@ async function bootstrap() {
             }
         };
 
-        // The opponent rejoined: restart the bout on both phones from our state
-        mpClient.onPeerRejoinedCallback = () => {
-            if (!onlineBout) return;
-            const snapshot = { segment: onlineBout.segment + 1, resume: boutRestartState() };
-            mpClient.sendSnapshot(snapshot);
-            startOnlineSegment(onlineBout.setup, snapshot.segment, snapshot.resume);
+        // The opponent's simulation fingerprint for a tick (both paths deliver it; the first copy is compared)
+        mpClient.onPeerHashCallback = (segment, tick, hash) => {
+            const bout = onlineBout;
+            if (!bout || segment !== (bout.segment & 0xFF) || bout.peerHashes.has(tick)) return;
+            bout.peerHashes.set(tick, hash);
+            compareStateHash(bout, tick);
         };
 
+        // The server asks the phone that kept the bout to restart both phones from its state
+        mpClient.onRestartRequestCallback = (segment) => restartBoutFromHere(segment);
+
         mpClient.onPeerSnapshotCallback = (data) => {
+            if (onlineBout && data.segment <= onlineBout.segment) return; // an older restart
             onlineResume = { ...onlineResume, snapshot: { segment: data.segment, resume: data.resume } };
             resumeOnlineBout();
         };
 
+        // So the server knows, when we rejoin, whether this phone can hand over the bout's state
+        mpClient.boutLiveProvider = () => !!onlineBout;
+
+        mpClient.onSpectateCallback = onSpectate;
+        mpClient.onSpectatorInputCallback = onSpectatorInput;
+
+        mpClient.onMatchEndedCallback = (data) => {
+            mpClient.resultAt = Date.now();
+            if (viewer && !viewer.replay) viewer.final = true; // the fight plays out without more inputs
+            const haptics = window.Telegram?.WebApp?.HapticFeedback;
+            if (haptics && !mpClient.isSpectator && data.winner_id) {
+                try { haptics.notificationOccurred(data.winner_id === mpClient.userId ? 'success' : 'error'); } catch (_) {}
+            }
+        };
+
+        // Both players asked for a rematch: same pair, new match, straight to hero select
+        mpClient.onRematchStartCallback = (matchId) => {
+            onlineBout = null;
+            totalDesyncs = 0;
+            onlineResume = null;
+            viewer = null;
+            mpClient._watching = false;
+            window.__muteVibration = false;
+            CoreEngine.onlineVersus = null;
+            mpClient.switchMatch(matchId);
+            // Players pick again; spectators wait on the same screen for the next fight
+            CoreEngine.setGameState(11);
+            CoreEngine.exec_u_int_to_void(1);
+        };
+
+        // Leaving the app mid-fight (minimised, phone call): the opponent sees a countdown instead of a freeze
+        // (pagehide comes before the hidden visibilitychange of a page that is reloading or closing)
+        window.addEventListener('pagehide', () => { mpClient.leavingPage = true; });
+        window.addEventListener('beforeunload', () => { mpClient.leavingPage = true; });
+        window.addEventListener('pageshow', () => { mpClient.leavingPage = false; });
+        document.addEventListener('visibilitychange', () => mpClient.setAway(document.hidden));
+        try {
+            window.Telegram?.WebApp?.onEvent?.('deactivated', () => mpClient.setAway(true));
+            window.Telegram?.WebApp?.onEvent?.('activated', () => mpClient.setAway(false));
+        } catch (_) {}
+
         mpClient.initUI();
+        if (mpClient.isReplay) startReplay();
+
+        // Read-only view of the online state, for tests and debugging from the console
+        window.__onlineDebug = {
+            bout: () => onlineBout,
+            viewer: () => viewer,
+            desyncs: () => totalDesyncs,
+            panel: () => (showResultPanelNow() ? resultPanelLines() : null),
+        };
 
         // 8. Start requestAnimationFrame loop
         startAnimationLoop();

@@ -4465,6 +4465,8 @@ export class CoreEngine {
     //   routeLocalBits - (bits, isDown) receives this phone's keypad mask changes instead of P1's masks
     //   stage, controlTypes [p1, p2] (val_int_bw values)
     //   resume         - null, or {rounds: [p1, p2], health: [p1, p2] or null, timer} to continue a bout from
+    //   recolorMirror  - null, or (animSet) called with fighter C's sprites in a mirror match (pictures only)
+    // Spectators and replays set it too: they run the same fight from both players' recorded inputs.
     static onlineVersus = null;
     static val_bool_an = false;
     static val_bool_ao = false;
@@ -5130,6 +5132,10 @@ export class CoreEngine {
                 (var1[1] = CoreEngine.val_arr_int_aU[this.characterId]);
             }
             (this.currentAnimSet = CoreEngine.exec_a_int_arr_int_arr_byte_bool_to_animationset(var3, var1, var8, false));
+            // Online mirror match: let the game push fighter C's alternate costume further from B's if needed
+            if (var5 && CoreEngine.onlineVersus && CoreEngine.onlineVersus.recolorMirror) {
+                CoreEngine.onlineVersus.recolorMirror(this.currentAnimSet);
+            }
             return false;
         } catch (var6) {
             return true;

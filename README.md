@@ -29,7 +29,7 @@ Starts a high-performance local HTTP server on `http://localhost:8080/player/ind
 
 ### B. Launch Telegram Mini App Bot
 ```powershell
-pip install aiogram python-dotenv
+pip install -r requirements.txt
 # Add TELEGRAM_BOT_TOKEN to .env
 python bot.py
 ```
@@ -84,8 +84,11 @@ immortal_combat/
 │   ├── nginx.conf              # Nginx config with TMA iframe CSP
 │   └── umk3-bot.service        # Systemd unit file for Telegram bot
 ├── .github/workflows/
-│   ├── deploy-vps.yml          # GitHub Actions CI/CD to VPS via SSH
-│   └── deploy.yml              # GitHub Pages deployment workflow
+│   └── deploy.yml              # Tests, then GitHub Pages + VPS deployment
+├── server/
+│   ├── multiplayer.py          # Match rooms, lockstep relay, spectators, replays, rematches
+│   └── db.py                   # SQLite: matches, leaderboards, replays
+├── requirements.txt            # Bot + server dependencies
 ├── run_server.py               # Local dev server
 └── bot.py                      # Telegram bot launcher
 ```
@@ -94,7 +97,7 @@ immortal_combat/
 
 ## 4. GitHub Actions & VPS Deployment
 
-Pushing to `main` deploys the web player to VPS and GitHub Pages automatically via the included CI/CD workflows.
+Pushing to `main` runs the tests, then deploys the web player to the VPS and GitHub Pages (`.github/workflows/deploy.yml`). A failing test stops both deploys. The VPS deploy waits up to 3 minutes for live matches to finish before it restarts the server, runs the server as its own `umk3` user, and checks that it came back up.
 
 ### Required GitHub Secrets for VPS Deployment
 In GitHub **Settings ➔ Secrets and variables ➔ Actions**:
@@ -105,6 +108,8 @@ In GitHub **Settings ➔ Secrets and variables ➔ Actions**:
 | `VPS_USERNAME` | SSH user | `root` or `ubuntu` |
 | `VPS_SSH_KEY` | Private SSH Key (ed25519 or rsa) | `-----BEGIN OPENSSH PRIVATE KEY...` |
 | `VPS_PORT` | SSH Port (optional, defaults to 22) | `22` |
+| `TG_BOT_TOKEN` | Bot token from @BotFather; also used to verify players' Telegram identity | `123456:ABC...` |
+| `WEBAPP_SHORT_NAME` | Optional: short name of the Mini App made with @BotFather `/newapp`, for one-tap Play buttons in groups | `fight` |
 
 ### Initial VPS Provisioning
 Run once on your Ubuntu/Debian VPS:

@@ -1,125 +1,178 @@
 """
 Unit tests for bot.py Telegram interaction logic:
-- Inline query generation (asserts no invalid web_app buttons in inline results)
-- DM challenge creation with friend-picker & share links
-- Group challenge creation
-- Deep-linked challenge entry (/start challenge_<id>)
+- Inline query results (no web_app buttons, which Telegram rejects there)
+- DM and group challenges (web_app buttons only in private chats; groups get links)
+- One-tap Direct Link Mini App buttons when WEBAPP_SHORT_NAME is set
+- Deep-linked entry (/start challenge_<id>, replay_<id>, a match being fought)
+- Match updates from the game server: accept ping, live message, result post, expiry
+- HTML escaping of player names
 """
 
+import os
+import tempfile
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import server.db as db
 import bot
 
 
-class TestBotHandlers(unittest.IsolatedAsyncioTestCase):
+def make_message(chat_id, chat_type, user_id, first_name, title=None):
+    user = MagicMock(id=user_id, first_name=first_name)
+    chat = MagicMock(id=chat_id, type=chat_type, title=title)
+    message = MagicMock(chat=chat, from_user=user)
+    sent = MagicMock(message_id=555, chat=MagicMock(id=chat_id))
+    message.answer = AsyncMock(return_value=sent)
+    return message
+
+
+def buttons(markup):
+    return [button for row in markup.inline_keyboard for button in row]
+
+
+class BotTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        self.orig_db = db.DB_PATH
+        fd, self.test_db = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        db.DB_PATH = self.test_db
         db.init_db()
 
+    def tearDown(self):
+        db.DB_PATH = self.orig_db
+        try:
+            os.remove(self.test_db)
+        except OSError:
+            pass
+
+
+class TestChallenges(BotTestCase):
     async def test_inline_query_keyboard_does_not_use_web_app(self):
-        """
-        Telegram Bot API strictly rejects web_app buttons in InlineQueryResultArticle.
-        Verify that handle_inline_query outputs valid URL buttons instead of WebAppInfo.
-        """
-        mock_user = MagicMock()
-        mock_user.id = 12345
-        mock_user.first_name = "SubZero"
+        query = MagicMock(from_user=MagicMock(id=12345, first_name="SubZero"), query="")
+        query.answer = AsyncMock()
 
-        mock_query = MagicMock()
-        mock_query.from_user = mock_user
-        mock_query.query = ""
-        mock_query.answer = AsyncMock()
+        await bot.handle_inline_query(query)
 
-        await bot.handle_inline_query(mock_query)
-
-        mock_query.answer.assert_called_once()
-        args, kwargs = mock_query.answer.call_args
-        results = args[0]
-
-        # There must be 2 results: 1v1 Challenge and Leaderboard
+        results = query.answer.call_args[0][0]
         self.assertEqual(len(results), 2)
-        challenge_result = results[0]
-
-        # Verify button is a URL button and button text is 'Play'
-        btn = challenge_result.reply_markup.inline_keyboard[0][0]
+        btn = results[0].reply_markup.inline_keyboard[0][0]
         self.assertEqual(btn.text, "Play")
         self.assertIsNone(btn.web_app, "Inline query result MUST NOT have web_app attribute!")
         self.assertTrue(btn.url.startswith(f"https://t.me/{bot.BOT_USERNAME}?start=challenge_"))
 
     async def test_dm_challenge_provides_friend_picker_and_share_link(self):
-        """
-        In DM with the bot, issuing a challenge must provide friend-picker and share buttons.
-        """
-        mock_user = MagicMock()
-        mock_user.id = 55555
-        mock_user.first_name = "Scorpion"
+        message = make_message(55555, "private", 55555, "Scorpion")
+        await bot.handle_challenge(message)
 
-        mock_chat = MagicMock()
-        mock_chat.id = 55555
-        mock_chat.type = "private"
-
-        mock_message = MagicMock()
-        mock_message.chat = mock_chat
-        mock_message.from_user = mock_user
-        mock_message.answer = AsyncMock()
-
-        await bot.handle_challenge(mock_message)
-
-        mock_message.answer.assert_called_once()
-        text, kwargs = mock_message.answer.call_args
-        reply_markup = kwargs["reply_markup"]
-
-        # Row 1: Send to Friend (switch_inline_query) & Share Link (url)
-        # Row 2: Play (web_app)
-        row1 = reply_markup.inline_keyboard[0]
-        row2 = reply_markup.inline_keyboard[1]
-
+        kwargs = message.answer.call_args[1]
+        row1, row2 = kwargs["reply_markup"].inline_keyboard[:2]
         self.assertEqual(row1[0].text, "⚔️ Send to a Friend")
         self.assertTrue(row1[0].switch_inline_query.startswith("challenge_"))
-
-        self.assertEqual(row1[1].text, "📲 Share Link")
-        self.assertTrue("t.me/share/url" in row1[1].url)
-
+        self.assertIn("t.me/share/url", row1[1].url)
         self.assertEqual(row2[0].text, "Play")
         self.assertIsNotNone(row2[0].web_app)
 
+    async def test_group_challenge_uses_links_not_web_app_buttons(self):
+        """Telegram only allows web_app buttons in private chats; a group challenge must use a link."""
+        message = make_message(-100777, "supergroup", 42, "Raiden")
+        await bot.handle_challenge(message)
+
+        markup = message.answer.call_args[1]["reply_markup"]
+        self.assertTrue(all(b.web_app is None for b in buttons(markup)))
+        play = buttons(markup)[0]
+        self.assertTrue(play.url.startswith(f"https://t.me/{bot.BOT_USERNAME}?start=challenge_"))
+        match_id = play.url.split("challenge_")[1]
+        match = db.get_match(match_id)
+        self.assertEqual((match["chat_id"], match["message_chat_id"], match["message_id"]), ("-100777", "-100777", 555))
+
+    async def test_direct_link_opens_the_game_in_one_tap(self):
+        with patch.object(bot, "WEBAPP_SHORT_NAME", "fight"):
+            message = make_message(-100777, "supergroup", 42, "Raiden")
+            await bot.handle_challenge(message)
+        play = buttons(message.answer.call_args[1]["reply_markup"])[0]
+        self.assertTrue(play.url.startswith(f"https://t.me/{bot.BOT_USERNAME}/fight?startapp=challenge_"))
+
     async def test_deep_link_start_for_creator_and_opponent(self):
-        """
-        Test /start challenge_<id> differentiation between creator and opponent.
-        """
-        import uuid
-        match_id = f"test_dl_{uuid.uuid4().hex[:6]}"
-        db.create_match(match_id, "chat_group", creator_id="100", creator_name="Raiden", timeout_seconds=60)
+        db.create_match("test_dl", "chat_group", creator_id="100", creator_name="Raiden")
+        cmd = MagicMock(args="challenge_test_dl")
 
-        # 1. Test when creator opens link
-        creator_user = MagicMock()
-        creator_user.id = 100
-        creator_user.first_name = "Raiden"
-        creator_msg = MagicMock()
-        creator_msg.chat = MagicMock(id=100)
-        creator_msg.from_user = creator_user
-        creator_msg.answer = AsyncMock()
-
-        cmd = MagicMock()
-        cmd.args = f"challenge_{match_id}"
-
+        creator_msg = make_message(100, "private", 100, "Raiden")
         await bot.handle_start(creator_msg, cmd)
-        text_creator = creator_msg.answer.call_args[0][0]
-        self.assertIn("YOUR CHALLENGE IS LIVE", text_creator)
+        self.assertIn("YOUR CHALLENGE IS LIVE", creator_msg.answer.call_args[0][0])
 
-        # 2. Test when opponent opens link
-        opp_user = MagicMock()
-        opp_user.id = 200
-        opp_user.first_name = "LiuKang"
-        opp_msg = MagicMock()
-        opp_msg.chat = MagicMock(id=200)
-        opp_msg.from_user = opp_user
-        opp_msg.answer = AsyncMock()
-
+        opp_msg = make_message(200, "private", 200, "LiuKang")
         await bot.handle_start(opp_msg, cmd)
-        text_opp = opp_msg.answer.call_args[0][0]
-        self.assertIn("CHALLENGE DETECTED", text_opp)
-        self.assertIn("Raiden", text_opp)
+        text = opp_msg.answer.call_args[0][0]
+        self.assertIn("CHALLENGE DETECTED", text)
+        self.assertIn("Raiden", text)
+
+    async def test_deep_link_to_a_live_match_offers_to_watch(self):
+        db.create_match("m_live", "chat_group", creator_id="100", creator_name="Raiden")
+        db.join_match("m_live", "200", "Kano")
+        msg = make_message(300, "private", 300, "Fan")
+        await bot.handle_start(msg, MagicMock(args="challenge_m_live"))
+        markup = msg.answer.call_args[1]["reply_markup"]
+        self.assertEqual(buttons(markup)[0].text, "👁 Watch live")
+        self.assertIn("match=m_live", buttons(markup)[0].web_app.url)
+
+    async def test_deep_link_replay(self):
+        msg = make_message(300, "private", 300, "Fan")
+        await bot.handle_start(msg, MagicMock(args="replay_abc123"))
+        self.assertIn("replay=abc123", buttons(msg.answer.call_args[1]["reply_markup"])[0].web_app.url)
+
+    def test_player_names_are_escaped_in_html_messages(self):
+        db.create_match("m_esc", "-1001", "1", "<b>Evil</b>")
+        db.join_match("m_esc", "2", "Tom & Jerry")
+        db.finish_match("m_esc", winner_id="2", finish_reason="KNOCKOUT")
+        text = bot.format_leaderboard_text("-1001", "Group <3")
+        self.assertIn("Tom &amp; Jerry", text)
+        self.assertIn("&lt;b&gt;Evil", text)
+        self.assertIn("Group &lt;3", text)
+
+
+class TestMatchEvents(BotTestCase):
+    def info(self, match_id, chat_id="-100777", **extra):
+        return {"match_id": match_id, "chat_id": chat_id,
+                "creator": {"id": "100", "name": "Alice"}, "opponent": {"id": "200", "name": "Bob"},
+                "p1": {"id": "200", "name": "Bob", "hero": "Scorpion"}, "p2": {"id": "100", "name": "Alice", "hero": "Sub-Zero"},
+                "rounds": [2, 1], "result": None, **extra}
+
+    async def test_creator_is_pinged_when_someone_accepts(self):
+        db.create_match("m_acc", "-100777", "100", "Alice")
+        db.set_challenge_message("m_acc", "-100777", 9)
+        tg = MagicMock(send_message=AsyncMock(), edit_message_text=AsyncMock())
+        await bot.on_match_event(tg, "challenge_accepted", self.info("m_acc"))
+        self.assertEqual(tg.send_message.call_args_list[0][0][0], 100)  # a DM to the creator
+        self.assertIn("Bob", tg.send_message.call_args_list[0][0][1])
+        self.assertEqual(tg.edit_message_text.call_args[1]["message_id"], 9)
+
+    async def test_group_is_used_when_the_creator_cannot_be_messaged(self):
+        db.create_match("m_acc2", "-100777", "100", "Alice")
+        tg = MagicMock(send_message=AsyncMock(side_effect=[Exception("bot was blocked"), None]), edit_message_text=AsyncMock())
+        await bot.on_match_event(tg, "challenge_accepted", self.info("m_acc2"))
+        self.assertEqual(tg.send_message.call_args_list[1][0][0], -100777)
+        self.assertIn("tg://user?id=100", tg.send_message.call_args_list[1][0][1])
+
+    async def test_result_is_posted_to_the_group_and_the_challenge_message_updated(self):
+        db.create_match("m_res", "-100777", "100", "Alice")
+        db.set_challenge_message("m_res", "-100777", 9)
+        result = {"winner_id": "200", "winner_name": "Bob", "loser_name": "Alice", "p1_rounds": 2, "p2_rounds": 1,
+                  "reason": "KNOCKOUT"}
+        tg = MagicMock(send_message=AsyncMock(), edit_message_text=AsyncMock())
+        await bot.on_match_event(tg, "match_ended", self.info("m_res", result=result, has_replay=True))
+        text = tg.send_message.call_args[0][1]
+        self.assertIn("<b>Bob</b> beat <b>Alice</b> 2–1 (Scorpion vs Sub-Zero)", text)
+        posted = buttons(tg.send_message.call_args[1]["reply_markup"])
+        self.assertTrue(posted[0].url.endswith("start=replay_m_res"))
+        self.assertIn("beat", tg.edit_message_text.call_args[1]["text"])
+
+    async def test_inline_challenge_message_is_edited_in_place(self):
+        db.create_match("m_inl", "inline", "100", "Alice")
+        db.set_inline_message("m_inl", "INLINE-1")
+        tg = MagicMock(send_message=AsyncMock(), edit_message_text=AsyncMock())
+        await bot.on_match_event(tg, "match_started", self.info("m_inl", chat_id="inline"))
+        self.assertEqual(tg.edit_message_text.call_args[1]["inline_message_id"], "INLINE-1")
+        tg.send_message.assert_not_called()
 
 
 if __name__ == "__main__":

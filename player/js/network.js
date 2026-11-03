@@ -1,39 +1,61 @@
 /**
  * Immortal Combat - Real-time Telegram Multiplayer Network Bridge
- * Handles WebSocket connection, matchmaking lobby, 60s join timer,
- * 60s disconnect grace period, input transmission, autowin resolution,
- * and local group leaderboards.
+ * Handles the WebSocket connection, the open-challenge lobby, hero locks, lockstep input transport
+ * (WebRTC DataChannel + WebSocket relay), the reconnect grace period, spectating, rematches and replays.
  */
+
+// Lobby states the server can end a challenge with, as shown on the canvas banner
+const CANCEL_TEXT = {
+    JOIN_TIMEOUT: "CHALLENGE EXPIRED - START A NEW ONE",
+    EXPIRED: "CHALLENGE EXPIRED - START A NEW ONE",
+    NOT_FOUND: "CHALLENGE NOT FOUND - START A NEW ONE",
+    ABANDONED: "BOTH FIGHTERS LEFT - MATCH ABANDONED",
+};
 
 export class MultiplayerClient {
     constructor() {
         this.ws = null;
         this.matchId = null;
+        this.replayId = null; // set when the page plays back a finished match (?replay=<id>)
         this.chatId = "0";
         this.userId = null;
         this.userName = "Fighter";
-        this.role = null; // 'p1' or 'p2'
-        this.status = "DISCONNECTED"; // HERO_SELECT, ACTIVE, COMPLETED, CANCELLED
+        this.initData = "";   // Telegram's signed initData; the server verifies who we are from it
+        this.role = null; // 'p1', 'p2' or 'spectator'
+        this.status = "DISCONNECTED"; // HERO_SELECT, ACTIVE, COMPLETED, CANCELLED, REJECTED, SPECTATING
         this.opponent = null;
         this.creator = null;
         this.onPeerInputCallback = null; // (segment, tick, pressed, released, delayHint, hintSeq, senderTick) per lockstep tick
+        this.onPeerHashCallback = null; // (segment, tick, hash): the opponent's simulation fingerprint
+        this.onSpectatorInputCallback = null; // (side, segment, tick, pressed, released) for spectators
         this.onMatchStartCallback = null;
         this.onHeroSelectStartCallback = null;
         this.onPeerHeroLockCallback = null;
         this.onVersusStartCallback = null;
         this.onRoundNextCallback = null;
         this.onMatchEndedCallback = null;
-        this.onPeerRejoinedCallback = null;
+        this.onRestartRequestCallback = null;
         this.onPeerSnapshotCallback = null;
+        this.onSpectateCallback = null;
+        this.onRematchStartCallback = null;
+        this.boutLiveProvider = null; // () => whether this phone still runs the bout (sent when rejoining)
         this.isMultiplayer = false;
+        this.isReplay = false;
         this._boutLive = false;
         this._heroSelected = false;
         this._heroId = null;
-        this.opponentDropDeadline = 0; // Date.now() when the opponent's 60s reconnect grace runs out; 0 while connected
+        this.opponentDropDeadline = 0; // Date.now() when the opponent's 60s grace runs out; 0 while they're here
+        this.opponentAway = false;      // the opponent left the app (still connected) rather than dropping
         this.result = null; // match_ended packet once the bout is decided
-        // The bout is frozen while either side is offline, so nobody can beat an idle fighter
+        this.cancelReason = null;
+        this.lobby = null; // {deadline, waitingFor} while the challenge waits for a player
+        this.spectatorCount = 0;
+        this.playerAway = null; // spectators: {name, deadline} while a player is gone
+        this.rematch = { requested: [], opponentLeft: false };
+        // The bout is frozen while either side is offline or away, so nobody can beat an idle fighter
         this.waitingForPeer = false; // opponent dropped, or rejoined and is still loading back in
         this.selfOffline = false;
+        this.selfAway = false;
 
         // Ultra-low-latency WebRTC P2P DataChannel & Latency Monitoring
         this.rtcPeer = null;
@@ -54,9 +76,10 @@ export class MultiplayerClient {
     }
 
     parseEnvironment() {
-        // 1. Extract from Telegram WebApp initData if running inside Telegram
+        // 1. Telegram identity (initData is verified by the server; initDataUnsafe is only for display)
         const tg = window.Telegram?.WebApp;
         let authenticatedUser = null;
+        this.initData = tg?.initData || "";
         if (tg?.initDataUnsafe?.user) {
             authenticatedUser = {
                 id: String(tg.initDataUnsafe.user.id),
@@ -64,8 +87,9 @@ export class MultiplayerClient {
             };
         }
 
-        // 2. Extract matchId from URL search params OR hash fragment
-        this.matchId = this.extractMatchId();
+        // 2. What to open: a replay, or a match (challenge link)
+        this.replayId = this.extractStartParam("replay_", ["replay"]);
+        this.matchId = this.replayId ? null : this.extractMatchId();
 
         const searchParams = new URLSearchParams(window.location.search);
         if (searchParams.get('chat')) this.chatId = String(searchParams.get('chat'));
@@ -94,10 +118,27 @@ export class MultiplayerClient {
             this.userName = 'Fighter #' + this.userId.slice(-4);
         }
 
-        if (this.matchId) {
+        if (this.replayId) {
+            this.isReplay = true;
+            this.status = "REPLAY";
+            console.log(`[Multiplayer] Replay of match ${this.replayId}`);
+        } else if (this.matchId) {
             this.isMultiplayer = true;
             console.log(`[Multiplayer] Detected match ID: ${this.matchId}, User: ${this.userId} (${this.userName})`);
         }
+    }
+
+    // A Telegram start_param with `prefix` (direct links: ?startapp=replay_<id>), or one of the query keys
+    extractStartParam(prefix, keys) {
+        const tgParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+        if (tgParam && tgParam.startsWith(prefix)) return tgParam.slice(prefix.length).trim() || null;
+        const searchParams = new URLSearchParams(window.location.search);
+        const searchStart = searchParams.get('tgWebAppStartParam') || searchParams.get('startapp');
+        if (searchStart && searchStart.startsWith(prefix)) return searchStart.slice(prefix.length).trim() || null;
+        for (const key of keys) {
+            if (searchParams.get(key)) return searchParams.get(key).trim();
+        }
+        return null;
     }
 
     extractMatchId() {
@@ -145,6 +186,34 @@ export class MultiplayerClient {
         return null;
     }
 
+    get isSpectator() {
+        return this.role === "spectator";
+    }
+
+    // The game server: this site, or the production gateway when the page is served from GitHub Pages
+    serverHost() {
+        const searchParams = new URLSearchParams(window.location.search);
+        let hostOverride = searchParams.get('server') || searchParams.get('ws');
+        if (!hostOverride && window.location.hash && window.location.hash.includes('=')) {
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            hostOverride = hashParams.get('server') || hashParams.get('ws');
+        }
+        if (hostOverride) return hostOverride;
+        return window.location.host.includes('github.io') ? '193.36.236.221.sslip.io' : window.location.host;
+    }
+
+    serverIsSecure(host) {
+        return window.location.protocol === 'https:' || host.includes('sslip.io');
+    }
+
+    // A finished match's recorded inputs, for playback
+    async fetchReplay() {
+        const host = this.serverHost();
+        const resp = await fetch(`${this.serverIsSecure(host) ? 'https:' : 'http:'}//${host}/api/replay/${encodeURIComponent(this.replayId)}`);
+        if (!resp.ok) throw new Error(`Replay not found (${resp.status})`);
+        return (await resp.json()).replay;
+    }
+
     initUI() {
         if (this.isMultiplayer) {
             this.connect();
@@ -154,32 +223,16 @@ export class MultiplayerClient {
     connect() {
         if (!this.matchId) return;
 
-        const searchParams = new URLSearchParams(window.location.search);
-        let hostOverride = searchParams.get('server') || searchParams.get('ws');
-
-        if (!hostOverride && window.location.hash && window.location.hash.includes('=')) {
-            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-            hostOverride = hashParams.get('server') || hashParams.get('ws');
-        }
-
-        let host = hostOverride;
-        if (!host) {
-            // When hosted on GitHub Pages static CDN, route WebSocket traffic to production VPS gateway
-            if (window.location.host.includes('github.io')) {
-                host = '193.36.236.221.sslip.io';
-            } else {
-                host = window.location.host;
-            }
-        }
-
-        const protocol = (window.location.protocol === 'https:' || host.includes('sslip.io')) ? 'wss:' : 'ws:';
+        const host = this.serverHost();
+        const protocol = this.serverIsSecure(host) ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${host}/ws/match/${this.matchId}`;
 
         console.log(`[Multiplayer] Connecting to ${wsUrl}...`);
 
+        let ws;
         try {
-            this.ws = new WebSocket(wsUrl);
-            this.ws.binaryType = "arraybuffer"; // Zero-copy binary transport
+            ws = this.ws = new WebSocket(wsUrl);
+            ws.binaryType = "arraybuffer"; // Zero-copy binary transport
         } catch (e) {
             console.error("[Multiplayer] WebSocket creation error:", e);
             setTimeout(() => {
@@ -188,20 +241,24 @@ export class MultiplayerClient {
             return;
         }
 
-        this.ws.onopen = () => {
+        ws.onopen = () => {
+            if (this.ws !== ws) return;
             console.log("[Multiplayer] WebSocket connected. Sending join packet...");
             this.sendPacket({
                 type: "join",
                 match_id: this.matchId,
                 chat_id: this.chatId,
                 user_id: this.userId,
-                user_name: this.userName
+                user_name: this.userName,
+                init_data: this.initData,
+                // A phone that still runs the bout can hand both phones the state to restart from
+                bout_live: typeof this.boutLiveProvider === 'function' ? !!this.boutLiveProvider() : false
             });
 
             while (this.outgoingQueue.length > 0) {
                 const pkt = this.outgoingQueue.shift();
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    this.ws.send(JSON.stringify(pkt));
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(pkt));
                 }
             }
 
@@ -210,13 +267,14 @@ export class MultiplayerClient {
             // Start latency monitoring ping every 5 seconds
             clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                if (ws.readyState === WebSocket.OPEN) {
                     this.sendPacket({ type: "ping", time: performance.now() });
                 }
             }, 5000);
         };
 
-        this.ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
+            if (this.ws !== ws) return;
             if (event.data instanceof ArrayBuffer) {
                 this.handleBinaryPacket(event.data);
             } else {
@@ -229,7 +287,8 @@ export class MultiplayerClient {
             }
         };
 
-        this.ws.onclose = () => {
+        ws.onclose = () => {
+            if (this.ws !== ws) return; // a socket we replaced on purpose (rematch)
             console.log("[Multiplayer] WebSocket closed.");
             clearInterval(this.pingInterval);
             this.resetP2P();
@@ -239,19 +298,53 @@ export class MultiplayerClient {
 
             if (this.shouldReconnect()) {
                 setTimeout(() => {
-                    if (this.shouldReconnect()) this.connect();
+                    if (this.shouldReconnect() && this.ws === ws) this.connect();
                 }, 2000);
             }
         };
 
-        this.ws.onerror = (err) => {
+        ws.onerror = (err) => {
             console.error("[Multiplayer] WebSocket error:", err);
         };
     }
 
-    // Keep retrying through hero select and the bout so the server's 60s grace can resume us
+    // Keep retrying through hero select and the bout so the server's 60s grace can resume us; a finished
+    // match stays connected for a rematch, so a drop there reconnects too
     shouldReconnect() {
-        return this.isMultiplayer && this.status !== "COMPLETED" && this.status !== "CANCELLED";
+        return this.isMultiplayer && this.status !== "CANCELLED" && this.status !== "REJECTED";
+    }
+
+    // Moves to a new match (a rematch): new socket, fresh match state, and a URL a reload would come back to
+    switchMatch(matchId) {
+        const old = this.ws;
+        this.ws = null;
+        if (old) {
+            try { old.close(); } catch (_) {}
+        }
+        this.resetP2P();
+        this.matchId = matchId;
+        this.status = this.isSpectator ? "SPECTATING" : "HERO_SELECT";
+        this._boutLive = false;
+        this._heroSelected = false;
+        this._heroId = null;
+        this.result = null;
+        this.lobby = null;
+        this.cancelReason = null;
+        this.opponentDropDeadline = 0;
+        this.opponentAway = false;
+        this.playerAway = null;
+        this.waitingForPeer = false;
+        this.selfOffline = false;
+        this.rematch = { requested: [], opponentLeft: false };
+        this.outgoingQueue = [];
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('match', matchId);
+            url.searchParams.delete('startapp');
+            url.searchParams.delete('tgWebAppStartParam');
+            history.replaceState(null, '', url.toString());
+        } catch (_) {}
+        this.connect();
     }
 
     resetP2P() {
@@ -264,7 +357,7 @@ export class MultiplayerClient {
     }
 
     get paused() {
-        return this.waitingForPeer || this.selfOffline;
+        return this.waitingForPeer || this.selfOffline || this.selfAway;
     }
 
     handleBinaryPacket(buffer) {
@@ -286,6 +379,16 @@ export class MultiplayerClient {
                 this.peerPingSentAt.delete(view.getUint8(1)); // the copy on the slower path is ignored
                 this.peerRttSamples.push(performance.now() - sentAt);
                 if (this.peerRttSamples.length > 10) this.peerRttSamples.shift();
+            }
+        } else if (packetType === 7 && buffer.byteLength >= 12) { // 0x07: STATE_HASH [7, segment, 0, 0, tick, hash]
+            if (typeof this.onPeerHashCallback === 'function') {
+                this.onPeerHashCallback(view.getUint8(1), view.getUint32(4), view.getUint32(8));
+            }
+        } else if (packetType === 8 && buffer.byteLength >= 22) { // 0x08: a player's input relayed to spectators
+            // [8, side, then the player's 20-byte lockstep input packet]
+            if (typeof this.onSpectatorInputCallback === 'function') {
+                this.onSpectatorInputCallback(view.getUint8(1), view.getUint8(3), view.getUint32(6),
+                                              view.getUint32(10), view.getUint32(14));
             }
         }
     }
@@ -310,7 +413,7 @@ export class MultiplayerClient {
     startPeerPing() {
         clearInterval(this.peerPingInterval);
         this.peerPingInterval = setInterval(() => {
-            if (this.status !== "HERO_SELECT" && this.status !== "ACTIVE") return;
+            if (this.isSpectator || (this.status !== "HERO_SELECT" && this.status !== "ACTIVE")) return;
             this.peerPingId = (this.peerPingId + 1) & 0xFF;
             this.peerPingSentAt.set(this.peerPingId, performance.now());
             const buffer = new ArrayBuffer(4);
@@ -332,7 +435,7 @@ export class MultiplayerClient {
     // =========================================================================
 
     async initWebRTC(isInitiator) {
-        if (typeof RTCPeerConnection === 'undefined') return;
+        if (typeof RTCPeerConnection === 'undefined' || this.isSpectator) return;
         if (this.rtcPeer) {
             try { this.rtcPeer.close(); } catch (_) {}
             this.rtcPeer = null;
@@ -494,7 +597,7 @@ export class MultiplayerClient {
     // 20-byte binary payload: [0x04, segment, hint (int8), hintSeq, tick (uint32), pressed (uint32),
     //                          released (uint32), senderTick (uint32)]
     sendLockstepInput(segment, tick, pressed, released, hint = 0, hintSeq = 0, senderTick = 0) {
-        if (!this.isMultiplayer || this.status !== "ACTIVE") return;
+        if (!this.isMultiplayer || this.status !== "ACTIVE" || this.isSpectator) return;
         const buffer = new ArrayBuffer(20);
         const view = new DataView(buffer);
         view.setUint8(0, 4);
@@ -511,37 +614,87 @@ export class MultiplayerClient {
         this.sendBinaryBothPaths(buffer);
     }
 
+    // A fingerprint of our simulation at a tick, so the two phones can tell if their fights ever differ.
+    // 12-byte binary payload: [0x07, segment, 0, 0, tick (uint32), hash (uint32)]
+    sendStateHash(segment, tick, hash) {
+        if (!this.isMultiplayer || this.status !== "ACTIVE" || this.isSpectator) return;
+        const buffer = new ArrayBuffer(12);
+        const view = new DataView(buffer);
+        view.setUint8(0, 7);
+        view.setUint8(1, segment & 0xFF);
+        view.setUint32(4, tick);
+        view.setUint32(8, hash >>> 0);
+        this.sendBinaryBothPaths(buffer);
+    }
+
     // controlType is the engine's val_int_bw, so both phones give our fighter the same key layout
     sendHeroLock(heroId, controlType) {
         this.sendPacket({ type: "hero_lock", hero_id: heroId, control: controlType });
     }
 
-    sendRoundWin(winnerRole) {
-        if (!this.isMultiplayer || this.status !== "ACTIVE") return;
-        this.sendPacket({ type: "round_win", winner_role: winnerRole });
+    // The engine's round score (P1, P2); the server counts it once both phones report the same one
+    sendRoundScore(p1Rounds, p2Rounds) {
+        if (!this.isMultiplayer || this.status !== "ACTIVE" || this.isSpectator) return;
+        this.sendPacket({ type: "round_score", p1: p1Rounds, p2: p2Rounds });
     }
 
-    // Where both phones restart the bout from after the opponent reconnects
+    // Where both phones restart the bout from (after a reconnect, or if the two simulations ever differ)
     sendSnapshot(snapshot) {
         this.sendPacket({ type: "state_snapshot", ...snapshot });
+    }
+
+    // We left the app (minimised, phone call) or came back: the opponent's screen shows the grace countdown
+    setAway(away) {
+        if (!this.isMultiplayer || this.isSpectator || this.selfAway === away) return;
+        // A page that is reloading or closing hides itself on the way out; that's a disconnect, not "away"
+        if (away && this.leavingPage) return;
+        if (away && !(this.status === "ACTIVE" && this._boutLive)) return;
+        this.selfAway = away;
+        this.sendPacket({ type: away ? "away" : "back" });
+    }
+
+    requestRematch() {
+        if (this.isSpectator || this.status !== "COMPLETED") return;
+        if (!this.rematch.requested.includes(this.userId)) {
+            this.rematch = { ...this.rematch, requested: [...this.rematch.requested, this.userId] };
+        }
+        this.sendPacket({ type: "rematch_request" });
+    }
+
+    opponentName() {
+        return (this.opponent && this.opponent.name) || "OPPONENT";
     }
 
     handlePacket(data) {
         switch (data.type) {
             case "joined": {
-                // Version handshake — hard-reload if client is stale
+                // Version handshake: a stale client reloads, keeping the match link (and Telegram's hash data)
                 const CURRENT_BUILD = "5dc4ec3";
-                if (data.build_version && data.build_version !== CURRENT_BUILD) {
+                // Once per server build: if a reload doesn't fix the mismatch, carry on rather than loop
+                const reloadKey = `ic_reloaded_for_${data.build_version}`;
+                let reloadedAlready = false;
+                try { reloadedAlready = sessionStorage.getItem(reloadKey) === "1"; } catch (_) {}
+                if (data.build_version && data.build_version !== CURRENT_BUILD && !reloadedAlready) {
                     console.warn(`[Version Mismatch] Server=${data.build_version} Client=${CURRENT_BUILD}. Hard reloading...`);
-                    window.location.replace(window.location.pathname + "?_ts=" + Date.now());
+                    try { sessionStorage.setItem(reloadKey, "1"); } catch (_) {}
+                    this.leavingPage = true;
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('_ts', String(Date.now()));
+                    window.location.replace(url.toString());
                     return;
                 }
                 this.role = data.role;
                 // The server renames a second tab that reuses the creator's id; match on what it assigned
                 if (data.player_id) this.userId = data.player_id;
                 this.creator = data.creator;
-                this.opponent = data.opponent;
+                this.opponent = data.creator && data.creator.id === this.userId ? data.opponent : data.creator;
+                this.spectatorCount = data.spectators || 0;
                 console.log(`[Multiplayer] Joined as role: ${this.role}. Match status: ${data.status}`);
+                if (this.isSpectator) {
+                    this.status = "SPECTATING";
+                    this.watched = { p1: data.creator, p2: data.opponent };
+                    break;
+                }
                 // Rejoining a running match as P1: we own the WebRTC offer
                 if (this.role === "p1" && data.status === "ACTIVE") {
                     this.initWebRTC(true);
@@ -549,16 +702,33 @@ export class MultiplayerClient {
                 break;
             }
 
+            case "auth_failed":
+                this.status = "REJECTED";
+                this.cancelReason = "AUTH";
+                console.warn("[Multiplayer] Server could not verify our Telegram identity.");
+                break;
+
+            case "waiting_opponent":
+                this.lobby = {
+                    deadline: Date.now() + (data.remaining_seconds || 0) * 1000,
+                    waitingFor: data.waiting_for || null
+                };
+                break;
+
             case "match_start":
+                if (this.isSpectator) break;
+                this.lobby = null;
                 this.creator = data.p1;
-                this.opponent = data.p2;
+                this.opponent = data.p1 && data.p1.id === this.userId ? data.p2 : data.p1;
                 if (this.role === "p1" && !this.rtcPeer) {
                     this.initWebRTC(true);
                 }
                 if (data.stage === "hero_select") {
                     this.status = "HERO_SELECT";
-                    this._heroSelected = false;
-                    this._heroId = null;
+                    // A lock we made before the opponent arrived still stands
+                    const myLock = data.locks ? data.locks[this.userId] : undefined;
+                    this._heroSelected = myLock !== undefined && myLock !== null;
+                    this._heroId = this._heroSelected ? myLock : null;
                     this._boutLive = false;
                     this.result = null;
                     console.log("[Multiplayer] Match ACTIVE! Entering native Character Selection.");
@@ -588,7 +758,9 @@ export class MultiplayerClient {
                 break;
 
             case "versus_start":
+                if (this.isSpectator) break;
                 this.status = "ACTIVE";
+                this.lobby = null;
                 this.role = (data.p1.id === this.userId) ? "p1" : "p2";
                 this.opponent = (this.role === "p1") ? data.p2 : data.p1;
                 this.creator = data.p1;
@@ -621,8 +793,22 @@ export class MultiplayerClient {
             case "opponent_disconnected":
                 // Their end of the DataChannel is gone; relay inputs until a fresh one is negotiated
                 this.resetP2P();
+                this.opponentAway = false;
                 this.opponentDropDeadline = Date.now() + (data.remaining_seconds || 60) * 1000;
                 this.waitingForPeer = this._boutLive;
+                break;
+
+            case "opponent_away":
+                // They left the app but are still connected: the direct channel survives, the bout waits
+                this.opponentAway = true;
+                this.opponentDropDeadline = Date.now() + (data.remaining_seconds || 60) * 1000;
+                this.waitingForPeer = this._boutLive;
+                break;
+
+            case "opponent_back":
+                // Their inputs resume where they stopped, so nothing restarts; their next input unfreezes us
+                this.opponentAway = false;
+                this.opponentDropDeadline = 0;
                 break;
 
             case "disconnect_countdown":
@@ -633,14 +819,18 @@ export class MultiplayerClient {
 
             case "opponent_reconnected":
                 this.opponentDropDeadline = 0;
+                this.opponentAway = false;
                 console.log("[Multiplayer] Opponent reconnected. Battle resumed.");
                 // A staying P1 owns the WebRTC offer; a rejoining P1 starts it from "joined" instead
                 if (this.role === "p1") {
                     this.initWebRTC(true);
                 }
-                // Both phones restart the bout from our state; we stay frozen until their inputs arrive
-                if (this._boutLive && typeof this.onPeerRejoinedCallback === 'function') {
-                    this.onPeerRejoinedCallback(data);
+                break;
+
+            case "restart_request":
+                // The server asks us, the phone that kept the bout, for the state both phones restart from
+                if (typeof this.onRestartRequestCallback === 'function') {
+                    this.onRestartRequestCallback(data.segment);
                 }
                 break;
 
@@ -650,9 +840,32 @@ export class MultiplayerClient {
                 }
                 break;
 
+            case "spectate":
+                if (this.isSpectator && typeof this.onSpectateCallback === 'function') {
+                    this.onSpectateCallback(data);
+                }
+                break;
+
+            case "spectators":
+                this.spectatorCount = data.count || 0;
+                break;
+
+            case "player_away": {
+                const watched = this.watched || {};
+                const who = [watched.p1, watched.p2].find((p) => p && p.id === data.player_id);
+                this.playerAway = { name: who ? who.name : "A FIGHTER", deadline: Date.now() + (data.remaining_seconds || 60) * 1000 };
+                break;
+            }
+
+            case "player_back":
+                this.playerAway = null;
+                break;
+
             case "match_ended":
                 this.status = "COMPLETED";
                 this.opponentDropDeadline = 0;
+                this.opponentAway = false;
+                this.playerAway = null;
                 this.waitingForPeer = false;
                 this.selfOffline = false;
                 this.result = data;
@@ -662,27 +875,52 @@ export class MultiplayerClient {
                 }
                 break;
 
+            case "rematch_status":
+                this.rematch = { requested: data.requested || [], opponentLeft: !!data.opponent_left };
+                break;
+
+            case "rematch_start":
+                console.log(`[Multiplayer] Rematch: moving to match ${data.match_id}`);
+                if (typeof this.onRematchStartCallback === 'function') {
+                    this.onRematchStartCallback(data.match_id);
+                }
+                break;
+
             case "match_cancelled":
                 this.status = "CANCELLED";
+                this.cancelReason = data.reason || "EXPIRED";
                 console.warn("[Multiplayer] Match cancelled:", data.message);
                 break;
         }
     }
 
-    // Status line the game loop draws on the canvas (no DOM overlays), or null when there is nothing to say
+    // Status line the game loop draws on the canvas (no DOM overlays), or null when there is nothing to say.
+    // A finished match shows the result panel instead (see the game loop).
     bannerText() {
-        if (this.status === "COMPLETED" && this.result) {
-            if (!this.result.winner_id) return "DRAW";
-            if (this.result.winner_id !== this.userId) return "DEFEAT";
-            return this.result.reason === "AUTOWIN_DISCONNECT" ? "VICTORY - OPPONENT FORFEITED" : "VICTORY!";
-        }
-        if (this.status === "CANCELLED") return "CHALLENGE EXPIRED - START A NEW ONE";
+        if (this.status === "REJECTED") return "OPEN THE GAME FROM TELEGRAM TO PLAY";
+        if (this.status === "CANCELLED") return CANCEL_TEXT[this.cancelReason] || CANCEL_TEXT.EXPIRED;
+        if (this.status === "COMPLETED") return null;
         if (this.selfOffline) return "CONNECTION LOST - RECONNECTING...";
+        if (this.isSpectator) {
+            if (this.playerAway) {
+                const secs = Math.max(0, Math.ceil((this.playerAway.deadline - Date.now()) / 1000));
+                return `${String(this.playerAway.name).toUpperCase().slice(0, 12)} LEFT - ${secs}s TO COME BACK`;
+            }
+            return this.status === "SPECTATING" && !this._watching ? "SPECTATING - WAITING FOR THE FIGHT..." : null;
+        }
         if (this.opponentDropDeadline) {
             const secs = Math.max(0, Math.ceil((this.opponentDropDeadline - Date.now()) / 1000));
-            return `OPPONENT DISCONNECTED - AUTOWIN IN ${secs}s`;
+            return this.opponentAway ? `OPPONENT LEFT THE GAME - AUTOWIN IN ${secs}s` : `OPPONENT DISCONNECTED - AUTOWIN IN ${secs}s`;
         }
         if (this.waitingForPeer) return "OPPONENT REJOINING...";
+        if (this.lobby && this.status !== "ACTIVE") {
+            const secs = Math.max(0, Math.ceil((this.lobby.deadline - Date.now()) / 1000));
+            const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+            const who = this.lobby.waitingFor && this.lobby.waitingFor.name
+                ? String(this.lobby.waitingFor.name).toUpperCase().slice(0, 12) : "OPPONENT";
+            const locked = this._heroSelected ? "LOCKED - " : "";
+            return `${locked}WAITING FOR ${who} ${clock}`;
+        }
         if (this.status === "HERO_SELECT" && this._heroSelected) {
             const roleText = this.role ? `[${this.role.toUpperCase()}] ` : '';
             return `${roleText}HERO LOCKED - WAITING FOR OPPONENT...`;

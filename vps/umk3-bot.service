@@ -4,12 +4,18 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+# Its own unprivileged user: it can read the checkout and .env, and write only data/ (the database)
+User=umk3
+Group=umk3
 WorkingDirectory=/var/www/umk3
 ExecStart=/var/www/umk3/venv/bin/python3 /var/www/umk3/bot.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
