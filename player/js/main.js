@@ -1102,7 +1102,7 @@ function runOnlineBout(now) {
         bout.acc -= LOCKSTEP_TICK_MS;
         bout.lastTickAt = now;
         stats.ticks++;
-        stats.predictSum += Math.max(0, bout.tick - bout.remoteNext);
+        if (!decided) stats.predictSum += Math.max(0, bout.tick - bout.remoteNext);
         ran++;
     }
     if (ran > 1) stats.catchUpFrames++;
