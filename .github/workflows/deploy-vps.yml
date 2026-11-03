@@ -76,16 +76,29 @@ jobs:
 
             echo "=== 4. Updating Nginx configuration for ${DOMAIN} ==="
             if [ -f "vps/nginx.conf" ]; then
+              NGINX_CONF=/etc/nginx/sites-available/umk3.conf
               sed "s/YOUR_DOMAIN/${DOMAIN}/g" vps/nginx.conf > /tmp/umk3_nginx.conf
-              $SUDO cp /tmp/umk3_nginx.conf /etc/nginx/sites-available/umk3.conf
+              if [ -f "$NGINX_CONF" ]; then $SUDO cp "$NGINX_CONF" /tmp/umk3_nginx.conf.bak; fi
+              $SUDO cp /tmp/umk3_nginx.conf "$NGINX_CONF"
               $SUDO rm -f /etc/nginx/sites-enabled/*
-              $SUDO ln -sf /etc/nginx/sites-available/umk3.conf /etc/nginx/sites-enabled/umk3.conf
+              $SUDO ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/umk3.conf
               if $SUDO nginx -t; then
                 $SUDO systemctl reload nginx
                 echo "Nginx reloaded successfully with WebSocket & REST proxy."
               else
-                echo "Warning: Nginx test failed, keeping previous configuration."
+                # Put the working config back and fail the deploy, so a bad config is never left on disk
+                echo "ERROR: Nginx test failed; restoring the previous configuration."
+                if [ -f /tmp/umk3_nginx.conf.bak ]; then $SUDO cp /tmp/umk3_nginx.conf.bak "$NGINX_CONF"; fi
+                exit 1
               fi
+              # The checkout holds .env and the database; fail loudly if either is reachable from the web
+              for SECRET_PATH in /.env /data/immortal_combat.db /.git/config; do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}${SECRET_PATH}" || echo "000")
+                if [ "$CODE" = "200" ]; then
+                  echo "ERROR: ${SECRET_PATH} is publicly reachable (HTTP 200)."
+                  exit 1
+                fi
+              done
             fi
 
             echo "=== 5. Restarting Bot Service ==="
