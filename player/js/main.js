@@ -737,41 +737,9 @@ function setupCanvas() {
             return;
         }
 
-        // 1. Softkey zone at the bottom of the screen (OPTNS / BACK / PAUSE)
-        // Canvas is 352 x 416. The bottom softkey bar occupies cy >= 355.
-        // LSK is on the left (cx <= 105), RSK is on the right (cx >= 247).
-        if (cy >= 355) {
-            if (cx <= 105) {
-                // In active multiplayer combat, ignore menu softkeys
-                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") return;
-
-                triggerHaptic(12);
-                unlockAudio();
-                const lskBtn = document.getElementById('screen-btn-lsk');
-                if (lskBtn) {
-                    lskBtn.classList.add('active');
-                    setTimeout(() => lskBtn.classList.remove('active'), 120);
-                }
-                sendKeyEvent(-6, true);
-                setTimeout(() => sendKeyEvent(-6, false), 90);
-                return;
-            }
-            if (cx >= 247) {
-                // In active multiplayer combat, ignore pause
-                if (mpClient && mpClient.isMultiplayer && mpClient.status === "ACTIVE") return;
-
-                triggerHaptic(12);
-                unlockAudio();
-                const rskBtn = document.getElementById('screen-btn-rsk');
-                if (rskBtn) {
-                    rskBtn.classList.add('active');
-                    setTimeout(() => rskBtn.classList.remove('active'), 120);
-                }
-                sendKeyEvent(-7, true);
-                setTimeout(() => sendKeyEvent(-7, false), 90);
-                return;
-            }
-        }
+        // 1. The softkeys (OPTNS / BACK / PAUSE) are not handled here: #screen-btn-lsk / #screen-btn-rsk sit
+        // on top of the game's own corner icons (see .on-screen-softkey in play.html) and take those taps.
+        // A second, wider zone here would fire softkeys from taps that miss the icons.
 
         // 2. Active combat check:
         // When fighters are spawned and fighting (single-player or multiplayer), touches on the arena
@@ -1616,54 +1584,163 @@ function scoreLine(result) {
     return `${p1} ${result.p1_rounds ?? 0} - ${result.p2_rounds ?? 0} ${p2}`;
 }
 
-function drawResultPanel(lines) {
-    const w = canvas.width - 40;
-    const lineH = 22;
-    const h = 24 + lines.length * lineH;
-    const x = 20;
-    const y = Math.round((canvas.height - h) / 2) - 20;
+// Text we draw over the game is set in the game's own bitmap font. Resource slot 4 holds its white menu
+// font and slot 5 the red one the menus use for the selected entry. Both have A-Z, 0-9 and punctuation.
+// Lowercase is upper-cased; characters the font lacks (a Cyrillic name, an emoji) use FALLBACK_FONT.
+const GAME_FONT_WHITE = 4;
+const GAME_FONT_RED = 5;
+const GAME_FONT_LINE = 18;        // the engine's line height for these fonts
+const GAME_FONT_GLYPH_TOP = 4;    // glyphs start 4px below the y the engine is given...
+const GAME_FONT_GLYPH_H = 10;     // ...and are 10px tall
+const TEXT_ANCHOR_LEFT = 0;
+const FALLBACK_FONT = 'italic bold 12px sans-serif';
+
+// The game's palette (sampled from its menus): the stone menu bars and the selection red
+const GAME_RED = '#ff0000';
+const STONE_EDGE = '#0c0a08';
+const STONE_CAP = '#1c1d22';
+const STONE_HI = '#a6a191';
+const STONE_GLINT = '#cfccc4';
+
+// Runs fn(fontCharmap) with one of the game's fonts selected, then puts the engine's own font back.
+// Returns undefined when the engine has no font loaded yet.
+function withGameFont(red, fn) {
+    const slots = CoreEngine && CoreEngine.val_arr_object_a;
+    const font = slots && ((red && slots[GAME_FONT_RED]) || slots[GAME_FONT_WHITE]);
+    if (!font) return undefined;
+    let fc;
+    try { fc = CoreEngine.exec_a_to_fontcharmap(); } catch (_) { return undefined; }
+    if (!fc) return undefined;
+    const previous = fc.val_contextservicenode_a.val_object_b;
+    CoreEngine.exec_a_object_to_void(font);
+    try {
+        return fn(fc);
+    } finally {
+        CoreEngine.exec_a_object_to_void(previous);
+    }
+}
+
+// Splits upper-cased text into runs the game font can draw ({ game: true }) and runs it can't, each with
+// its width. Without a loaded game font the whole line is one fallback run.
+function layoutGameText(text, red) {
+    const s = String(text).toUpperCase();
+    const runs = withGameFont(red, (fc) => {
+        const out = [];
+        for (const ch of s) {
+            const c = ch.charCodeAt(0);
+            // The engine draws a debug box for a glyph it doesn't have (-1), so those go to the fallback
+            const game = c === 32 || (ch.length === 1 && c <= 126 && fc.getKerning(c, 1) >= 0);
+            const last = out[out.length - 1];
+            if (last && last.game === game) last.text += ch;
+            else out.push({ text: ch, game });
+        }
+        for (const run of out) {
+            if (run.game) {
+                run.width = CoreEngine.exec_a_encodedtextbuffer_int_int_to_int(new EngineModule.EncodedTextBuffer(run.text), 0, run.text.length);
+            }
+        }
+        return out;
+    }) || [{ text: s, game: false }];
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+    ctx.font = FALLBACK_FONT;
+    for (const run of runs) {
+        if (!run.game) run.width = ctx.measureText(run.text).width;
+    }
+    ctx.restore();
+    return runs;
+}
+
+function measureGameText(text) {
+    return layoutGameText(text, false).reduce((sum, run) => sum + run.width, 0);
+}
+
+// One line centred on (cx, cy)
+function drawGameText(text, cx, cy, red = false) {
+    const runs = layoutGameText(text, red);
+    let x = Math.round(cx - runs.reduce((sum, run) => sum + run.width, 0) / 2);
+    const top = Math.round(cy - GAME_FONT_GLYPH_H / 2) - GAME_FONT_GLYPH_TOP;
+    for (const run of runs) {
+        if (run.game) {
+            withGameFont(red, () => {
+                const buf = new EngineModule.EncodedTextBuffer(run.text);
+                CoreEngine.exec_a_encodedtextbuffer_int_int_int_int_int_to_void(buf, 0, buf.bufferCapacity, x, top, TEXT_ANCHOR_LEFT);
+            });
+        } else {
+            ctx.save();
+            ctx.fillStyle = red ? GAME_RED : '#ffffff';
+            ctx.font = FALLBACK_FONT;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(run.text, x, cy);
+            ctx.restore();
+        }
+        x += run.width;
+    }
+}
+
+// Breaks text into lines no wider than maxWidth: first at the " - " between a message's parts, then
+// between words. A line that fits keeps its spacing.
+function wrapGameText(text, maxWidth) {
+    if (measureGameText(text) <= maxWidth) return [text];
+    const parts = String(text).split(' - ');
+    if (parts.length > 1) return parts.flatMap((part) => wrapGameText(part, maxWidth));
+    const lines = [];
+    let line = '';
+    for (const word of String(text).split(/ +/)) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && measureGameText(next) > maxWidth) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = next;
+        }
+    }
+    if (line) lines.push(line);
+    return lines;
+}
+
+// A black box framed like the game's menu bars: dark top and left, light bottom and right
+function drawStonePanel(x, y, w, h, edge = 3) {
+    ctx.save();
+    ctx.fillStyle = '#000000';
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = '#dcb450';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, w, h);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = STONE_EDGE;
+    ctx.fillRect(x, y, w, edge);
+    ctx.fillStyle = STONE_CAP;
+    ctx.fillRect(x, y, edge, h);
+    ctx.fillStyle = STONE_HI;
+    ctx.fillRect(x, y + h - edge, w, edge);
+    ctx.fillStyle = STONE_GLINT;
+    ctx.fillRect(x + w - edge, y, edge, h);
+    ctx.restore();
+}
+
+// The title in the game's red, the rest in its white
+function drawResultPanel(lines) {
+    const x = 16;
+    const w = canvas.width - 2 * x;
+    const pad = 12;
+    const rows = [];
     lines.forEach((line, i) => {
-        ctx.fillStyle = i === 0 ? '#ffd76a' : '#ffeedd';
-        ctx.font = i === 0 ? 'bold 17px monospace' : 'bold 12px monospace';
-        ctx.fillText(line, canvas.width / 2, y + 12 + lineH * i + lineH / 2);
+        wrapGameText(line, w - 2 * pad).forEach((part) => rows.push({ text: part, red: i === 0 }));
+        if (i === 0) rows.push(null); // a blank row under the title
     });
-    ctx.restore();
+    const h = 2 * pad + rows.length * GAME_FONT_LINE;
+    const y = Math.round((canvas.height - h) / 2) - 20;
+    drawStonePanel(x, y, w, h);
+    rows.forEach((row, i) => {
+        if (row && row.text) drawGameText(row.text, canvas.width / 2, y + pad + GAME_FONT_LINE * i + GAME_FONT_LINE / 2, row.red);
+    });
 }
 
+// A status strip across the screen just above the softkey icons
 function drawBanner(text) {
-    ctx.save();
-    const bH = 34;
-    const bY = canvas.height - bH - 18;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    ctx.fillRect(0, bY, canvas.width, bH);
-    ctx.strokeStyle = '#dcb450';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(0, bY, canvas.width, bH);
-    ctx.fillStyle = '#ffeedd';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width / 2, bY + bH / 2);
-    ctx.restore();
-}
-
-// "2 WATCHING" in the softkey bar while people spectate our fight
-function drawSpectatorCount(count) {
-    ctx.save();
-    ctx.fillStyle = '#ffeedd';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${count} WATCHING`, canvas.width / 2, canvas.height - 12);
-    ctx.restore();
+    const pad = 8;
+    const rows = wrapGameText(text, canvas.width - 2 * pad);
+    const bH = 2 * pad + rows.length * GAME_FONT_LINE;
+    const bY = canvas.height - bH - 30;
+    drawStonePanel(-3, bY, canvas.width + 6, bH);
+    rows.forEach((row, i) => drawGameText(row, canvas.width / 2, bY + pad + GAME_FONT_LINE * i + GAME_FONT_LINE / 2));
 }
 
 // Haptics: a knock when our fighter takes a hit (heavier for big ones), success/error when a round ends
@@ -1817,6 +1894,9 @@ function showResultPanelNow() {
 // Overlays drawn on the canvas over the native frame (no DOM): result panel, status banner, footer note
 function drawOnlineOverlays(now) {
     if (!canvas || !ctx) return;
+    // The engine's last draw call may have left a clip rectangle on the context; overlays use the whole screen
+    const g = Display.getDisplay().getGraphics();
+    if (g) g.resetClip();
     if (showResultPanelNow()) {
         const lines = resultPanelLines();
         if (lines) drawResultPanel(lines);
@@ -1841,16 +1921,15 @@ function drawOnlineOverlays(now) {
     }
 }
 
+// A short note in the softkey bar, between the two corner icons and level with them
 function drawFooterText(text) {
+    const cy = 401; // the softkey icons' centre row (see .on-screen-softkey in play.html)
+    const w = Math.min(canvas.width - 2 * 64, Math.ceil(measureGameText(text)) + 12);
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(canvas.width / 2 - 90, canvas.height - 22, 180, 18);
-    ctx.fillStyle = '#ffeedd';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width / 2, canvas.height - 13);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(Math.round((canvas.width - w) / 2), cy - 9, w, 18);
     ctx.restore();
+    drawGameText(text, canvas.width / 2, cy);
 }
 
 function startAnimationLoop() {
