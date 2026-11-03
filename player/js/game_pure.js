@@ -698,7 +698,9 @@ function setupCanvas() {
     canvas = document.getElementById('display');
     canvas.width = 352;
     canvas.height = 416;
-    ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    // Not `desynchronized`: that low-latency mode draws straight to the screen on Windows (Telegram Desktop),
+    // so half-drawn frames showed - the arena without the HUD drawn on top made the health bars flicker
+    ctx = canvas.getContext('2d', { alpha: false });
     ctx.imageSmoothingEnabled = false;
 
     const g = new Graphics(ctx);
@@ -1121,6 +1123,7 @@ function reportNetStats(bout, now) {
         peer_rtt: mpClient.peerRtt === null ? null : Math.round(mpClient.peerRtt),
         server_rtt: mpClient.rtt,
         p2p: mpClient.isP2PActive,
+        ...mpClient.iceSummary(),
         frame_ms: s.frames ? Math.round(s.frameMs / s.frames * 10) / 10 : null,
         slow_frames: s.slowFrames,
         tick_ms: s.ticks ? Math.round(s.tickMs / s.ticks * 10) / 10 : null,

@@ -245,8 +245,11 @@ coordinator = MatchCoordinator()
 # Recent lockstep stats reported by phones every 10s, newest last; numbers only, no player identity
 NET_STATS_FIELDS = (
     "segment", "secs", "ticks_per_s", "stalls", "stall_ms", "max_stall_ms", "delay", "delay_min", "delay_max",
-    "ticks_ahead", "peer_rtt", "server_rtt", "p2p", "frame_ms", "slow_frames", "tick_ms", "paints_skipped", "catch_up_frames",
+    "ticks_ahead", "peer_rtt", "server_rtt", "p2p", "ice_failures", "frame_ms", "slow_frames", "tick_ms",
+    "paints_skipped", "catch_up_frames",
 )
+# Direct-connection diagnostics: ICE state and candidate type tallies such as "host:2,srflx:1"
+NET_STATS_TEXT_FIELDS = ("ice_state", "ice_local", "ice_remote")
 net_stats_log: deque = deque(maxlen=500)
 
 
@@ -256,6 +259,9 @@ def record_net_stats(match_id: str, role: str, data: dict):
         value = data.get(field)
         if isinstance(value, (int, float, bool)) or value is None:
             entry[field] = value
+    for field in NET_STATS_TEXT_FIELDS:
+        if field in data:
+            entry[field] = str(data[field])[:40]
     entry["device"] = str(data.get("device", ""))[:160]
     net_stats_log.append(entry)
     logging.info(f"[{match_id}] net_stats {role}: {json.dumps({k: v for k, v in entry.items() if k not in ('at', 'match_id', 'role')})}")

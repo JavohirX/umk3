@@ -39,6 +39,9 @@ export class MultiplayerClient {
         this.rtcPeer = null;
         this.dataChannel = null;
         this.isP2PActive = false;
+        this.pendingCandidates = []; // opponent candidates waiting for their offer/answer to be applied
+        this.rtcSignalQueue = null;
+        this.ice = null; // direct-connection diagnostics, see iceSummary()
         this.pingInterval = null;
         this.rtt = 0;
         this.peerPingInterval = null;
@@ -334,23 +337,39 @@ export class MultiplayerClient {
             try { this.rtcPeer.close(); } catch (_) {}
             this.rtcPeer = null;
         }
+        this.pendingCandidates = [];
+        this.ice = { state: "new", local: {}, remote: {}, failures: this.ice ? this.ice.failures : 0 };
 
         try {
             const config = {
                 iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
+                    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+                    { urls: 'stun:stun.cloudflare.com:3478' }
                 ]
             };
-            this.rtcPeer = new RTCPeerConnection(config);
+            const peer = this.rtcPeer = new RTCPeerConnection(config);
 
-            this.rtcPeer.onicecandidate = (event) => {
+            peer.onicecandidate = (event) => {
                 if (event.candidate) {
+                    this.countCandidate(this.ice.local, event.candidate.candidate);
                     this.sendPacket({
                         type: "rtc_signal",
                         signal: { type: "candidate", candidate: event.candidate.toJSON() }
                     });
+                }
+            };
+
+            peer.oniceconnectionstatechange = () => {
+                if (this.rtcPeer !== peer) return;
+                this.ice.state = peer.iceConnectionState;
+                // One more try if the direct link can't be established; the relay keeps the fight going meanwhile
+                if (peer.iceConnectionState === "failed") {
+                    this.ice.failures++;
+                    if (isInitiator && this.ice.failures < 2) {
+                        setTimeout(() => {
+                            if (this.rtcPeer === peer && !this.isP2PActive) this.initWebRTC(true);
+                        }, 2000);
+                    }
                 }
             };
 
@@ -375,31 +394,58 @@ export class MultiplayerClient {
         }
     }
 
-    async handleRtcSignal(signal) {
+    // Signals are processed strictly in arrival order: a candidate handled while the offer or answer before it
+    // is still being applied would be rejected and lost, and lost candidates are often the only working path
+    handleRtcSignal(signal) {
         if (!signal) return;
+        this.rtcSignalQueue = (this.rtcSignalQueue || Promise.resolve())
+            .then(() => this.processRtcSignal(signal))
+            .catch((err) => console.warn("[Multiplayer] Failed to process RTC signal:", err));
+    }
+
+    async processRtcSignal(signal) {
         // Every offer starts a fresh negotiation, replacing any peer left over from before a reconnect
         if (signal.type === "offer") {
             await this.initWebRTC(false);
         }
-        if (!this.rtcPeer) return;
+        const peer = this.rtcPeer;
+        if (!peer) return;
 
-        try {
+        if (signal.type === "offer" || signal.type === "answer") {
+            await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+            // Candidates that arrived before the description can be applied now
+            for (const candidate of this.pendingCandidates.splice(0)) {
+                await peer.addIceCandidate(new RTCIceCandidate(candidate));
+            }
             if (signal.type === "offer") {
-                await this.rtcPeer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                const answer = await this.rtcPeer.createAnswer();
-                await this.rtcPeer.setLocalDescription(answer);
+                const answer = await peer.createAnswer();
+                await peer.setLocalDescription(answer);
                 this.sendPacket({
                     type: "rtc_signal",
                     signal: { type: "answer", sdp: answer }
                 });
-            } else if (signal.type === "answer") {
-                await this.rtcPeer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-            } else if (signal.type === "candidate" && signal.candidate) {
-                await this.rtcPeer.addIceCandidate(new RTCIceCandidate(signal.candidate));
             }
-        } catch (err) {
-            console.warn("[Multiplayer] Failed to process RTC signal:", err);
+        } else if (signal.type === "candidate" && signal.candidate) {
+            this.countCandidate(this.ice.remote, signal.candidate.candidate);
+            if (peer.remoteDescription) {
+                await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
+            } else {
+                this.pendingCandidates.push(signal.candidate);
+            }
         }
+    }
+
+    // Tallies candidate types (host = local network, srflx = public address found via STUN, relay = TURN)
+    countCandidate(tally, candidateLine) {
+        const type = (/ typ (\w+)/.exec(candidateLine || "") || [])[1] || "unknown";
+        tally[type] = (tally[type] || 0) + 1;
+    }
+
+    // Direct-connection diagnostics for the stats report
+    iceSummary() {
+        const fmt = (tally) => Object.entries(tally).map(([type, n]) => `${type}:${n}`).join(",") || "none";
+        if (!this.ice) return { ice_state: typeof RTCPeerConnection === 'undefined' ? "unsupported" : "not-started" };
+        return { ice_state: this.ice.state, ice_local: fmt(this.ice.local), ice_remote: fmt(this.ice.remote), ice_failures: this.ice.failures };
     }
 
     setupDataChannel(dc) {

@@ -652,6 +652,7 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         ws1, ws2, _, _ = await self._connect_and_lock(match_id, "group_stats", 0, 1)
 
         await ws2.send_json({"type": "net_stats", "ticks_per_s": 59.4, "stalls": 3, "delay": 6, "p2p": True,
+                             "ice_state": "connected", "ice_local": "host:2,srflx:1",
                              "device": "TestPhone/1.0", "user_name": "should not be kept"})
         await ws2.send_json({"type": "ping", "time": 1})
         await ws2.receive_json()  # pong: the stats were processed
@@ -662,6 +663,7 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         self.assertEqual(stats[0]["role"], "p1")  # the joiner locked first
         self.assertEqual((stats[0]["ticks_per_s"], stats[0]["stalls"], stats[0]["delay"], stats[0]["p2p"]), (59.4, 3, 6, True))
         self.assertEqual(stats[0]["device"], "TestPhone/1.0")
+        self.assertEqual((stats[0]["ice_state"], stats[0]["ice_local"]), ("connected", "host:2,srflx:1"))
         self.assertNotIn("user_name", stats[0])
 
         await ws1.close()
