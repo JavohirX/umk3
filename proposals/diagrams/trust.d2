@@ -1,0 +1,22 @@
+...@_theme
+
+direction: down
+
+phone: "A player's phone\nsigned in with Telegram" {class: green}
+
+server: "Game server · multiplayer.py" {
+  class: zone
+  relay: "Input relay\nrecords every tick" {class: box}
+  score: "settle_rounds\nboth phones must agree" {class: box}
+  snap: "state_snapshot handler\nno check" {class: bad}
+}
+
+other: "Opponent's phone\nruns the same fight" {class: green}
+board: "Leaderboard\nSQLite" {class: rust}
+
+phone -> server.relay: "inputs" {class: live}
+phone -> server.score: "round_score\nfrom both phones" {class: live}
+phone -> server.snap: "snapshot" {class: danger}
+server.relay -> other: "inputs" {class: live}
+server.snap -> other: "forwarded as is" {class: danger}
+server.score -> board: "finish_match" {class: live}

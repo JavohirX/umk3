@@ -1,0 +1,25 @@
+# Explainer theme. build.py prepends this to every diagrams/*.d2 before rendering.
+# Use the classes below; don't hard-code colors in diagram files.
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+style: {fill: "#FFFDF9"}
+classes: {
+  # nodes
+  box: {style: {fill: "#F2EBDF"; stroke: "#D8CCB9"; stroke-width: 1; font-color: "#111111"; font-size: 15}}
+  rust: {style: {fill: "#F7E6DA"; stroke: "#B4531A"; stroke-width: 2; font-color: "#111111"; font-size: 15}}
+  green: {style: {fill: "#E3EEE9"; stroke: "#1F6B5C"; stroke-width: 2; font-color: "#111111"; font-size: 15}}
+  blue: {style: {fill: "#E4EBF2"; stroke: "#2F5D8A"; stroke-width: 2; font-color: "#111111"; font-size: 15}}
+  bad: {style: {fill: "#F8E2DE"; stroke: "#B3261E"; stroke-width: 2; font-color: "#111111"; font-size: 15}}
+  note: {shape: text; style: {font-color: "#3F3A33"; font-size: 14; bold: false}}
+  # containers
+  zone: {style: {fill: "#F4F8F6"; stroke: "#1F6B5C"; stroke-dash: 5; font-color: "#1F6B5C"; font-size: 14; bold: true}}
+  panel: {style: {fill: "#FFFDF9"; stroke: "#D8CCB9"; font-color: "#111111"; font-size: 16; bold: true}}
+  # edges
+  live: {style: {stroke: "#3F3A33"; stroke-width: 2; font-color: "#1F6B5C"; font-size: 14; italic: false; bold: true}}
+  bg: {style: {stroke: "#3F3A33"; stroke-width: 2; stroke-dash: 5; font-color: "#1F6B5C"; font-size: 14; italic: false; bold: true}}
+  danger: {style: {stroke: "#B3261E"; stroke-width: 2; font-color: "#B3261E"; font-size: 14; italic: false; bold: true}}
+  accent: {style: {stroke: "#B4531A"; stroke-width: 3; font-color: "#B4531A"; font-size: 14; italic: false; bold: true}}
+}

@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proposed Fixes and Features</title>
+<meta name="explainer" content="10|Fixes &amp; features">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600&family=Open+Sans:wght@400;700&family=Cousine:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="explainers.css">
+</head>
+<body>
+<div class="layout">
+
+<aside class="side">
+  <div><div class="side-label">Explainers</div><!-- nav -->
+<nav aria-label="Explainer pages">
+  <a href="improvements.html" aria-current="page">Fixes &amp; features</a>
+</nav>
+<!-- /nav --></div>
+  <div><div class="side-label">On this page</div><nav aria-label="Sections">
+    <a href="#glance">At a glance</a>
+    <a href="#cheat">How a result gets faked</a>
+    <a href="#fair">Fixes: fair results</a>
+    <a href="#client">Fixes: one copy of the client</a>
+    <a href="#server">Fixes: server and bot</a>
+    <a href="#deploy">Fixes: deploy and docs</a>
+    <a href="#features">New features</a>
+    <a href="#order">Order and open questions</a>
+  </nav></div>
+  <div><div class="side-label">About this page</div><div class="facts-list">
+    <span>Code at commit 2a678c6</span>
+    <span>Tests: 59 pytest + 1 Node check, all passing</span>
+    <span>Not published: kept outside docs/</span>
+    <span>Updated 2026-11-03</span>
+  </div></div>
+</aside>
+
+<main class="read">
+
+<header class="hero">
+  <span class="eyebrow">Review · immortal_combat</span>
+  <h1>Proposed Fixes and Features</h1>
+  <p class="lede">Every suggestion from the code review, split into changes you can ship one at a time. Each card says what is wrong today, what to change, how to check it, and what it depends on.</p>
+</header>
+
+<section>
+  <p class="oneliner">Ship F1, F5 and F6 first. Right now one hand-typed message wins a match and puts it on the leaderboard, and three small server changes stop that.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="glance">
+  <span class="eyebrow">1 · At a glance</span>
+  <h2>23 fixes and 11 features, one change each</h2>
+  <p><b>Atomic</b> here means one change, one commit, one test. No card hides a second change inside it. When a change only works after another one, the card says so under <b>Needs</b>.</p>
+  <p class="note">Sizes are my estimates. <b>S</b> is under half a day, <b>M</b> is one to two days, <b>L</b> is a week or more. Line numbers are from commit 2a678c6.</p>
+  <div class="table-box"><table>
+    <thead><tr><th>ID</th><th>Change</th><th>Size</th><th>Needs</th></tr></thead>
+    <tbody>
+      <tr><th colspan="4">Fair results</th></tr>
+      <tr><td class="k"><a href="#f1">F1</a></td><td>Pin a snapshot's round score to the confirmed score <span class="tag now">first</span></td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f2">F2</a></td><td>Route desync restarts through the server</td><td>M</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f3">F3</a></td><td>Accept only the snapshot the server asked for</td><td>S</td><td>F2</td></tr>
+      <tr><td class="k"><a href="#f4">F4</a></td><td>Restarted rounds start at full health <span class="tag">decided</span></td><td>S</td><td>F3</td></tr>
+      <tr><td class="k"><a href="#f5">F5</a></td><td>Settle on one report when the other phone stays silent <span class="tag now">first</span></td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f6">F6</a></td><td>No-contest when the two reports disagree <span class="tag now">first</span></td><td>S</td><td>—</td></tr>
+      <tr><th colspan="4">One copy of the client</th></tr>
+      <tr><td class="k"><a href="#f7">F7</a></td><td>Delete the dead copies main.js and network.js</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f8">F8</a></td><td>Make player/index.html a redirect to play.html</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f9">F9</a></td><td>One version stamp for client, server and bot</td><td>M</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f10">F10</a></td><td>Stamp the GitHub Pages build too</td><td>S</td><td>F9</td></tr>
+      <tr><td class="k"><a href="#f11">F11</a></td><td>Remove the multiplayer_ui.js stub and the anti-neon guard</td><td>S</td><td>F9</td></tr>
+      <tr><td class="k"><a href="#f12">F12</a></td><td>Move the server address out of the code</td><td>S</td><td>F9</td></tr>
+      <tr><th colspan="4">Server and bot</th></tr>
+      <tr><td class="k"><a href="#f13">F13</a></td><td>Stop creating a match on every inline query <span class="tag">done</span></td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f14">F14</a></td><td>Cap WebSocket message size</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f15">F15</a></td><td>Relay only known binary packets</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f16">F16</a></td><td>Rate-limit text messages per connection</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f17">F17</a></td><td>Save replays off the event loop</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f18">F18</a></td><td>Put /api/netstats behind a key</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f19">F19</a></td><td>Bot texts read the grace period from the server</td><td>S</td><td>—</td></tr>
+      <tr><th colspan="4">Deploy and docs</th></tr>
+      <tr><td class="k"><a href="#f20">F20</a></td><td>Roll back instead of running as root</td><td>M</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f21">F21</a></td><td>Touch only umk3's own nginx site</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f22">F22</a></td><td>Back up the database before each restart <span class="tag now">first</span></td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#f23">F23</a></td><td>Fix docs that point at missing files</td><td>S</td><td>F7</td></tr>
+      <tr><th colspan="4">New features</th></tr>
+      <tr><td class="k"><a href="#n1">N1</a></td><td>Replay a match headless in Node <span class="tag">parked</span></td><td>L</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n2">N2</a></td><td>Settle disputed matches from the replay <span class="tag">parked</span></td><td>M</td><td>N1, F6</td></tr>
+      <tr><td class="k"><a href="#n3">N3</a></td><td>Player rating (Elo)</td><td>M</td><td>F1, F5, F6</td></tr>
+      <tr><td class="k"><a href="#n4">N4</a></td><td>/history command</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n5">N5</a></td><td>/h2h head-to-head command</td><td>S</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n6">N6</a></td><td>Quick match queue</td><td>L</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n7">N7</a></td><td>Fight the CPU while a challenge is open</td><td>L</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n8">N8</a></td><td>Group tournaments</td><td>L</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n9">N9</a></td><td>Bot in the user's language</td><td>M</td><td>—</td></tr>
+      <tr><td class="k"><a href="#n10">N10</a></td><td>Report browser errors to the server</td><td>S</td><td>F16</td></tr>
+      <tr><td class="k"><a href="#n11">N11</a></td><td>Decide on a TURN relay from real data</td><td>S</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="cheat">
+  <span class="eyebrow">2 · The main problem</span>
+  <h2>How a result gets faked today</h2>
+  <p>The server never runs the fight itself. Both phones run the same engine on the same inputs (this is called <b>lockstep</b>), so they see the same fight. The server only passes inputs between them and counts a round once both phones report the same score.</p>
+  <p>That works while both phones are honest. The trouble is that three kinds of message change the outcome, they all come straight from the phones, and one of them isn't checked at all.</p>
+  <figure>
+    <div class="fig-box"><!-- d2:trust "A phone sends inputs, round scores and snapshots to the game server. Inputs and scores are relayed or cross-checked, but snapshots are forwarded to the opponent unchecked." -->
+<svg role="img" aria-label="A phone sends inputs, round scores and snapshots to the game server. Inputs and scores are relayed or cross-checked, but snapshots are forwarded to the opponent unchecked." xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"  preserveAspectRatio="xMinYMin meet" viewBox="0 0 828 827"><svg class="d2-2643888627 d2-svg" width="828" height="827" viewBox="-13 -13 828 827"><rect x="-13" y="-13" width="828" height="827" rx="0" fill="#FFFDF9" stroke-width="0" /><style type="text/css"><![CDATA[
+.d2-2643888627 .text-bold {
+	font-family: "d2-2643888627-font-bold";
+}
+@font-face {
+	font-family: d2-2643888627-font-bold;
+	src: url("data:application/font-woff;base64,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");
+}]]></style><style type="text/css"><![CDATA[.shape {
+  shape-rendering: geometricPrecision;
+  stroke-linejoin: round;
+}
+.connection {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.blend {
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+		.d2-2643888627 .stroke-B2{stroke:#0D32B2;}.appendix text.text{fill:#0A0F25}.md{--color-fg-default:#0A0F25;--color-fg-muted:#676C7E;--color-fg-subtle:#9499AB;--color-canvas-default:#FFFFFF;--color-canvas-subtle:#EEF1F8;--color-border-default:#0D32B2;--color-border-muted:#0D32B2;--color-neutral-muted:#EEF1F8;--color-accent-fg:#0D32B2;--color-accent-emphasis:#0D32B2;--color-attention-subtle:#676C7E;--color-danger-fg:red;}.light-code{display: block}.dark-code{display: none}]]></style><g class="cGhvbmU= green"><g class="shape" ><rect x="243" y="12" width="223" height="81" stroke="#1F6B5C" fill="#E3EEE9" style="stroke-width:2;" /></g><text x="354.5" y="49.5" fill="#111111" class="text-bold" style="text-anchor:middle;font-size:15px"><tspan x="354.5" dy="0">A player&#39;s phone</tspan><tspan x="354.5" dy="18">signed in with Telegram</tspan></text></g><g class="c2VydmVy zone"><g class="shape" ><rect x="12" y="292" width="769" height="181" stroke="#1F6B5C" fill="#F4F8F6" style="stroke-width:2;stroke-dasharray:10.000000,9.865639;" /></g><text x="396.5" y="311" fill="#1F6B5C" class="text-bold" style="text-anchor:middle;font-size:14px">Game server · multiplayer.py</text></g><g class="b3RoZXI= green"><g class="shape" ><rect x="260" y="708" width="192" height="81" stroke="#1F6B5C" fill="#E3EEE9" style="stroke-width:2;" /></g><text x="356" y="745.5" fill="#111111" class="text-bold" style="text-anchor:middle;font-size:15px"><tspan x="356" dy="0">Opponent&#39;s phone</tspan><tspan x="356" dy="18">runs the same fight</tspan></text></g><g class="Ym9hcmQ= rust"><g class="shape" ><rect x="649" y="708" width="141" height="81" stroke="#B4531A" fill="#F7E6DA" style="stroke-width:2;" /></g><text x="719.5" y="745.5" fill="#111111" class="text-bold" style="text-anchor:middle;font-size:15px"><tspan x="719.5" dy="0">Leaderboard</tspan><tspan x="719.5" dy="18">SQLite</tspan></text></g><g class="c2VydmVyLnJlbGF5 box"><g class="shape" ><rect x="62" y="342" width="179" height="81" stroke="#D8CCB9" fill="#F2EBDF" style="stroke-width:1;" /></g><text x="151.5" y="379.5" fill="#111111" class="text-bold" style="text-anchor:middle;font-size:15px"><tspan x="151.5" dy="0">Input relay</tspan><tspan x="151.5" dy="18">records every tick</tspan></text></g><g class="c2VydmVyLnNjb3Jl box"><g class="shape" ><rect x="261" y="342" width="228" height="81" stroke="#D8CCB9" fill="#F2EBDF" style="stroke-width:1;" /></g><text x="375" y="379.5" fill="#111111" class="text-bold" style="text-anchor:middle;font-size:15px"><tspan x="375" dy="0">settle_rounds</tspan><tspan x="375" dy="18">both phones must agree</tspan></text></g><g class="c2VydmVyLnNuYXA= bad"><g class="shape" ><rect x="509" y="342" width="222" height="81" stroke="#B3261E" fill="#F8E2DE" style="stroke-width:2;" /></g><text x="620" y="379.5" fill="#111111" class="text-bold" style="text-anchor:middle;font-size:15px"><tspan x="620" dy="0">state_snapshot handler</tspan><tspan x="620" dy="18">no check</tspan></text></g><g class="KHBob25lIC0mZ3Q7IHNlcnZlci5yZWxheSlbMF0= live"><marker id="mk-d2-2643888627-65404597" markerWidth="10" markerHeight="12" refX="7" refY="6" viewBox="0 0 10 12" orient="auto" markerUnits="userSpaceOnUse"> <polygon points="0,0 10,6 0,12" fill="#3F3A33" class="connection" stroke-width="2" /> </marker><path d="M 299.625 95 L 299.625 123 S 299.625 133 289.625 133 L 225.75 133 S 215.75 133 215.75 143 L 215.75 338.5" stroke="#3F3A33" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-2643888627-65404597)" mask="url(#d2-2643888627)" /><text x="216" y="180" fill="#1F6B5C" class="text-bold" style="text-anchor:middle;font-size:14px">inputs</text></g><g class="KHBob25lIC0mZ3Q7IHNlcnZlci5zY29yZSlbMF0= live"><path d="M 375 95 L 375 338.5" stroke="#3F3A33" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-2643888627-65404597)" mask="url(#d2-2643888627)" /><text x="375" y="215" fill="#1F6B5C" class="text-bold" style="text-anchor:middle;font-size:14px"><tspan x="375" dy="0">round_score</tspan><tspan x="375" dy="17">from both phones</tspan></text></g><g class="KHBob25lIC0mZ3Q7IHNlcnZlci5zbmFwKVswXQ== danger"><marker id="mk-d2-2643888627-506155567" markerWidth="10" markerHeight="12" refX="7" refY="6" viewBox="0 0 10 12" orient="auto" markerUnits="userSpaceOnUse"> <polygon points="0,0 10,6 0,12" fill="#B3261E" class="connection" stroke-width="2" /> </marker><path d="M 411.125 95 L 411.125 237 S 411.125 247 421.125 247 L 610 247 S 620 247 620 257 L 620 338" stroke="#B3261E" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-2643888627-506155567)" mask="url(#d2-2643888627)" /><text x="486.5" y="251" fill="#B3261E" class="text-bold" style="text-anchor:middle;font-size:14px">snapshot</text></g><g class="KHNlcnZlci5yZWxheSAtJmd0OyBvdGhlcilbMF0= live"><path d="M 151.5 424.5 L 151.5 508 S 151.5 518 161.5 518 L 300.75 518 S 310.75 518 310.75 528 L 310.75 704" stroke="#3F3A33" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-2643888627-65404597)" mask="url(#d2-2643888627)" /><text x="279" y="522" fill="#1F6B5C" class="text-bold" style="text-anchor:middle;font-size:14px">inputs</text></g><g class="KHNlcnZlci5zbmFwIC0mZ3Q7IG90aGVyKVswXQ== danger"><path d="M 588 425 L 588 658 S 588 668 578 668 L 398.25 668 S 388.25 668 388.25 678 L 388.25 704" stroke="#B3261E" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-2643888627-506155567)" mask="url(#d2-2643888627)" /><text x="588" y="669" fill="#B3261E" class="text-bold" style="text-anchor:middle;font-size:14px">forwarded as is</text></g><g class="KHNlcnZlci5zY29yZSAtJmd0OyBib2FyZClbMF0= live"><path d="M 375 424.5 L 375 508 S 375 518 385 518 L 709.75 518 S 719.75 518 719.75 528 L 719.75 704" stroke="#3F3A33" fill="none" class="connection" style="stroke-width:2;" marker-end="url(#mk-d2-2643888627-65404597)" mask="url(#d2-2643888627)" /><text x="595" y="522" fill="#1F6B5C" class="text-bold" style="text-anchor:middle;font-size:14px">finish_match</text></g><mask id="d2-2643888627" maskUnits="userSpaceOnUse" x="-13" y="-13" width="828" height="827">
+<rect x="-13" y="-13" width="828" height="827" fill="white"></rect>
+<rect x="192" y="166" width="48" height="20" fill="black"></rect>
+<rect x="310" y="201" width="130" height="34" fill="black"></rect>
+<rect x="452" y="237" width="69" height="20" fill="black"></rect>
+<rect x="255" y="508" width="48" height="20" fill="black"></rect>
+<rect x="532" y="655" width="112" height="20" fill="black"></rect>
+<rect x="548" y="508" width="94" height="20" fill="black"></rect>
+</mask></svg></svg>
+
+<!-- /d2 --></div>
+    <figcaption>Inputs can't be faked for the other player, and scores need both phones to agree. The snapshot path (red) has no check, and the opponent's phone loads whatever arrives.</figcaption>
+  </figure>
+  <p><b>Why snapshots exist.</b> When a phone reconnects mid-fight, it has missed inputs. Both phones then restart the bout from one shared state: the round score, both fighters' health and the clock. The server sends <code>restart_request</code> to the phone that kept the fight going, and that phone answers with <code>state_snapshot</code>. Each restart gets a higher <b>segment</b> number.</p>
+  <p><b>The hole.</b> The handler (<code>server/multiplayer.py:1079–1093</code>) accepts a snapshot from either player at any time, as long as its segment number is higher. <code>clean_resume</code> only clamps the values to their ranges: rounds 0–3, health 1–100. The opponent's phone loads it (<code>game_pure.js:1890</code>), and the engine writes the round score and health straight into the fight (<code>umk3.js:16350–16365</code>).</p>
+  <figure>
+    <div class="fig-box"><pre class="mermaid">
+sequenceDiagram
+  participant C as Cheater phone (P2)
+  participant S as Game server
+  participant V as Opponent phone (P1)
+  participant D as Leaderboard
+  Note over C,V: Mid-fight. Confirmed score 0-0, segment 3
+  C->>S: state_snapshot, segment 4, rounds [0,2]
+  S->>V: forwarded, 4 is higher than 3
+  V->>V: engine restarts at 0-2
+  V->>S: round_score 0-2
+  C->>S: round_score 0-2
+  S->>D: finish_match, cheater wins
+</pre></div>
+    <figcaption>One message is enough. The opponent's phone reports the faked score by itself, because every restart reports the score it starts from (game_pure.js:929). Both reports agree, so settle_rounds ends the match.</figcaption>
+  </figure>
+  <p><b>A second, smaller hole.</b> <code>settle_rounds</code> (<code>multiplayer.py:501</code>) waits until both phones report the same score, with no time limit. A losing player whose phone never sends its final score keeps the match open. When the winner gives up and closes the app, the normal forfeit rule kicks in against the winner.</p>
+  <figure>
+    <div class="fig-box"><pre class="mermaid">
+sequenceDiagram
+  participant W as Winner phone
+  participant S as Game server
+  participant L as Loser phone (modified)
+  W->>S: round_score 2-1
+  Note over L: never sends its score
+  Note over S: one report missing, keeps waiting
+  W--xS: winner closes the app
+  Note over S: 60 s grace for the winner runs out
+  S->>L: match_ended, loser wins by forfeit
+</pre></div>
+    <figcaption>The silent player is still connected when the grace period ends, so _forfeit_timer (multiplayer.py:590) gives them the win.</figcaption>
+  </figure>
+  <p class="note"><b>The rule behind both:</b> never trust the client. Anything a phone sends can also be typed by hand. Telegram's signed login (<code>initData</code>) proves <b>who</b> sent a message, not that its content is true.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="fair">
+  <span class="eyebrow">3 · Fixes</span>
+  <h2>Fair results</h2>
+  <p>F1, F5 and F6 are independent and small, and together they block both sequences above. F2 to F4 close the health part, which needs one decision from you.</p>
+  <div class="grid">
+
+    <div class="card" id="f1">
+      <div class="card-head"><h3>F1 · Pin a snapshot's round score to the confirmed score</h3><span class="tag now">Do first</span></div>
+      <span class="ru">server/multiplayer.py · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>A snapshot can set any round score from 0 to 3, which ends the match on the spot.</dd>
+        <dt>Change</dt><dd>In the <code>state_snapshot</code> handler, accept <code>resume.rounds</code> only if it equals the confirmed score (<code>room.p1_rounds</code>, <code>room.p2_rounds</code>) or the score the other phone last reported in <code>room.score_reports</code>. Otherwise drop the snapshot. The second case covers an honest reconnect right after a knockout, before both reports have arrived.</dd>
+        <dt>Check</dt><dd>A test in <code>TestHeroSelectAndRounds</code>: a player sends a snapshot with rounds [0,2]; the opponent receives nothing and the match stays ACTIVE.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f2">
+      <div class="card-head"><h3>F2 · Route desync restarts through the server</h3></div>
+      <span class="ru">game_pure.js, network_pure.js, multiplayer.py · M · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Once a second, both phones compare a fingerprint of their fight (<code>game_pure.js:1121</code>). If they differ, P1's phone restarts both phones by sending a snapshot nobody asked for (line 1137). F3 can't allow only requested snapshots while this path exists.</dd>
+        <dt>Change</dt><dd>Both phones send a new <code>{"type": "desync", "segment", "tick"}</code> message instead. The server answers with <code>restart_request</code> to P1, the same message a reconnect uses. Allow one restart per 3 seconds per match, like the client's own guard today.</dd>
+        <dt>Check</dt><dd>A test: two desync messages for the same tick produce exactly one <code>restart_request</code>, sent to P1.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f3">
+      <div class="card-head"><h3>F3 · Accept only the snapshot the server asked for</h3></div>
+      <span class="ru">server/multiplayer.py · S · Needs F2</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Even with the score pinned (F1), a forged snapshot can still set health and the clock whenever the cheater likes.</dd>
+        <dt>Change</dt><dd>When <code>restart_bout</code> sends <code>restart_request</code> (line 493), store <code>room.pending_restart = (player_id, segment)</code>. The handler accepts a snapshot only from that player with that segment, then clears it.</dd>
+        <dt>Check</dt><dd>A test: an unrequested snapshot is dropped; the requested one is forwarded.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f4">
+      <div class="card-head"><h3>F4 · Restarted rounds start at full health</h3><span class="tag">Decided: B</span></div>
+      <span class="ru">multiplayer.py, game_pure.js · S once decided · Needs F3</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>After F3, the phone the server asks still reports the health, and the server can't check it. A cheater can get asked on purpose: if they send a wrong fingerprint, the opponent's phone reports a desync, and the server asks P1. P1 is whoever locks a hero first.</dd>
+        <dt>Option A</dt><dd><b>Keep trusting the phone.</b> Smooth for honest players, since a reconnect continues the round where it was. But a cheater playing as P1 can still set health.</dd>
+        <dt>Option B</dt><dd><b>The server builds every restart:</b> confirmed rounds, full health, fresh clock. The server already does this when neither phone kept the fight (line 495). It can't be faked, and every replay segment then starts from a state the server made, so N2 can re-check whole matches. The cost: a reconnect or desync replays the current round from full health.</dd>
+        <dt>Decided</dt><dd>B, on 2026-11-03, because the leaderboard ranks people. Also cap desync restarts at two per match and then end it as a no-contest (F6), so a losing player can't keep resetting rounds.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f5">
+      <div class="card-head"><h3>F5 · Settle on one report when the other phone stays silent</h3><span class="tag now">Do first</span></div>
+      <span class="ru">server/multiplayer.py · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The second sequence above: silence keeps the match open until the winner leaves.</dd>
+        <dt>Change</dt><dd>When one phone reports a match-ending score and the other phone sends no score of its own for 15 seconds, or disconnects, finish with the one report. Use a task like the forfeit timer. Honest phones report within milliseconds, so only a modified or crashed phone is ever silent this long.</dd>
+        <dt>Check</dt><dd>A test: P1 reports 2–0, P2 reports nothing; after the timeout, <code>match_ended</code> names P1.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f6">
+      <div class="card-head"><h3>F6 · No-contest when the two reports disagree</h3><span class="tag now">Do first</span></div>
+      <span class="ru">multiplayer.py, db.py, bot.py · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>With F5 in place, a cheater who reports a fake win instead of staying silent gets two conflicting reports. Today that also hangs forever.</dd>
+        <dt>Change</dt><dd>If the two phones keep reporting different match-ending scores for 15 seconds, finish with reason <code>DISPUTED</code> and no winner. <code>db.finish_match(..., record_stats=False)</code> already exists for closing a match without touching the leaderboard (<code>db.py:209</code>). Keep the replay so N2 can settle it later. Add a <code>DISPUTED</code> line to <code>result_line</code> in the bot.</dd>
+        <dt>Check</dt><dd>A test: reports 2–0 and 0–2 lead to <code>match_ended</code> with reason DISPUTED, and no leaderboard row changes.</dd>
+      </dl>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="client">
+  <span class="eyebrow">4 · Fixes</span>
+  <h2>One copy of the client</h2>
+  <p>Two commits (5dc4ec3, 0ab4b3b) fought browser caching by copying files under new names: <code>play.html</code>, <code>game_pure.js</code>, <code>network_pure.js</code>. The old files stayed. Today each pair is byte-identical, so every client change has to be made twice, or the copies drift apart. On top of that, four separate strings claim to be the build version:</p>
+  <div class="table-box"><table>
+    <thead><tr><th>Where</th><th>Value today</th><th>Who updates it</th></tr></thead>
+    <tbody>
+      <tr><td class="k">network_pure.js:672</td><td><code>CURRENT_BUILD = "5dc4ec3"</code></td><td>VPS deploy (sed); never on Pages</td></tr>
+      <tr><td class="k">play.html:702, index.html:702</td><td><code>APP_BUILD_HASH = "v20261031_pure_native_v3"</code></td><td>VPS deploy (sed)</td></tr>
+      <tr><td class="k">bot.py:63</td><td><code>v = "20261103"</code></td><td>By hand</td></tr>
+      <tr><td class="k">multiplayer.py:747</td><td>fallback <code>"5dc4ec3"</code></td><td>.env from deploy; fallback by hand</td></tr>
+    </tbody>
+  </table></div>
+  <div class="grid">
+
+    <div class="card" id="f7">
+      <div class="card-head"><h3>F7 · Delete the dead copies main.js and network.js</h3></div>
+      <span class="ru">player/js · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Nothing loads them. Both HTML pages import <code>game_pure.js</code>, which imports <code>network_pure.js</code>.</dd>
+        <dt>Change</dt><dd><code>git rm</code> both files.</dd>
+        <dt>Check</dt><dd>No import of them anywhere (grep), and the test suite still passes.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f8">
+      <div class="card-head"><h3>F8 · Make player/index.html a redirect to play.html</h3></div>
+      <span class="ru">player/index.html · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Both URLs are in use: nginx (<code>/</code>), <code>vercel.json</code> and the GitHub Pages root send people to <code>index.html</code>, and the bot sends them to <code>play.html</code>. Only one of them needs to be the 708-line page.</dd>
+        <dt>Change</dt><dd>Replace <code>index.html</code> with the short redirect the root <code>index.html</code> already uses, keeping <code>location.search</code> and <code>location.hash</code>. Telegram passes its login data in the hash (<code>#tgWebAppData=…</code>), so losing it would break sign-in.</dd>
+        <dt>Check</dt><dd>Open <code>/player/index.html?match=x#a=b</code> and land on <code>play.html</code> with both parts intact.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f9">
+      <div class="card-head"><h3>F9 · One version stamp for client, server and bot</h3></div>
+      <span class="ru">deploy.yml, play.html, network_pure.js, bot.py · M · Needs nothing (easier after F7, F8)</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The four strings in the table above, patched by sed lines that fail silently (<code>|| true</code>).</dd>
+        <dt>Change</dt><dd>CI writes <code>player/version.js</code> (<code>export const BUILD = "&lt;commit&gt;"</code>). <code>play.html</code> loads it with a fresh query (<code>?t=</code> + now), since it's tiny and must never be cached, then uses BUILD to cache-bust the game import. <code>network_pure.js</code> imports BUILD for the handshake. The bot and server read <code>BUILD_VERSION</code> from <code>.env</code>, which the deploy already writes. Delete the literals and the sed lines.</dd>
+        <dt>Check</dt><dd>After a deploy, <code>/api/health</code> reports the same build as <code>version.js</code>.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f10">
+      <div class="card-head"><h3>F10 · Stamp the GitHub Pages build too</h3></div>
+      <span class="ru">deploy.yml, pages job · S · Needs F9</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The pages job copies files as they are (<code>deploy.yml:61</code>), so its client says 5dc4ec3 while the server says the real commit. <code>network_pure.js</code> reloads the page on a mismatch once per browser session, so on the github.io copy the first match join of every session reloads.</dd>
+        <dt>Change</dt><dd>Run the F9 step in the pages job before the upload.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f11">
+      <div class="card-head"><h3>F11 · Remove the multiplayer_ui.js stub and the anti-neon guard</h3></div>
+      <span class="ru">player/js/multiplayer_ui.js, play.html · S · Needs F9, live for a week</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Both exist only to kill a custom UI that an old cached copy might still inject. The guard watches the whole page with a MutationObserver for the life of the tab. Once every file loads with the build stamp, no stale copy can load.</dd>
+        <dt>Change</dt><dd>Delete the file and the "NUCLEAR ANTI-NEON GUARD" script block.</dd>
+        <dt>Check</dt><dd><code>test_architecture_guard.py</code> still passes.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f12">
+      <div class="card-head"><h3>F12 · Move the server address out of the code</h3></div>
+      <span class="ru">network_pure.js:202 · S · Needs F9</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The github.io copy connects to a hardcoded <code>193.36.236.221.sslip.io</code>. A new VPS or a real domain means a code change.</dd>
+        <dt>Change</dt><dd>CI writes the server host into <code>version.js</code>, mapping an IP to sslip.io the way deploy step 3 already does. The address is public anyway: it's in the code today.</dd>
+      </dl>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="server">
+  <span class="eyebrow">5 · Fixes</span>
+  <h2>Server and bot</h2>
+  <div class="grid">
+
+    <div class="card" id="f13">
+      <div class="card-head"><h3>F13 · Stop creating a match on every inline query</h3><span class="tag">Done, not committed</span></div>
+      <span class="ru">bot.py:364 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Telegram sends an inline query while the user types after <code>@botname</code>, and again each time they reopen it. Each one creates a WAITING row, even when nothing gets sent. The sweeper marks them CANCELLED later, and they stay in the table forever.</dd>
+        <dt>Change</dt><dd>Option (a): create the row in <code>chosen_inline_result</code>. That needs inline feedback turned on in @BotFather (<code>/setinlinefeedback</code>), and the handler already exists. Option (b): reuse the user's newest unsent inline challenge if it's under a few minutes old. (a) is cleaner. Its gotcha: a very fast tap on Play could arrive before the choice does, so the game should retry a NOT_FOUND once.</dd>
+        <dt>Done</dt><dd>Option (a). Inline feedback is on. The bot creates the match in <code>handle_chosen_inline_result</code>. For the fast tap, the server waits up to <code>NEW_CHALLENGE_WAIT_SECONDS</code> (3 s) for the match to appear instead of the game retrying. Four new tests cover it.</dd>
+        <dt>Check</dt><dd>Open inline mode five times and send nothing: no new rows.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f14">
+      <div class="card-head"><h3>F14 · Cap WebSocket message size</h3></div>
+      <span class="ru">multiplayer.py:929 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>aiohttp accepts messages up to 4 MB by default. <code>rtc_signal</code> (line 1071) forwards whatever it gets to the opponent, so one player can push megabytes onto the other's phone.</dd>
+        <dt>Change</dt><dd><code>web.WebSocketResponse(heartbeat=15.0, max_msg_size=64 * 1024)</code>. Real messages are far smaller; the largest is a WebRTC offer of a few KB. aiohttp closes a socket that sends more, with code 1009.</dd>
+        <dt>Check</dt><dd>A test: a 100 KB message closes the socket.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f15">
+      <div class="card-head"><h3>F15 · Relay only known binary packets</h3></div>
+      <span class="ru">multiplayer.py:770 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd><code>relay_input</code> forwards any binary frame to the opponent. The client only ever sends four kinds: 0x04 input (20 bytes), 0x05 and 0x06 ping and pong (4 bytes), and 0x07 fight fingerprint (12 bytes).</dd>
+        <dt>Change</dt><dd>Drop a frame whose first byte isn't 4 to 7, or that is longer than 20 bytes.</dd>
+        <dt>Check</dt><dd>A test: a 0x09 frame and a 500-byte frame don't reach the opponent.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f16">
+      <div class="card-head"><h3>F16 · Rate-limit text messages per connection</h3></div>
+      <span class="ru">multiplayer.py:955 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Every <code>net_stats</code> message is logged at INFO (line 743), and every <code>rtc_signal</code> is forwarded. A loop sending them floods the log and the opponent.</dd>
+        <dt>Change</dt><dd>A <b>token bucket</b> per connection: a counter that refills at a steady rate, where each message spends one token and an empty bucket means "too fast". For example, 20 per second with bursts up to 60, which leaves room for the burst of connection candidates WebRTC sends. Ignore messages over the limit and close sockets far over it. Separately, accept <code>net_stats</code> at most once per 5 seconds (phones send every 10).</dd>
+        <dt>Check</dt><dd>A test: 500 <code>net_stats</code> in a row produce only a few log lines.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f17">
+      <div class="card-head"><h3>F17 · Save replays off the event loop</h3></div>
+      <span class="ru">multiplayer.py:551–557 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The whole server is one asyncio event loop, and every match's inputs are relayed on it. <code>finish()</code> compresses the replay and writes it to SQLite right inside that loop. <code>zlib</code> and <code>sqlite3</code> are blocking calls, so while they run, every other match's inputs wait.</dd>
+        <dt>Change</dt><dd>Run the compress-and-save in a worker thread: <code>await asyncio.to_thread(...)</code>. Keep the order: write first, then broadcast <code>match_ended</code>.</dd>
+        <dt>Concept</dt><dd><code>async</code> only lets other work run at an <code>await</code>. A blocking call inside async code stops everything until it returns.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f18">
+      <div class="card-head"><h3>F18 · Put /api/netstats behind a key</h3></div>
+      <span class="ru">multiplayer.py:1136 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>Anyone can read the latest 500 entries: match ids and each phone's user agent (line 741). That's diagnostics for you, not the public, and nginx proxies all of <code>/api/</code>.</dd>
+        <dt>Change</dt><dd>Require a key that matches <code>NETSTATS_KEY</code> from <code>.env</code>, and answer 404 otherwise.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f19">
+      <div class="card-head"><h3>F19 · Bot texts read the grace period from the server</h3></div>
+      <span class="ru">bot.py · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The grace period is <code>RECONNECT_GRACE_SECONDS</code> (<code>multiplayer.py:32</code>), but the bot hardcodes "60s" or "1 minute" in six places (bot.py lines 154, 234, 244, 287, 375, 383). If the constant changes, the bot's messages become wrong.</dd>
+        <dt>Change</dt><dd>Format the text from the constant, the way <code>CHALLENGE_WINDOW_TEXT</code> already does for the challenge window.</dd>
+      </dl>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="deploy">
+  <span class="eyebrow">6 · Fixes</span>
+  <h2>Deploy and docs</h2>
+  <div class="grid">
+
+    <div class="card" id="f20">
+      <div class="card-head"><h3>F20 · Roll back instead of running as root</h3></div>
+      <span class="ru">deploy.yml:209–217 · M · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>When the service doesn't come up as the <code>umk3</code> user, the script rewrites the unit to <code>User=root</code> and restarts it. The deploy fails, but production then runs as root until someone notices. That undoes the hardening commit c7e5616 added.</dd>
+        <dt>Change</dt><dd>Save the current commit (<code>git rev-parse HEAD</code>) before pulling. If the health check fails, reset to that commit, restart, and fail the deploy with the logs.</dd>
+        <dt>Check</dt><dd>On a test VPS, deploy a commit that crashes at start, and watch the old commit come back.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f21">
+      <div class="card-head"><h3>F21 · Touch only umk3's own nginx site</h3></div>
+      <span class="ru">deploy.yml:172 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd><code>rm -f /etc/nginx/sites-enabled/*</code> disables every site on the VPS, not just old umk3 ones. Anything else hosted there goes offline on the next push.</dd>
+        <dt>Change</dt><dd>Remove the <code>default</code> site and the old umk3 file names by name.</dd>
+        <dt>Check</dt><dd>A dummy site in <code>sites-enabled</code> survives a deploy.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f22">
+      <div class="card-head"><h3>F22 · Back up the database before each restart</h3><span class="tag now">Do first</span></div>
+      <span class="ru">deploy.yml, step 6 · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd><code>data/immortal_combat.db</code> holds every match, leaderboard and replay, and a deploy restarts the server without a copy.</dd>
+        <dt>Change</dt><dd>Before the restart, use SQLite's online backup through Python (<code>sqlite3.Connection.backup</code>). It needs no sqlite3 command-line tool and is safe while the server writes. Save to <code>data/backups/&lt;date&gt;-&lt;commit&gt;.db</code> and keep the newest 10.</dd>
+        <dt>Check</dt><dd>A file appears after a deploy, and it opens with the expected match count.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="f23">
+      <div class="card-head"><h3>F23 · Fix docs that point at missing files</h3></div>
+      <span class="ru">DEVELOPER_GUIDE.md:90–92, docs/multiplayer-explainer.html · S · Needs F7</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The guide links to <code>reverse_engineered/</code>, which is in <code>.gitignore</code> and so isn't in the repo. The explainer names <code>main.js</code> and <code>network.js</code> (line 107) and says "60 second lobby" and "11 / 11 tests". The challenge window is now 10 minutes, and there are 59 tests.</dd>
+        <dt>Change</dt><dd>Point the guide at <code>src/main/java/</code>, and update the explainer's facts.</dd>
+      </dl>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="features">
+  <span class="eyebrow">7 · New features</span>
+  <h2>What to build next</h2>
+  <p>These ideas build on parts that already exist: recorded inputs, match events sent to the bot, the matches table, and the rematch path that creates a match for a known pair of players.</p>
+  <div class="grid">
+
+    <div class="card" id="n1">
+      <div class="card-head"><h3>N1 · Replay a match headless in Node</h3></div>
+      <span class="ru">new tools/referee/ · L · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd>A command-line program that loads <code>umk3.js</code> in Node, plays a replay from <code>/api/replay/&lt;id&gt;</code>, and prints the final round score.</dd>
+        <dt>Why it can work</dt><dd>Lockstep already means the same inputs give the same fight on every device, which is how spectating and replays work today. The engine file has one direct browser reference. <code>graphics.js</code> and <code>audio.js</code> have seven each, and a headless run stubs those out: no drawing, no sound.</dd>
+        <dt>Unknown</dt><dd>How much of the replay driver in <code>game_pure.js</code> can run outside the browser.</dd>
+        <dt>Parked</dt><dd>This is a referee, not a way to watch. Once F1 to F6 are in, a cheater can at most turn a match into a no-contest. Build N1 and N2 only if the count of DISPUTED matches shows that really happens.</dd>
+        <dt>Check</dt><dd>For 20 stored replays, the program's score matches the recorded result.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n2">
+      <div class="card-head"><h3>N2 · Settle disputed matches from the replay</h3></div>
+      <span class="ru">server · M · Needs N1, F6; best with F4 option B</span>
+      <dl class="facts">
+        <dt>What</dt><dd>When F6 ends a match as DISPUTED, the server runs N1 on its replay in a separate process, records the real winner, and has the bot edit the result message.</dd>
+        <dt>Limit</dt><dd>A replay segment that starts from a phone-supplied snapshot can't be checked. F4 option B removes those.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n3">
+      <div class="card-head"><h3>N3 · Player rating (Elo)</h3></div>
+      <span class="ru">server/db.py, bot.py · M · Needs F1, F5, F6</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>The leaderboard sorts by wins first (<code>db.py</code>, <code>get_local_leaderboard</code>). Whoever plays most ranks highest, and beating a strong player counts the same as beating a beginner.</dd>
+        <dt>How</dt><dd>Everyone starts at 1000 points. After a match, the winner takes points from the loser: more for an upset, fewer for an expected win (K = 32). Store them in a new <code>ratings</code> table, and update it inside the same transaction as <code>finish_match</code>, so a crash can't record half a result. Results have to be fair first, hence the dependency on F1, F5 and F6.</dd>
+        <dt>Decided</dt><dd>One rating per group, like the leaderboard.</dd>
+        <dt>Check</dt><dd>Unit tests for the math: two equal ratings move by exactly 16 each.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n4">
+      <div class="card-head"><h3>N4 · /history command</h3></div>
+      <span class="ru">bot.py, db.py · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd>Your last 10 matches: opponent, both heroes, score, date, and a replay button.</dd>
+        <dt>How</dt><dd>Query matches by <code>creator_id</code> or <code>opponent_id</code>. The heroes and score are already stored in the <code>room_state</code> JSON column. Add indexes on those two id columns; today only <code>chat_id</code> and <code>status</code> are indexed.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n5">
+      <div class="card-head"><h3>N5 · /h2h head-to-head command</h3></div>
+      <span class="ru">bot.py, db.py · S · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd>Reply to someone's message with <code>/h2h</code> to see your wins and losses against each other.</dd>
+        <dt>Why a reply</dt><dd>The Bot API can't look up a user's id from an @username, but a reply carries the user.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n6">
+      <div class="card-head"><h3>N6 · Quick match queue</h3></div>
+      <span class="ru">multiplayer.py, bot.py, client · L · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd>A "Find a fight" button. The server keeps a queue, pairs the first two players in it, and creates their match the way a rematch does, with both players already set (<code>multiplayer.py:676</code>).</dd>
+        <dt>Blocker</dt><dd>In production only the bot creates matches (<code>create=not auth_required()</code>, line 805). The queue needs its own path for verified players.</dd>
+        <dt>Unknown</dt><dd>How many people are online at once. An empty queue feels broken, so show a count, or offer the CPU (N7).</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n7">
+      <div class="card-head"><h3>N7 · Fight the CPU while a challenge is open</h3></div>
+      <span class="ru">game_pure.js · L · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd>A challenge stays open for 10 minutes (<code>CHALLENGE_WINDOW_SECONDS</code>). Let the creator play the single-player mode meanwhile, and switch them into hero select when <code>match_start</code> arrives.</dd>
+        <dt>Unknown</dt><dd>Whether the engine can leave a single-player fight cleanly mid-round. A good sign: the client already fully resets the engine before every online bout (<code>resetEngineForBout</code>).</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n8">
+      <div class="card-head"><h3>N8 · Group tournaments</h3></div>
+      <span class="ru">bot.py, db.py · L · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd><code>/tournament</code> in a group: 4 or 8 players sign up with a button, the bot posts the bracket, and each pairing becomes a match with both players set. Winners advance when the bot receives <code>match_ended</code>, an event it already gets (<code>on_match_event</code>).</dd>
+        <dt>Decide</dt><dd>What happens when a player doesn't show up. The challenge window could double as a walkover deadline.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n9">
+      <div class="card-head"><h3>N9 · Bot in the user's language</h3></div>
+      <span class="ru">bot.py · M · Needs nothing</span>
+      <dl class="facts">
+        <dt>What</dt><dd>All bot text is English. Telegram tells the bot each user's app language (<code>from_user.language_code</code>). Move the strings into one table per language. In groups, use the language of whoever triggered the message.</dd>
+        <dt>Note</dt><dd>The game ships its own text in English, German, Spanish, French and Italian (<code>player/assets/t_*</code>). Which languages to add to the bot depends on who plays. For example, Russian and Uzbek, if that's your audience.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n10">
+      <div class="card-head"><h3>N10 · Report browser errors to the server</h3></div>
+      <span class="ru">play.html, multiplayer.py · S · Needs F16</span>
+      <dl class="facts">
+        <dt>What</dt><dd>Today a JavaScript error on a player's phone is invisible to you. Catch <code>window.onerror</code> and <code>unhandledrejection</code>, send the message, a short stack, the build and the match id to a new <code>/api/client-error</code> endpoint, and log them there.</dd>
+        <dt>Needs</dt><dd>F16-style limits on the endpoint, so it can't flood the log.</dd>
+      </dl>
+    </div>
+
+    <div class="card" id="n11">
+      <div class="card-head"><h3>N11 · Decide on a TURN relay from real data</h3></div>
+      <span class="ru">network_pure.js:448 · S to decide, M to set up · Needs nothing</span>
+      <dl class="facts">
+        <dt>Why</dt><dd>WebRTC uses only STUN servers today, which find a direct path but can't relay. When the direct path fails, which is common on mobile networks, inputs go through the WebSocket over TCP, where one lost packet delays every packet behind it. A TURN server (coturn on the VPS) relays over UDP instead.</dd>
+        <dt>How to decide</dt><dd>Don't guess. Phones already report <code>p2p</code>, <code>ice_failures</code> and <code>max_stall_ms</code> every 10 seconds (<code>/api/netstats</code>). If most matches run without P2P and show long stalls, set up coturn. Otherwise skip it.</dd>
+      </dl>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="order">
+  <span class="eyebrow">8 · Plan</span>
+  <h2>Order and open questions</h2>
+  <ol class="steps">
+    <li><b>This week:</b> F1, F5, F6, F22, then F14 and F15. All small, no dependencies, and they protect the results and the data.</li>
+    <li><b>Then</b> F2, F3 and F4, in that order.</li>
+    <li><b>Client cleanup:</b> F7, F8, F9, then F10 and F12. F11 a week after F9 is live.</li>
+    <li><b>Server and deploy:</b> F16 to F21, and F23, in any order. F13 is done.</li>
+    <li><b>Features:</b> N4, N5, N9, N10 and N11 at any time. N3 only after F1 to F6. N6 to N8 once there are enough players to fill them. N1 and N2 are parked.</li>
+  </ol>
+  <p><b>Decided on 2026-11-03:</b></p>
+  <ul class="tight">
+    <li>F4: restart the round at full health (option B).</li>
+    <li>F13: create inline challenges when they're sent (option a). Inline feedback is on in @BotFather.</li>
+    <li>N3: one rating per group.</li>
+    <li>N1 and N2: parked until disputes actually happen.</li>
+    <li>The repo is public: see the first point below.</li>
+  </ul>
+  <div class="limits">
+    <div class="limit"><span class="l">The repo contains the original game files.</span><span class="r"><code>Ultimate_Mortal_Kombat_3_352.jar</code>, the deobfuscated jar and the game assets are committed, and GitHub Pages publishes <code>player/assets</code>. The repo is public, so one DMCA notice can take down both the repo and the Pages site. Adding the files to <code>.gitignore</code> isn't enough on its own. Git history keeps every committed file. The web game needs <code>player/assets</code> to run. And <code>src/main/java</code> and <code>umk3.js</code> are built from the game's own code. Making the repo private covers all three.</span></div>
+    <div class="limit"><span class="l">This page describes a cheat that isn't fixed yet.</span><span class="r">It lives in <code>proposals/</code>, which neither GitHub Pages nor nginx serves. Keep it out of <code>docs/</code> until F1, F5 and F6 are live, because CI publishes that folder on every push.</span></div>
+  </div>
+</section>
+
+<footer>Sources: the code at commit 2a678c6 (server/multiplayer.py, server/db.py, bot.py, player/js/game_pure.js, player/js/network_pure.js, player/js/engine/umk3.js, player/play.html, vps/nginx.conf, .github/workflows/deploy.yml, DEVELOPER_GUIDE.md, docs/multiplayer-explainer.html). Test run on 2026-11-03: 59 pytest tests and tests/test_match_end.mjs passed. Public behavior: Telegram Mini Apps docs (signed initData, launch data in the URL hash), Telegram Bot API docs (inline queries, chosen_inline_result with inline feedback), aiohttp docs (WebSocketResponse max_msg_size, 4 MB default), Python docs (asyncio.to_thread, sqlite3 Connection.backup).</footer>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: true, theme: 'base', securityLevel: 'strict',
+    themeVariables: {fontFamily: 'Open Sans, sans-serif', fontSize: '14px', primaryColor: '#F2EBDF',
+      primaryBorderColor: '#E4DACB', primaryTextColor: '#111111', lineColor: '#6B6358',
+      noteBkgColor: '#F2EBDF', noteBorderColor: '#E4DACB', actorBkg: '#F2EBDF', actorBorder: '#B4531A',
+      signalColor: '#111111', signalTextColor: '#111111', labelBoxBkgColor: '#F2EBDF'}});
+</script>
+</body>
+</html>
