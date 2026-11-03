@@ -443,8 +443,9 @@ export class Display {
 
     vibrate(duration) {
         try {
-            // Watching someone else's fight (spectating, replays): their knockouts don't shake our phone
-            if (typeof window !== 'undefined' && window.__muteVibration) return true;
+            // Watching someone else's fight (spectating, replays): their knockouts don't shake our phone.
+            // Ticks replayed after a rollback already shook it the first time.
+            if (typeof window !== 'undefined' && (window.__muteVibration || window.__rollbackResim)) return true;
             if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
                 if (duration > 150) {
                     window.Telegram.WebApp.HapticFeedback.impactOccurred('heavy');

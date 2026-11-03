@@ -566,6 +566,16 @@ class TestHousekeepingAndApi(MatchTestCase):
         self.assertEqual((stats[0]["ice_state"], stats[0]["device"]), ("connected", "TestPhone/1.0"))
         self.assertNotIn("user_name", stats[0])
 
+    async def test_rollback_net_stats_are_kept(self):
+        ws1, ws2, _, _ = await self.start_bout("m_rb_stats")
+        await ws2.send_json({"type": "net_stats", "netcode": "rollback", "rollbacks": 12, "rollback_ticks": 40,
+                             "max_rollback": 6, "predict_ticks": 3.5, "save_ms": 0.4, "load_ms": 0.7})
+        await ws2.send_json({"type": "ping", "time": 1})
+        await recv_type(ws2, "pong")
+        stats = (await (await self.client.get("/api/netstats?match_id=m_rb_stats")).json())["stats"]
+        self.assertEqual((stats[0]["netcode"], stats[0]["rollbacks"], stats[0]["max_rollback"], stats[0]["predict_ticks"]),
+                         ("rollback", 12, 6, 3.5))
+
     async def test_sweep_closes_matches_left_hanging(self):
         db.create_match("m_old_wait", "g", "a", "A", timeout_seconds=-10)
         db.create_match("m_old_active", "g", "a", "A")

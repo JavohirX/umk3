@@ -726,9 +726,10 @@ NET_STATS_FIELDS = (
     "segment", "secs", "ticks_per_s", "stalls", "stall_ms", "max_stall_ms", "delay", "delay_min", "delay_max",
     "ticks_ahead", "peer_rtt", "server_rtt", "p2p", "ice_failures", "frame_ms", "slow_frames", "tick_ms",
     "paints_skipped", "catch_up_frames", "desyncs",
+    "rollbacks", "rollback_ticks", "max_rollback", "rollback_misses", "predict_ticks", "save_ms", "load_ms",
 )
 # Direct-connection diagnostics: ICE state and candidate type tallies such as "host:2,srflx:1"
-NET_STATS_TEXT_FIELDS = ("ice_state", "ice_local", "ice_remote")
+NET_STATS_TEXT_FIELDS = ("ice_state", "ice_local", "ice_remote", "netcode")
 net_stats_log: deque = deque(maxlen=500)
 
 

@@ -1,9 +1,11 @@
 import { loadAllAssets } from './assets.js';
 import { Graphics, Display } from './j2me/graphics.js';
 import { Manager } from './j2me/audio.js';
+import * as EngineModule from './engine/umk3.js';
 import { initEngine, SDKMIDlet, CoreEngine } from './engine/umk3.js';
 import { MultiplayerClient } from './network_pure.js';
 import { stepMatchEnd } from './match_end.js';
+import { createStateSaver } from './rollback_state.js';
 
 let midlet = null;
 let animFrameId = null;
@@ -868,19 +870,46 @@ function setupCanvas() {
     });
 }
 
-// Online fights run in lockstep. Both phones step the same engine on a fixed 60 ticks/s clock and apply
-// both players' key mask changes on the same tick, `delay` ticks after they happen (the delay hides the
-// network trip). With identical inputs, RNG seed and clock the two simulations stay identical, so nothing
-// is ever corrected or synced back. A tick whose opponent input hasn't arrived yet waits for it.
+// Online fights run on rollback netcode. Both phones step the same engine on a fixed 60 ticks/s clock and
+// apply both players' key mask changes on the same tick, `delay` ticks after they happen, so our own presses
+// show after the same short delay whatever the connection. The opponent's input for a tick is often still
+// on its way when we get there: we guess it (no change - they keep holding what they held) and carry on.
+// When their real input arrives and differs, we put the fight back the way it was before that tick, replay
+// the ticks since with the real input, and the next frame draws the corrected picture. We only wait for the
+// opponent when our guesses would run more than MAX_PREDICTION ticks past their last input.
+// With identical inputs, RNG seed and clock the two simulations end up identical; the round scores and the
+// per-second fingerprints both phones compare are taken from ticks whose inputs are all in, never guesses.
 const LOCKSTEP_TICK_MS = 1000 / 60;
 const MIN_INPUT_DELAY = 2;
 const MAX_INPUT_DELAY = 15;
+const MAX_PREDICTION = 8;
+const NO_INPUT = [0, 0];
+
+// Saves and restores the whole engine state (see rollback_state.js). The engine's key event queue is left
+// out: a rewind must not replay or drop a key press, and presses only reach the fight through `pending`.
+let stateSaver = null;
+function getStateSaver() {
+    if (!stateSaver) {
+        const engineClasses = Object.values(EngineModule).filter((v) => typeof v === 'function' && /^[A-Z]/.test(v.name));
+        stateSaver = createStateSaver([CoreEngine, midlet, ...engineClasses.filter((c) => c !== CoreEngine)], {
+            skipFields: [[midlet, 'frameHistoryArray'], [midlet, 'loopState']]
+        });
+    }
+    return stateSaver;
+}
 
 // The current online fight, null outside one:
 //   setup          - versus info both phones build the fight from (heroes, stage, control types, seed)
 //   segment        - bumped when both phones restart the bout after a reconnect; older inputs are ignored
 //   tick, delay    - next tick to simulate, and our input delay in ticks
-//   local, remote  - tick -> [pressedBits, releasedBits] for us and the opponent
+//   local, remote  - tick -> [pressedBits, releasedBits] for us and the opponent, kept while a rollback
+//                    could still replay that tick
+//   remoteNext     - the first tick whose opponent input hasn't arrived; ticks from here on run on a guess
+//   snapshots      - [{tick, state}] oldest first: the engine state before each of those ticks. There is
+//                    always one at or before remoteNext while any tick runs on a guess
+//   rollbackTo     - the earliest tick whose guess turned out wrong, or null
+//   facts          - tick -> [fight phase, P1 rounds, P2 rounds, fingerprint or null] for ticks run but
+//                    not yet confirmed; factsNext is the next tick waiting for confirmation
 //   pending        - our key mask changes captured during the tick being simulated
 //   acc, last      - real time banked towards the next tick
 //   rounds         - engine round wins [P1, P2] already reported to the server
@@ -888,7 +917,7 @@ const MAX_INPUT_DELAY = 15;
 //   peerHintSeq    - sequence number of the last advice we applied
 //   advice         - our current advice on the opponent's delay, sent with every input
 //   window         - this second's waits for their input and the least slack their inputs arrived with
-//   goodSeconds    - the last few seconds' verdicts (every input early enough), for lowering their delay
+//   goodSeconds    - the last few seconds' spare ticks (null: an input came too late), for lowering their delay
 //   peerTick, peerTickAt - the latest tick the opponent reported simulating, and when that report arrived
 //   stallStart     - when we started waiting for their input for the current tick, or null
 //   stats          - counters reported to the server every 10s (see reportNetStats)
@@ -897,14 +926,17 @@ let onlineBout = null;
 let onlineResume = null;
 
 function startOnlineSegment(setup, segment, resume) {
-    // Our inputs must reach the opponent before they simulate the tick: one-way trip to them, plus two ticks
-    // for frame timing on both ends. Before a measurement exists, relayed inputs cross the server twice.
+    // Our input for a tick must reach the opponent before their guesses run MAX_PREDICTION ticks past it:
+    // one-way trip to them in ticks, plus three for frame timing and jitter, less what guessing covers.
+    // Before a measurement exists, relayed inputs cross the server twice.
     const peerRtt = mpClient.peerRtt ?? (mpClient.rtt ? mpClient.rtt * 2 : 200);
-    const delay = Math.min(MAX_INPUT_DELAY, Math.max(3, Math.ceil(peerRtt / 2 / LOCKSTEP_TICK_MS) + 2));
+    const oneWayTicks = Math.ceil(peerRtt / 2 / LOCKSTEP_TICK_MS);
+    const delay = Math.min(MAX_INPUT_DELAY, Math.max(MIN_INPUT_DELAY, oneWayTicks + 3 - MAX_PREDICTION));
     const now = performance.now();
     onlineBout = {
         setup, segment, tick: 0, delay,
         local: new Map(), remote: new Map(), pending: [0, 0],
+        remoteNext: 0, snapshots: [], rollbackTo: null, facts: new Map(), factsNext: 0,
         acc: 0, last: now, lastTickAt: now,
         rounds: resume ? resume.rounds.slice() : [0, 0],
         delayChange: 0, peerHintSeq: 0, advice: { hint: 0, seq: 0 },
@@ -925,6 +957,7 @@ function startOnlineSegment(setup, segment, resume) {
     resetEngineForBout(setup, segment, resume, (bits, isDown) => {
         onlineBout.pending[isDown ? 0 : 1] |= bits;
     });
+    getStateSaver().refresh();
     // The score this segment starts from, so the server sees both phones agree on it
     mpClient.sendRoundScore(onlineBout.rounds[0], onlineBout.rounds[1]);
 }
@@ -1015,31 +1048,32 @@ function applyTickInput(side, input) {
     if (input[1]) CoreEngine.applyInputBits(side, input[1], false);
 }
 
-// Advances the online fight by as many ticks as real time allows and both players' inputs are in for
+// Advances the online fight by as many ticks as real time allows: first fixing any wrong guesses about the
+// opponent's input, then running new ticks while their input is in or close enough behind to guess
 function runOnlineBout(now) {
     const bout = onlineBout;
     const stats = bout.stats;
     const frameMs = now - bout.last;
     bout.last = now;
     // Two devices never tick at exactly the same rate. If we've run ahead of the opponent, ease off until
-    // they catch up, rather than running into their input frontier and stalling in bursts.
+    // they catch up, rather than guessing further and further ahead of their input.
     const pace = ticksAheadOfPeer(bout, now) > 2 ? 0.8 : 1;
     // A slow phone runs several ticks in one frame to keep game speed, drawing only the last; never more
     // than a few, so a hitch doesn't fast-forward the fight
     bout.acc = Math.min(bout.acc + frameMs * pace, LOCKSTEP_TICK_MS * 4);
     // Once the server has decided the match, the end animation plays out without waiting on inputs
     const decided = mpClient.status === "COMPLETED";
-    const localSide = mpClient.role === 'p1' ? 0 : 1;
     stats.frames++;
     stats.frameMs += frameMs;
     if (frameMs > 50) stats.slowFrames++;
 
+    if (!decided && bout.rollbackTo !== null) rollBack(bout);
+
     let ran = 0;
     while (bout.acc >= LOCKSTEP_TICK_MS) {
-        const local = bout.local.get(bout.tick);
-        const remote = bout.remote.get(bout.tick);
-        if (!decided && (!local || !remote)) {
-            // The opponent's input for this tick is still on its way. The waiting time isn't banked, or the
+        const t = bout.tick;
+        if (!decided && !canRunTick(bout, t)) {
+            // Too far past the opponent's last input to keep guessing. The waiting time isn't banked, or the
             // fight would jump ahead once it lands.
             if (bout.stallStart === null) bout.stallStart = now;
             bout.acc = Math.min(bout.acc, LOCKSTEP_TICK_MS);
@@ -1049,19 +1083,13 @@ function runOnlineBout(now) {
             endStall(bout, now - bout.stallStart, now);
             bout.stallStart = null;
         }
-        if (!decided) {
-            applyTickInput(localSide, local);
-            applyTickInput(1 - localSide, remote);
-            bout.local.delete(bout.tick);
-            bout.remote.delete(bout.tick);
-        }
+        // From the first guessed tick on, keep a way back to before each one
+        if (!decided && t >= bout.remoteNext) saveSnapshot(bout, t);
 
-        // Skip drawing a tick when another one is due this frame and ready to run (it redraws everything)
-        const next = bout.tick + 1;
-        const anotherThisFrame = bout.acc >= 2 * LOCKSTEP_TICK_MS
-            && (decided || (bout.local.has(next) && bout.remote.has(next)));
+        // Skip drawing a tick when another one is due this frame and can run (it redraws everything)
+        const anotherThisFrame = bout.acc >= 2 * LOCKSTEP_TICK_MS && (decided || canRunTick(bout, t + 1));
         const tickStart = performance.now();
-        midlet.stepFrame(1000 + Math.floor(bout.tick * 1000 / 60), anotherThisFrame);
+        simulateTick(bout, t, anotherThisFrame, decided);
         stats.tickMs += performance.now() - tickStart;
         if (anotherThisFrame) stats.paintsSkipped++;
 
@@ -1069,19 +1097,113 @@ function runOnlineBout(now) {
             bout.pending = [0, 0];
         } else {
             scheduleLocalInput(bout);
-            if (bout.tick % HASH_EVERY_TICKS === 0) shareStateHash(bout, bout.tick);
         }
         bout.tick++;
         bout.acc -= LOCKSTEP_TICK_MS;
         bout.lastTickAt = now;
         stats.ticks++;
+        stats.predictSum += Math.max(0, bout.tick - bout.remoteNext);
         ran++;
-        reportScoredRounds();
-        if (onlineBout !== bout) return; // a desync restarted the bout
     }
     if (ran > 1) stats.catchUpFrames++;
-    if (!decided) updateDelayAdvice(bout, now);
+    if (!decided) {
+        confirmTicks(bout);
+        if (onlineBout !== bout) return; // a desync restarted the bout
+        updateDelayAdvice(bout, now);
+    }
     if (now - stats.since >= 10000) reportNetStats(bout, now);
+}
+
+function canRunTick(bout, t) {
+    return bout.local.has(t) && t - bout.remoteNext < MAX_PREDICTION;
+}
+
+// One tick of the fight with both players' inputs; the opponent's is a guess (no change) if it isn't here
+function simulateTick(bout, t, skipPaint, decided) {
+    if (!decided) {
+        const localSide = mpClient.role === 'p1' ? 0 : 1;
+        applyTickInput(localSide, bout.local.get(t) || NO_INPUT);
+        applyTickInput(1 - localSide, bout.remote.get(t) || NO_INPUT);
+    }
+    midlet.stepFrame(1000 + Math.floor(t * 1000 / 60), skipPaint);
+    if (!decided) {
+        bout.facts.set(t, [CoreEngine.val_int_dN, CoreEngine.val_int_dU, CoreEngine.val_int_dV,
+                           t % HASH_EVERY_TICKS === 0 ? simulationHash() : null]);
+    }
+}
+
+function saveSnapshot(bout, t) {
+    const started = performance.now();
+    bout.snapshots.push({ tick: t, state: getStateSaver().save() });
+    bout.stats.saves++;
+    bout.stats.saveMs += performance.now() - started;
+}
+
+// The opponent's real input differs from what we guessed for bout.rollbackTo: go back to the latest saved
+// state at or before it and replay every tick since, silently and without drawing
+function rollBack(bout) {
+    const target = bout.rollbackTo;
+    bout.rollbackTo = null;
+    if (target >= bout.tick) return;
+    const snaps = bout.snapshots;
+    let i = snaps.length - 1;
+    while (i >= 0 && snaps[i].tick > target) i--;
+    if (i < 0) {
+        // Never expected; the fights now differ and the fingerprint check will restart them
+        console.warn(`[Multiplayer] No saved state to roll back to tick ${target}`);
+        bout.stats.rollbackMisses++;
+        return;
+    }
+    const from = snaps[i].tick;
+    snaps.length = i + 1;
+    const started = performance.now();
+    getStateSaver().load(snaps[i].state);
+    bout.stats.loads++;
+    bout.stats.loadMs += performance.now() - started;
+    window.__rollbackResim = true;
+    try {
+        for (let t = from; t < bout.tick; t++) {
+            // Ticks from the first one still guessed may need undoing again: keep a way back to it
+            if (t > from && t === bout.remoteNext) saveSnapshot(bout, t);
+            simulateTick(bout, t, true, false);
+        }
+    } finally {
+        window.__rollbackResim = false;
+    }
+    const ticks = bout.tick - from;
+    bout.stats.rollbacks++;
+    bout.stats.rollbackTicks += ticks;
+    bout.stats.maxRollback = Math.max(bout.stats.maxRollback, ticks);
+}
+
+// Ticks run with both players' real inputs can't change any more: report their round scores, share their
+// fingerprints, and forget what only a rollback to them would need
+function confirmTicks(bout) {
+    const upTo = Math.min(bout.remoteNext, bout.tick);
+    while (bout.factsNext < upTo) {
+        const t = bout.factsNext++;
+        const facts = bout.facts.get(t);
+        bout.facts.delete(t);
+        if (!facts) continue;
+        reportScoredRounds(bout, facts);
+        if (facts[3] !== null) {
+            shareStateHash(bout, t, facts[3]);
+            if (onlineBout !== bout) return;
+        }
+    }
+    // Keep only the latest snapshot at or before the first guessed tick, and none if nothing is guessed
+    const snaps = bout.snapshots;
+    if (bout.remoteNext >= bout.tick) {
+        snaps.length = 0;
+    } else {
+        let k = 0;
+        while (k + 1 < snaps.length && snaps[k + 1].tick <= bout.remoteNext) k++;
+        if (k) snaps.splice(0, k);
+    }
+    const keepFrom = snaps.length ? snaps[0].tick : bout.tick;
+    for (const map of [bout.local, bout.remote]) {
+        for (const t of map.keys()) if (t < keepFrom) map.delete(t);
+    }
 }
 
 // Desync check: both phones fingerprint their simulation once a second and compare. The fights only ever
@@ -1112,8 +1234,7 @@ function simulationHash() {
     return h;
 }
 
-function shareStateHash(bout, tick) {
-    const hash = simulationHash();
+function shareStateHash(bout, tick, hash) {
     bout.hashes.set(tick, hash);
     mpClient.sendStateHash(bout.segment, tick, hash);
     compareStateHash(bout, tick);
@@ -1149,8 +1270,9 @@ function scheduleLocalInput(bout) {
         sendLocalInput(bout, bout.tick + bout.delay, [0, 0]);
         bout.delay++;
     } else if (bout.delayChange < 0 && bout.delay > MIN_INPUT_DELAY) {
+        // Advice can lower by several ticks: one per tick
         bout.delay--;
-        bout.delayChange = 0;
+        bout.delayChange++;
         bout.pending = pending;
         return;
     }
@@ -1188,7 +1310,9 @@ function endStall(bout, ms, now) {
 }
 
 // Once a second, advise the opponent on their input delay from how their inputs reached us: raise it if we
-// had to wait for them, lower it when in four of the last five seconds every input arrived 3+ ticks early
+// had to wait for them; when for three seconds running every input arrived with 3+ ticks to spare before
+// our guesses would have run out, lower it by half the spare (a delay set from a bad early measurement
+// comes down in a few seconds)
 function updateDelayAdvice(bout, now) {
     const w = bout.window;
     if (now - w.since < 1000) return;
@@ -1197,10 +1321,12 @@ function updateDelayAdvice(bout, now) {
         hint = 1;
         bout.goodSeconds = [];
     } else {
-        bout.goodSeconds.push(w.stalls === 0 && w.minLead >= 3 && w.minLead !== Infinity);
-        if (bout.goodSeconds.length > 5) bout.goodSeconds.shift();
-        if (bout.goodSeconds.length === 5 && bout.goodSeconds.filter(Boolean).length >= 4) {
-            hint = -1;
+        // Ticks to spare beyond 3 before we'd have had to stop guessing and wait; null for a bad second
+        const spare = w.stalls === 0 && w.minLead !== Infinity ? w.minLead - (3 - MAX_PREDICTION) : -1;
+        bout.goodSeconds.push(spare >= 0 ? spare : null);
+        if (bout.goodSeconds.length > 3) bout.goodSeconds.shift();
+        if (bout.goodSeconds.length === 3 && bout.goodSeconds.every((x) => x !== null)) {
+            hint = -Math.max(1, Math.min(4, Math.floor(Math.min(...bout.goodSeconds) / 2)));
             bout.goodSeconds = [];
         }
     }
@@ -1213,7 +1339,9 @@ function updateDelayAdvice(bout, now) {
 function newNetStats(now, delay) {
     return {
         since: now, frames: 0, frameMs: 0, slowFrames: 0, ticks: 0, tickMs: 0, paintsSkipped: 0, catchUpFrames: 0,
-        stalls: 0, stallMs: 0, maxStallMs: 0, delayMin: delay, delayMax: delay
+        stalls: 0, stallMs: 0, maxStallMs: 0, delayMin: delay, delayMax: delay,
+        rollbacks: 0, rollbackTicks: 0, maxRollback: 0, rollbackMisses: 0, predictSum: 0,
+        saves: 0, saveMs: 0, loads: 0, loadMs: 0
     };
 }
 
@@ -1243,21 +1371,28 @@ function reportNetStats(bout, now) {
         paints_skipped: s.paintsSkipped,
         catch_up_frames: s.catchUpFrames,
         desyncs: totalDesyncs,
+        netcode: "rollback",
+        rollbacks: s.rollbacks,
+        rollback_ticks: s.rollbackTicks,
+        max_rollback: s.maxRollback,
+        rollback_misses: s.rollbackMisses,
+        // how many ticks past the opponent's last input we ran, on average (how much was guessed)
+        predict_ticks: s.ticks ? Math.round(s.predictSum / s.ticks * 10) / 10 : null,
+        save_ms: s.saves ? Math.round(s.saveMs / s.saves * 100) / 100 : null,
+        load_ms: s.loads ? Math.round(s.loadMs / s.loads * 100) / 100 : null,
         device: navigator.userAgent.slice(0, 160)
     });
     bout.stats = newNetStats(now, bout.delay);
 }
 
-// Both phones report the engine's round score whenever it changes; the server counts a round once both
-// reports agree (a time-out on equal health scores both)
-function reportScoredRounds() {
-    if (CoreEngine.val_int_dN !== 2) return;
-    const roundsB = CoreEngine.val_int_dU;
-    const roundsC = CoreEngine.val_int_dV;
-    if (roundsB !== onlineBout.rounds[0] || roundsC !== onlineBout.rounds[1]) {
+// Both phones report the engine's round score whenever it changes, as of a confirmed tick (never a guess);
+// the server counts a round once both reports agree (a time-out on equal health scores both)
+function reportScoredRounds(bout, [phase, roundsB, roundsC]) {
+    if (phase !== 2) return;
+    if (roundsB !== bout.rounds[0] || roundsC !== bout.rounds[1]) {
         mpClient.sendRoundScore(roundsB, roundsC);
     }
-    onlineBout.rounds = [roundsB, roundsC];
+    bout.rounds = [roundsB, roundsC];
 }
 
 // =========================================================================
@@ -1867,8 +2002,13 @@ async function bootstrap() {
                 bout.peerHintSeq = hintSeq;
                 bout.delayChange = hint;
             }
-            if (tick < bout.tick || bout.remote.has(tick)) return;
+            if (tick < bout.remoteNext || bout.remote.has(tick)) return;
             bout.remote.set(tick, [pressed, released]);
+            while (bout.remote.has(bout.remoteNext)) bout.remoteNext++;
+            // We already ran this tick guessing "no change"; any key change means it ran wrong
+            if (tick < bout.tick && (pressed || released)) {
+                bout.rollbackTo = bout.rollbackTo === null ? tick : Math.min(bout.rollbackTo, tick);
+            }
             bout.window.minLead = Math.min(bout.window.minLead, tick - bout.tick);
             bout.heardFromPeer = true;
             if (!mpClient.opponentDropDeadline) {

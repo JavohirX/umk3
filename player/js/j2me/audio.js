@@ -732,6 +732,8 @@ export class Player {
     }
 
     start() {
+        // Replaying ticks after a rollback: their sounds already played the first time
+        if (typeof window !== 'undefined' && window.__rollbackResim) return;
         if (this.state === Player.CLOSED || !this.audioCtx) return;
         Manager.unlockAudio();
 

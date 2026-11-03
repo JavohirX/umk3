@@ -30,7 +30,7 @@ jobs:
         # test_advanced_joystick.py is a manual Playwright script for a real browser, not part of CI
         run: python -m pytest -q tests --ignore=tests/test_advanced_joystick.py
       - name: Client tests
-        run: node tests/test_match_end.mjs
+        run: node tests/test_match_end.mjs && node tests/test_rollback_state.mjs
 
   pages:
     name: Deploy Game to GitHub Pages
