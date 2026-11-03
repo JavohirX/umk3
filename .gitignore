@@ -31,6 +31,12 @@ tools/vineflower_test/
 tools/vf_single/
 tools/*.class
 
+# The original game files are never committed (removed from history on 2026-11-03)
+*.jad
+Ultimate_Mortal_Kombat_3*.jar
+/META-INF/
+player/jar/
+
 
 # Logs & Environment
 node_modules/

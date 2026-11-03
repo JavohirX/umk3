@@ -23,4 +23,4 @@ echo     - F1 / Q        : Options Menu (Softkey 1)
 echo     - F2 / Esc      : Back (Softkey 2)
 echo.
 
-java -cp "%~dp0build\compat;%~dp0Ultimate_Mortal_Kombat_3_deobf.jar" DesktopLauncher %*
+java -cp "%~dp0build\compat" DesktopLauncher %*

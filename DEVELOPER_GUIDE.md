@@ -51,11 +51,11 @@ All mobile LCDUI / Nokia / MMAPI components are implemented natively under `src/
 
 ## 3. How to Explore and Mod the Game
 
-Because `build\compat` precedes `Ultimate_Mortal_Kombat_3_352.jar` on the classpath:
+The desktop edition is built entirely from this repository: `build.bat` compiles `src/main/java` and copies the game assets from `src/main/resources` into `build\compat`, and `run.bat` starts it from there:
 ```bat
-java -cp "build\compat;Ultimate_Mortal_Kombat_3_352.jar" DesktopLauncher
+java -cp "build\compat" DesktopLauncher
 ```
-Any class compiled into `build\compat` will immediately override the JAR version!
+No original game JAR is needed. Change a source file, run `build.bat` again, and the change is in the game.
 
 ### Mod 1: Window Scaling & Display Size
 Open `src/main/java/javax/microedition/lcdui/Display.java`:

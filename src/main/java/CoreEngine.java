@@ -1,4 +1,3 @@
-import com.ea.sdk.SDKMIDlet;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -154,7 +153,7 @@ public final class CoreEngine implements EntityInterface {
    public static int val_int_az;
    public static int[] val_arr_int_q;
    public static byte[] val_arr_byte_g;
-   public static SDKMIDlet midletInstance;
+   public static GameMidletLoop midletInstance;
    public static Thread val_thread_a;
    public static boolean val_bool_H;
    public static int val_int_aA;
@@ -10204,7 +10203,7 @@ public final class CoreEngine implements EntityInterface {
 
    public static int exec_h_int_to_int(int var0) {
       FontCharmap var1 = exec_a_to_fontcharmap();
-      SDKMIDlet var2 = midletInstance;
+      GameMidletLoop var2 = midletInstance;
       byte[] var3 = new byte[2];
       if (exec_e_int_to_bool(var0) && !var1.val_bool_b) {
          return var1.val_arr_short_a[var0];

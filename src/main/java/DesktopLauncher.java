@@ -38,11 +38,9 @@ public class DesktopLauncher {
             e.printStackTrace();
         });
         try {
-            Class<?> midletClass = Class.forName("com.ea.sdk.SDKMIDlet");
-            Object midlet = midletClass.getDeclaredConstructor().newInstance();
-            java.lang.reflect.Method startApp = midletClass.getMethod("startApp");
+            GameMidletLoop midlet = new GameMidletLoop();
             System.out.println("Invoking startApp()...");
-            startApp.invoke(midlet);
+            midlet.startApp();
             System.out.println("startApp() invoked successfully!");
 
             if (args.length > 0 && "test".equals(args[0])) {

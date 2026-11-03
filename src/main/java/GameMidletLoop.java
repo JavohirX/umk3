@@ -26,6 +26,9 @@ public class GameMidletLoop extends MIDlet implements Runnable {
       this.isPaused = true;
       CoreEngine.val_gamemidletloop_a = this;
       CoreEngine.val_gamemidletloop_b = this;
+      // The original jar's entry point (com.ea.sdk.SDKMIDlet) was an empty subclass that did only this; the
+      // engine uses the instance to load resources (getClass().getResourceAsStream("/...")).
+      CoreEngine.midletInstance = this;
    }
 
    public void startApp() {
