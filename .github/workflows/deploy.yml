@@ -190,6 +190,57 @@ jobs:
               done
             fi
 
+            echo "=== 5b. TURN relay (coturn): a UDP path for fight inputs ==="
+            # Optional: if any of this fails, fights carry on over the WebSocket relay as before.
+            # (Run as its own step with set -e inside; an `if ! ( ... )` would silently ignore failures.)
+            set +e
+            (
+              set -e
+              if ! command -v turnserver >/dev/null 2>&1; then
+                $SUDO apt-get update -qq
+                $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq coturn
+              fi
+              # One shared secret, made once and kept; the game server signs short-lived TURN logins with it
+              if ! $SUDO test -s /etc/umk3-turn-secret; then
+                openssl rand -hex 32 | $SUDO tee /etc/umk3-turn-secret >/dev/null
+                $SUDO chmod 600 /etc/umk3-turn-secret
+              fi
+              TURN_SECRET=$($SUDO cat /etc/umk3-turn-secret)
+              PUBLIC_IP="${{ secrets.VPS_HOST }}"
+              if ! [[ "$PUBLIC_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                PUBLIC_IP=$(getent ahostsv4 "$PUBLIC_IP" | awk 'NR == 1 { print $1 }')
+              fi
+              LOCAL_IP=$(ip -4 route get 1.1.1.1 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1) }')
+              EXTERNAL_IP="$PUBLIC_IP"
+              # Behind the provider's NAT the relay must announce its public address for the private one
+              if [ -n "$LOCAL_IP" ] && [ "$LOCAL_IP" != "$PUBLIC_IP" ]; then EXTERNAL_IP="${PUBLIC_IP}/${LOCAL_IP}"; fi
+              sed -e "s|EXTERNAL_IP|${EXTERNAL_IP}|" -e "s|TURN_REALM|${DOMAIN}|" -e "s|TURN_SECRET|${TURN_SECRET}|" \
+                vps/turnserver.conf | $SUDO tee /etc/turnserver.conf >/dev/null
+              $SUDO chmod 640 /etc/turnserver.conf
+              if getent group turnserver >/dev/null; then $SUDO chgrp turnserver /etc/turnserver.conf; fi
+              # Older Ubuntu packages ship the service switched off
+              if [ -f /etc/default/coturn ]; then
+                $SUDO sed -i 's/^#*[[:space:]]*TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+              fi
+              if command -v ufw >/dev/null 2>&1 && $SUDO ufw status | grep -q "Status: active"; then
+                $SUDO ufw allow 3478/udp >/dev/null
+                $SUDO ufw allow 49160:49200/udp >/dev/null
+              fi
+              $SUDO systemctl enable coturn >/dev/null 2>&1 || true
+              $SUDO systemctl restart coturn
+              sleep 1
+              $SUDO systemctl is-active --quiet coturn
+              echo "TURN_SECRET=${TURN_SECRET}" >> .env
+              echo "TURN_URL=turn:${PUBLIC_IP}:3478?transport=udp" >> .env
+              echo "TURN relay running on ${PUBLIC_IP}:3478 (UDP)"
+            )
+            TURN_STATUS=$?
+            set -e
+            if [ "$TURN_STATUS" -ne 0 ]; then
+              echo "WARNING: TURN relay not set up (exit ${TURN_STATUS}); fights use the WebSocket relay only."
+              $SUDO journalctl -u coturn -n 20 --no-pager || true
+            fi
+
             echo "=== 6. Restarting Bot Service ==="
             SERVICE=/etc/systemd/system/umk3-bot.service
             $SUDO cp vps/umk3-bot.service "$SERVICE"

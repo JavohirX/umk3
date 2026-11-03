@@ -4,6 +4,10 @@
  * (WebRTC DataChannel + WebSocket relay), the reconnect grace period, spectating, rematches and replays.
  */
 
+// How many of our latest inputs every packet on the WebRTC channel carries: a run of lost packets shorter
+// than this costs nothing (8 ticks is 133ms)
+const INPUT_BUNDLE_TICKS = 8;
+
 // Lobby states the server can end a challenge with, as shown on the canvas banner
 const CANCEL_TEXT = {
     JOIN_TIMEOUT: "CHALLENGE EXPIRED - START A NEW ONE",
@@ -64,6 +68,8 @@ export class MultiplayerClient {
         this.pendingCandidates = []; // opponent candidates waiting for their offer/answer to be applied
         this.rtcSignalQueue = null;
         this.ice = null; // direct-connection diagnostics, see iceSummary()
+        this.turnServers = []; // our short-lived TURN login from the server: a UDP relay when no direct path works
+        this.sentInputs = []; // our last few lockstep inputs [segment, tick, pressed, released], resent in every bundle
         this.pingInterval = null;
         this.rtt = 0;
         this.peerPingInterval = null;
@@ -370,6 +376,16 @@ export class MultiplayerClient {
                 this.onPeerInputCallback(view.getUint8(1), view.getUint32(4), view.getUint32(8), view.getUint32(12),
                                          view.getInt8(2), view.getUint8(3), view.getUint32(16));
             }
+        } else if (packetType === 9 && buffer.byteLength >= 16) { // 0x09: the last few inputs, see sendLockstepInput
+            const count = view.getUint8(12);
+            if (typeof this.onPeerInputCallback === 'function' && buffer.byteLength >= 16 + count * 8) {
+                const segment = view.getUint8(1);
+                const firstTick = view.getUint32(8);
+                for (let i = 0; i < count; i++) {
+                    this.onPeerInputCallback(segment, firstTick + i, view.getUint32(16 + i * 8), view.getUint32(20 + i * 8),
+                                             view.getInt8(2), view.getUint8(3), view.getUint32(4));
+                }
+            }
         } else if (packetType === 5) { // 0x05: PEER_PING -> echo it straight back
             view.setUint8(0, 6);
             this.sendBinaryBothPaths(buffer);
@@ -394,6 +410,12 @@ export class MultiplayerClient {
     }
 
     sendBinaryBothPaths(buffer) {
+        this.sendDirect(buffer);
+        this.sendRelay(buffer);
+    }
+
+    // The WebRTC channel: straight to the opponent, or through the TURN relay, over UDP
+    sendDirect(buffer) {
         if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
             try {
                 this.dataChannel.send(buffer);
@@ -401,6 +423,10 @@ export class MultiplayerClient {
                 this.isP2PActive = false;
             }
         }
+    }
+
+    // The WebSocket through the game server (TCP), which also records the match for replays and spectators
+    sendRelay(buffer) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
                 this.ws.send(buffer);
@@ -447,7 +473,10 @@ export class MultiplayerClient {
             const config = {
                 iceServers: [
                     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-                    { urls: 'stun:stun.cloudflare.com:3478' }
+                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    // Behind carrier NAT neither phone can reach the other directly; the game server's TURN relay
+                    // carries the channel over UDP instead
+                    ...this.turnServers
                 ]
             };
             const peer = this.rtcPeer = new RTCPeerConnection(config);
@@ -477,8 +506,10 @@ export class MultiplayerClient {
             };
 
             if (isInitiator) {
-                // Ordered and reliable: inputs are press/release events, so a lost release would leave a key held
-                const dc = this.rtcPeer.createDataChannel("combat_input", { ordered: true });
+                // Unordered and never retransmitted: a lost or late packet must not hold up the ones behind it.
+                // Every input packet repeats the last few ticks (see sendLockstepInput), and the WebSocket
+                // delivers each one as well, so a loss costs nothing.
+                const dc = this.rtcPeer.createDataChannel("combat_input", { ordered: false, maxRetransmits: 0 });
                 this.setupDataChannel(dc);
 
                 const offer = await this.rtcPeer.createOffer();
@@ -548,7 +579,25 @@ export class MultiplayerClient {
     iceSummary() {
         const fmt = (tally) => Object.entries(tally).map(([type, n]) => `${type}:${n}`).join(",") || "none";
         if (!this.ice) return { ice_state: typeof RTCPeerConnection === 'undefined' ? "unsupported" : "not-started" };
-        return { ice_state: this.ice.state, ice_local: fmt(this.ice.local), ice_remote: fmt(this.ice.remote), ice_failures: this.ice.failures };
+        return { ice_state: this.ice.state, ice_local: fmt(this.ice.local), ice_remote: fmt(this.ice.remote), ice_failures: this.ice.failures,
+                 ice_path: this.ice.path || "none" };
+    }
+
+    // Which way the open channel runs, as "<our candidate type>-<theirs>": relay is through TURN,
+    // host/srflx/prflx are direct
+    async notePath(peer) {
+        try {
+            const stats = await peer.getStats();
+            let pair = null;
+            stats.forEach((s) => {
+                if (s.type === "transport" && s.selectedCandidatePairId) pair = stats.get(s.selectedCandidatePairId);
+            });
+            if (!pair) stats.forEach((s) => { if (s.type === "candidate-pair" && s.nominated && s.state === "succeeded") pair = s; });
+            if (!pair || this.rtcPeer !== peer || !this.ice) return;
+            const local = stats.get(pair.localCandidateId);
+            const remote = stats.get(pair.remoteCandidateId);
+            this.ice.path = `${local ? local.candidateType : "?"}-${remote ? remote.candidateType : "?"}`;
+        } catch (_) {}
     }
 
     setupDataChannel(dc) {
@@ -561,6 +610,7 @@ export class MultiplayerClient {
             if (this.dataChannel !== dc) return;
             console.log("[Multiplayer] ⚡ WebRTC P2P DataChannel OPEN! Direct low-latency UDP combat active.");
             this.isP2PActive = true;
+            if (this.rtcPeer) this.notePath(this.rtcPeer);
         };
 
         dc.onclose = () => {
@@ -594,8 +644,12 @@ export class MultiplayerClient {
     // Our input for one lockstep tick: the key mask bits pressed and released during it, plus our latest
     // advice on the opponent's input delay (+1 their inputs arrive late, -1 they have slack) and its sequence
     // number, so they apply each piece of advice once, and the tick we just simulated, so they can keep pace.
-    // 20-byte binary payload: [0x04, segment, hint (int8), hintSeq, tick (uint32), pressed (uint32),
-    //                          released (uint32), senderTick (uint32)]
+    // To the server (which records and relays it), a 20-byte packet:
+    //   [0x04, segment, hint (int8), hintSeq, tick (uint32), pressed (uint32), released (uint32), senderTick (uint32)]
+    // On the WebRTC channel, which drops packets rather than resend them, this tick and the ones before it:
+    //   [0x09, segment, hint (int8), hintSeq, senderTick (uint32), firstTick (uint32), count, 0, 0, 0,
+    //    then count x (pressed (uint32), released (uint32)) for ticks firstTick, firstTick + 1, ...]
+    // The peer keeps the first copy of each tick from either path. A tick that never arrived would freeze both phones.
     sendLockstepInput(segment, tick, pressed, released, hint = 0, hintSeq = 0, senderTick = 0) {
         if (!this.isMultiplayer || this.status !== "ACTIVE" || this.isSpectator) return;
         const buffer = new ArrayBuffer(20);
@@ -608,10 +662,29 @@ export class MultiplayerClient {
         view.setUint32(8, pressed >>> 0);
         view.setUint32(12, released >>> 0);
         view.setUint32(16, senderTick);
+        this.sendRelay(buffer);
 
-        // Sent on both paths: the peer keeps the first copy of each tick, and the relay still delivers if the
-        // direct channel dies silently. A tick that never arrives would freeze both phones.
-        this.sendBinaryBothPaths(buffer);
+        // Our inputs go out one tick after another; a new bout segment starts the list again
+        const last = this.sentInputs[this.sentInputs.length - 1];
+        if (!last || last[0] !== segment || last[1] !== tick - 1) this.sentInputs = [];
+        this.sentInputs.push([segment, tick, pressed >>> 0, released >>> 0]);
+        if (this.sentInputs.length > INPUT_BUNDLE_TICKS) this.sentInputs.shift();
+        if (!this.isP2PActive) return;
+        const count = this.sentInputs.length;
+        const bundle = new ArrayBuffer(16 + count * 8);
+        const out = new DataView(bundle);
+        out.setUint8(0, 9);
+        out.setUint8(1, segment & 0xFF);
+        out.setInt8(2, hint);
+        out.setUint8(3, hintSeq & 0xFF);
+        out.setUint32(4, senderTick);
+        out.setUint32(8, this.sentInputs[0][1]);
+        out.setUint8(12, count);
+        this.sentInputs.forEach(([, , p, r], i) => {
+            out.setUint32(16 + i * 8, p);
+            out.setUint32(20 + i * 8, r);
+        });
+        this.sendDirect(bundle);
     }
 
     // A fingerprint of our simulation at a tick, so the two phones can tell if their fights ever differ.
@@ -684,6 +757,7 @@ export class MultiplayerClient {
                     return;
                 }
                 this.role = data.role;
+                this.turnServers = Array.isArray(data.ice_servers) ? data.ice_servers : [];
                 // The server renames a second tab that reuses the creator's id; match on what it assigned
                 if (data.player_id) this.userId = data.player_id;
                 this.creator = data.creator;

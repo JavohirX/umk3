@@ -9,6 +9,7 @@ A player who drops or leaves the app has RECONNECT_GRACE_SECONDS to come back be
 """
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -56,6 +57,21 @@ def bot_token() -> Optional[str]:
 def auth_required() -> bool:
     """Production sets REQUIRE_TG_AUTH=1: every player must prove who they are with Telegram's signed initData."""
     return os.getenv("REQUIRE_TG_AUTH", "").strip().lower() in ("1", "true", "yes")
+
+
+TURN_CREDENTIAL_SECONDS = 6 * 3600
+
+
+def turn_ice_servers(player_id: str) -> list:
+    """A short-lived TURN login for one player (coturn's use-auth-secret scheme), or [] when TURN isn't set up.
+    The username is "<expiry unix time>:<player id>" and the password is base64(HMAC-SHA1(secret, username))."""
+    secret = os.getenv("TURN_SECRET", "").strip()
+    url = os.getenv("TURN_URL", "").strip()
+    if not secret or not url:
+        return []
+    username = f"{int(time.time()) + TURN_CREDENTIAL_SECONDS}:{player_id}"
+    digest = hmac.new(secret.encode(), username.encode(), hashlib.sha1).digest()
+    return [{"urls": [url], "username": username, "credential": base64.b64encode(digest).decode()}]
 
 
 def verify_init_data(init_data: str, token: str, now: Optional[float] = None) -> Optional[dict]:
@@ -729,7 +745,7 @@ NET_STATS_FIELDS = (
     "rollbacks", "rollback_ticks", "max_rollback", "rollback_misses", "predict_ticks", "save_ms", "load_ms",
 )
 # Direct-connection diagnostics: ICE state and candidate type tallies such as "host:2,srflx:1"
-NET_STATS_TEXT_FIELDS = ("ice_state", "ice_local", "ice_remote", "netcode")
+NET_STATS_TEXT_FIELDS = ("ice_state", "ice_local", "ice_remote", "ice_path", "netcode")
 net_stats_log: deque = deque(maxlen=500)
 
 
@@ -886,6 +902,7 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
         "creator": {"id": room.creator_id, "name": room.creator_name},
         "opponent": {"id": room.opponent_id, "name": room.opponent_name} if room.opponent_id else None,
         "spectators": len(room.spectators),
+        "ice_servers": turn_ice_servers(player_id),
     }))
 
     if room.status == "COMPLETED":

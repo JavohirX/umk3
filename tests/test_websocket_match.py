@@ -5,6 +5,7 @@ spectators, replays, rematches, Telegram identity checks, and housekeeping.
 """
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -12,6 +13,7 @@ import os
 import tempfile
 import time
 import unittest
+import unittest.mock
 from unittest.mock import patch
 from urllib.parse import urlencode
 
@@ -208,6 +210,23 @@ class TestLobby(MatchTestCase):
         ws2 = await self.join("m_early", "joiner", "Joiner")
         start = await recv_type(ws2, "match_start")
         self.assertEqual(start["locks"], {"creator": 4})
+
+    async def test_players_get_a_turn_login_when_turn_is_set_up(self):
+        with unittest.mock.patch.dict(os.environ, {"TURN_SECRET": "s3cret", "TURN_URL": "turn:1.2.3.4:3478?transport=udp"}):
+            ws = await self.join("m_turn", "p1", "p1")
+            joined = await recv_type(ws, "joined")
+        assert joined["ice_servers"][0]["urls"] == ["turn:1.2.3.4:3478?transport=udp"]
+        username = joined["ice_servers"][0]["username"]
+        assert username.endswith(":p1")
+        expiry = int(username.split(":")[0])
+        assert expiry > time.time() + 3600
+        assert joined["ice_servers"][0]["credential"] == base64.b64encode(hmac.new(b"s3cret", username.encode(), hashlib.sha1).digest()).decode()
+
+    async def test_no_turn_login_without_turn_setup(self):
+        with patch.dict(os.environ, {"TURN_SECRET": "", "TURN_URL": ""}):
+            ws = await self.join("m_noturn", "p1", "p1")
+            joined = await recv_type(ws, "joined")
+        assert joined["ice_servers"] == []
 
 
 class TestHeroSelectAndRounds(MatchTestCase):
