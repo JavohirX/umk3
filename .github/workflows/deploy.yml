@@ -135,6 +135,8 @@ jobs:
               echo "REQUIRE_TG_AUTH=1" >> .env
               # Optional: short name of the Direct Link Mini App (@BotFather /newapp) for one-tap Play buttons
               echo "WEBAPP_SHORT_NAME=${{ secrets.WEBAPP_SHORT_NAME }}" >> .env
+              # Telegram user id that /feedback is delivered to (empty switches /feedback off)
+              echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
             else
               # No bot token but still stamp build version for non-bot deployments
               echo "BUILD_VERSION=${COMMIT_HASH}" > .env

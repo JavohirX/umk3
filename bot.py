@@ -7,6 +7,7 @@ Supports:
 - One-tap entry through a Direct Link Mini App (WEBAPP_SHORT_NAME), falling back to the bot's chat
 - Challenge messages that follow the match (accepted, live with a Watch button, result with a replay)
 - Local group-isolated leaderboards (/leaderboard) tracking Wins, Losses, Games, and Win Rate
+- /feedback, delivered to the admin (ADMIN_ID) as a message from the bot
 - In-match disconnect grace period and autowin rules
 """
 
@@ -22,8 +23,12 @@ from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart, Command, CommandObject
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    ForceReply,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     InlineQuery,
@@ -47,6 +52,22 @@ WEBAPP_SHORT_NAME = os.getenv("WEBAPP_SHORT_NAME", "").strip()
 CHALLENGE_WINDOW_TEXT = f"{db.CHALLENGE_WINDOW_SECONDS // 60} minutes"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] %(message)s")
+
+
+def parse_admin_id(raw: Optional[str]) -> Optional[int]:
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        logging.warning(f"ADMIN_ID={raw!r} is not a Telegram user id, so /feedback is switched off")
+        return None
+
+
+# Telegram user id that /feedback is sent to. That user must have started the bot once: a bot can't
+# message someone who never opened a chat with it.
+ADMIN_ID = parse_admin_id(os.getenv("ADMIN_ID"))
 
 dp = Dispatcher()
 
@@ -416,7 +437,101 @@ async def handle_chosen_inline_result(chosen: types.ChosenInlineResult):
 
 
 # =========================================================================
-# 5. MATCH UPDATES FROM THE GAME SERVER
+# 5. /FEEDBACK (DELIVERED TO THE ADMIN)
+# =========================================================================
+
+FEEDBACK_COOLDOWN_SECONDS = 30
+FEEDBACK_MAX_CHARS = 3500  # leaves room for the header in Telegram's 4096-character message
+_last_feedback_at: dict = {}  # user id -> time.monotonic() of their last delivered feedback
+
+
+class FeedbackForm(StatesGroup):
+    waiting = State()  # a bare /feedback was sent; the user's next message is the feedback
+
+
+def feedback_header(user: types.User, chat: types.Chat) -> str:
+    """Who sent it (a tappable name, @username and id) and, from a group, where."""
+    name = esc(user.full_name or user.first_name or "Someone")
+    details = [f"id <code>{user.id}</code>"]
+    if user.username:
+        details.insert(0, f"@{esc(user.username)}")
+    header = f'💬 <b>Feedback</b> from <a href="tg://user?id={user.id}">{name}</a> ({", ".join(details)})'
+    if chat.type != "private":
+        header += f"\nin <b>{esc(chat.title or 'a group')}</b>"
+    return header
+
+
+async def deliver_feedback(bot: Bot, message: types.Message, text: Optional[str]) -> bool:
+    """Text goes to the admin as one message; anything else (a screenshot, a voice note) as the header plus a copy."""
+    header = feedback_header(message.from_user, message.chat)
+    try:
+        if text is not None:
+            await bot.send_message(ADMIN_ID, f"{header}\n\n{esc(text[:FEEDBACK_MAX_CHARS])}", parse_mode="HTML")
+        else:
+            await bot.send_message(ADMIN_ID, header, parse_mode="HTML")
+            await bot.copy_message(chat_id=ADMIN_ID, from_chat_id=message.chat.id, message_id=message.message_id)
+    except TelegramAPIError as e:
+        logging.error(f"Could not deliver feedback to ADMIN_ID {ADMIN_ID}: {e}")
+        return False
+    return True
+
+
+async def submit_feedback(bot: Bot, message: types.Message, text: Optional[str]):
+    user_id = message.from_user.id
+    last = _last_feedback_at.get(user_id)
+    now = time.monotonic()
+    if last is not None and now - last < FEEDBACK_COOLDOWN_SECONDS:
+        await message.answer("⏳ Got it, thanks! Please wait a moment before sending more feedback.")
+        return
+    if await deliver_feedback(bot, message, text):
+        _last_feedback_at[user_id] = now
+        await message.answer("✅ Thanks! Your feedback was sent to the developer.")
+    else:
+        await message.answer("⚠️ Sorry, your feedback couldn't be delivered right now. Please try again later.")
+
+
+@dp.message(Command("feedback"))
+async def handle_feedback(message: types.Message, command: CommandObject, state: FSMContext, bot: Bot):
+    """/feedback <text> sends it right away; a bare /feedback asks for it in the next message."""
+    await state.clear()
+    if ADMIN_ID is None:
+        await message.answer("Feedback isn't switched on yet. Please try again later.")
+        return
+    text = (command.args or "").strip()
+    if text:
+        await submit_feedback(bot, message, text)
+        return
+    await state.set_state(FeedbackForm.waiting)
+    # A reply prompt, so the answer reaches the bot in groups too (with privacy mode on, bots only see
+    # commands and replies to their own messages there)
+    await message.answer(
+        "💬 <b>Send your feedback</b> as a reply to this message: ideas, bugs, anything. "
+        "Screenshots and voice notes work too. Send /cancel to stop.",
+        parse_mode="HTML",
+        reply_markup=ForceReply(selective=True, input_field_placeholder="Your feedback..."),
+    )
+
+
+@dp.message(Command("cancel"), FeedbackForm.waiting)
+async def handle_feedback_cancel(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Feedback cancelled.")
+
+
+@dp.message(FeedbackForm.waiting)
+async def handle_feedback_message(message: types.Message, state: FSMContext, bot: Bot):
+    """The message after a bare /feedback. Other commands are left alone and the bot keeps waiting."""
+    if message.text and message.text.startswith("/"):
+        return
+    await state.clear()
+    if ADMIN_ID is None:
+        await message.answer("Feedback isn't switched on yet. Please try again later.")
+        return
+    await submit_feedback(bot, message, message.text)
+
+
+# =========================================================================
+# 6. MATCH UPDATES FROM THE GAME SERVER
 # =========================================================================
 
 def result_line(info: dict) -> str:
@@ -514,7 +629,7 @@ async def on_match_event(bot: Bot, event: str, info: dict):
 
 
 # =========================================================================
-# 6. BOT BOOTSTRAP & MENU BUTTON
+# 7. BOT BOOTSTRAP & MENU BUTTON
 # =========================================================================
 
 async def main():
@@ -555,6 +670,8 @@ async def main():
     except Exception as e:
         logging.warning(f"Failed to set menu button: {e}")
 
+    if ADMIN_ID is None:
+        logging.warning("ADMIN_ID is not set, so /feedback is switched off")
     logging.info(f"Immortal Combat Bot starting... Serving WebApp: {WEBAPP_URL}")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

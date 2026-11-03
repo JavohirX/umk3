@@ -211,5 +211,101 @@ class TestMatchEvents(BotTestCase):
         tg.send_message.assert_not_called()
 
 
+class TestFeedback(unittest.IsolatedAsyncioTestCase):
+    ADMIN = 999000
+
+    def setUp(self):
+        patcher = patch.object(bot, "ADMIN_ID", self.ADMIN)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        bot._last_feedback_at.clear()
+        self.tg = MagicMock(send_message=AsyncMock(), copy_message=AsyncMock())
+        self.state = AsyncMock()
+
+    def message(self, text="hi", chat_type="private", user_id=42, first_name="Liu", username="liukang", title=None):
+        message = make_message(chat_id=user_id if chat_type == "private" else -100555, chat_type=chat_type,
+                               user_id=user_id, first_name=first_name, title=title)
+        message.from_user.full_name = first_name
+        message.from_user.username = username
+        message.text = text
+        message.message_id = 77
+        return message
+
+    def replies(self, message):
+        return [call[0][0] for call in message.answer.call_args_list]
+
+    async def test_feedback_with_text_is_sent_to_the_admin(self):
+        message = self.message("/feedback the d-pad is great")
+        await bot.handle_feedback(message, MagicMock(args="the d-pad is great"), self.state, self.tg)
+
+        chat_id, text = self.tg.send_message.call_args[0]
+        self.assertEqual(chat_id, self.ADMIN)
+        self.assertIn('<a href="tg://user?id=42">Liu</a>', text)
+        self.assertIn("@liukang", text)
+        self.assertIn("id <code>42</code>", text)
+        self.assertTrue(text.endswith("the d-pad is great"))
+        self.assertIn("sent to the developer", self.replies(message)[0])
+        self.state.set_state.assert_not_called()
+
+    async def test_bare_feedback_asks_for_it_then_sends_the_next_message(self):
+        prompt = self.message("/feedback")
+        await bot.handle_feedback(prompt, MagicMock(args=None), self.state, self.tg)
+        self.state.set_state.assert_awaited_with(bot.FeedbackForm.waiting)
+        self.assertIsInstance(prompt.answer.call_args[1]["reply_markup"], bot.ForceReply)
+        self.tg.send_message.assert_not_called()
+
+        reply = self.message("rounds end too fast")
+        await bot.handle_feedback_message(reply, self.state, self.tg)
+        self.state.clear.assert_awaited()
+        self.assertTrue(self.tg.send_message.call_args[0][1].endswith("rounds end too fast"))
+
+    async def test_a_screenshot_is_copied_to_the_admin_under_a_header(self):
+        photo = self.message(text=None)
+        await bot.handle_feedback_message(photo, self.state, self.tg)
+        header = self.tg.send_message.call_args[0][1]
+        self.assertIn("Feedback", header)
+        self.tg.copy_message.assert_awaited_with(chat_id=self.ADMIN, from_chat_id=42, message_id=77)
+
+    async def test_other_commands_while_waiting_are_not_feedback(self):
+        await bot.handle_feedback_message(self.message("/leaderboard"), self.state, self.tg)
+        self.tg.send_message.assert_not_called()
+        self.state.clear.assert_not_called()
+
+    async def test_group_feedback_names_the_group_and_escapes_html(self):
+        message = self.message("<b>bold</b> & co", chat_type="group", first_name="<Raiden>", title="Outworld <3")
+        await bot.handle_feedback(message, MagicMock(args="<b>bold</b> & co"), self.state, self.tg)
+        text = self.tg.send_message.call_args[0][1]
+        self.assertIn("&lt;Raiden&gt;", text)
+        self.assertIn("in <b>Outworld &lt;3</b>", text)
+        self.assertTrue(text.endswith("&lt;b&gt;bold&lt;/b&gt; &amp; co"))
+
+    async def test_a_second_message_within_the_cooldown_is_not_sent(self):
+        await bot.handle_feedback(self.message(), MagicMock(args="one"), self.state, self.tg)
+        second = self.message()
+        await bot.handle_feedback(second, MagicMock(args="two"), self.state, self.tg)
+        self.assertEqual(self.tg.send_message.await_count, 1)
+        self.assertIn("wait a moment", self.replies(second)[0])
+
+    async def test_no_admin_id_means_feedback_is_off(self):
+        with patch.object(bot, "ADMIN_ID", None):
+            message = self.message()
+            await bot.handle_feedback(message, MagicMock(args="hello"), self.state, self.tg)
+        self.tg.send_message.assert_not_called()
+        self.assertIn("isn't switched on", self.replies(message)[0])
+
+    async def test_delivery_failure_is_reported_and_does_not_start_the_cooldown(self):
+        self.tg.send_message.side_effect = bot.TelegramAPIError(method=MagicMock(), message="Forbidden: chat not found")
+        message = self.message()
+        await bot.handle_feedback(message, MagicMock(args="hello"), self.state, self.tg)
+        self.assertIn("couldn't be delivered", self.replies(message)[0])
+        self.assertNotIn(42, bot._last_feedback_at)
+
+    def test_admin_id_parsing(self):
+        self.assertEqual(bot.parse_admin_id(" 123456 "), 123456)
+        self.assertIsNone(bot.parse_admin_id(""))
+        self.assertIsNone(bot.parse_admin_id(None))
+        self.assertIsNone(bot.parse_admin_id("@someone"))
+
+
 if __name__ == "__main__":
     unittest.main()

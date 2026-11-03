@@ -17,11 +17,12 @@
     <style>
         /* Everything drawn around the game borrows the game's own look: its pitch-black
            background, its white pixel font (the A / B / D glyphs are cut from the game's own
-           text), its fire-orange menu arrow, its stone menu bars and its red selection
-           (red text plus the 2px red cursor from the fighter grid). */
+           text), its fire-orange menu arrow, its stone menu bars and its red selected text.
+           The keys are solid blocks of that stone and fire that sink when pressed. */
         :root {
             --ink: #000000;
-            --pick: #ff0000;
+            --stone-side: #2e2a20;
+            --fire-side: #7a2410;
             --stone-edge: #0c0a08;
             --stone-cap: #1c1d22;
             --stone-mid: #444133;
@@ -35,6 +36,8 @@
             --pad-size: 168px;
             --pad-gap: 6px;
             --key-edge: 6px;
+            --key-depth: 7px;
+            --arrow-depth: 5px;
             --glyph-a: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAdElEQVR42oWPsQmAUBBD33cEcQFbV9E5dBkXcARncAXBzhWsbFwgFp7+jx4YCEdC4JIgiRc+RvYXAPbMCcxAA4ymeyShiMk0kg7z6mCdvDc3qiCnedoHKNJOMxCMnXmLt+7GYHd9h0onvF2745JWUp6se3gCOhxTCYRjKvwAAAAASUVORK5CYII=");
             --glyph-a-red: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAbUlEQVR42mP8z4ABMISYCClgYGB4y4RFwRkGBgYfBgaGlVB+D8N/iOx/KN4N5TP8Z2D4BBXzZvyP2xoY0EI2BRt+8x/N4WcYGBgYoTgdKnYem+9gYCaUvoauSBGL4udwF0N9kvafgUEIyXdwDAAcZDcPCGC1zwAAAABJRU5ErkJggg==");
             --glyph-b: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAaklEQVR42oWQuw2AUAwD7yEGQGIEKhahYRhaRmIH9qBiBWY4miCe+LqypTgXJakA8q5U8K8WFU/1kfvIq0r50FyBJvwAUGT3bEAHVLdahpoDRWBUJ5X88CXzB66+bnrSqH4OjQe+BNLfp3aJS4wVuLkUIwAAAABJRU5ErkJggg==");
@@ -198,25 +201,10 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Pressed = the game's selection cursor: 2px red, one black pixel off the key */
-        .btn-mk::after {
-            content: "";
-            position: absolute;
-            inset: -3px;
-            border: 2px solid var(--pick);
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .btn-mk:active::after,
-        .btn-mk.active::after {
-            opacity: 1;
-        }
-
         /* --- IN-GAME SOFTKEYS (OPTNS / BACK / PAUSE) ---
            The game draws its softkey icons at canvas x 9-30 (left) and 321-342 (right), y 390-411.
            Each target covers its icon plus the corner around it (56 x 48 canvas px, flush with the
-           bottom corner), and the cursor sits on the icon itself. */
+           bottom corner). Pressing shades the round icon as if it were pushed in. */
         .on-screen-softkey {
             position: absolute;
             bottom: 0;
@@ -244,21 +232,27 @@
             --icon-x: calc(36 / 56 * 100%);
         }
 
-        .softkey-cursor {
+        /* A 22px disc over the 22px icon: a shadow along its top rim and a darker face read as a pushed-in button */
+        .softkey-press {
             position: absolute;
             left: var(--icon-x);
             top: calc(33 / 48 * 100%);
-            width: calc(28 / 56 * 100%);
-            height: calc(28 / 48 * 100%);
-            transform: translate(-50%, -50%);
-            border: 2px solid var(--pick);
+            width: calc(22 / 56 * 100%);
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 65%, rgba(0, 0, 0, 0.2) 0 45%, rgba(0, 0, 0, 0.6) 100%);
+            box-shadow: inset 0 3px 3px rgba(0, 0, 0, 0.85);
+            transform: translate(-50%, -50%) scale(0.85);
             opacity: 0;
             pointer-events: none;
+            transition: opacity 140ms ease-out, transform 140ms ease-out;
         }
 
-        .on-screen-softkey:active .softkey-cursor,
-        .on-screen-softkey.active .softkey-cursor {
+        .on-screen-softkey:active .softkey-press,
+        .on-screen-softkey.active .softkey-press {
             opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+            transition-duration: 40ms;
         }
 
         /* --- MAIN ROW: D-PAD (LEFT) + A / B / D KEYS (RIGHT) --- */
@@ -285,10 +279,15 @@
             position: relative;
         }
 
+        /* Each arrow is a solid block: the shadow under its shape is its dark-fire side. The shadow sits on
+           the button, so it falls straight down whichever way the arrow is turned. Pressing sinks the arrow
+           onto its side; letting go springs it back. */
         .dpad-btn {
             width: 100%;
             height: 100%;
             padding: 0;
+            filter: drop-shadow(0 var(--arrow-depth) 0 var(--fire-side));
+            transition: filter 160ms cubic-bezier(0.3, 1.6, 0.5, 1);
         }
 
         .dpad-arrow {
@@ -298,10 +297,11 @@
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             pointer-events: none;
-            transform: rotate(var(--turn, 0deg)) scale(var(--size, 1));
+            transform: translateY(var(--sink, 0px)) rotate(var(--turn, 0deg)) scale(var(--size, 1)) scaleY(var(--flip, 1));
+            transition: transform 160ms cubic-bezier(0.3, 1.6, 0.5, 1);
         }
 
-        [data-dir="down"]       .dpad-arrow { transform: scaleY(-1); }
+        [data-dir="down"]       .dpad-arrow { --flip: -1; }
         [data-dir="left"]       .dpad-arrow { --turn: -90deg; }
         [data-dir="right"]      .dpad-arrow { --turn: 90deg; }
         [data-dir="up-left"]    .dpad-arrow { --turn: -45deg; --size: 0.62; }
@@ -309,9 +309,18 @@
         [data-dir="down-left"]  .dpad-arrow { --turn: -135deg; --size: 0.62; }
         [data-dir="down-right"] .dpad-arrow { --turn: 135deg; --size: 0.62; }
 
+        .dpad-btn:active,
+        .dpad-btn.active {
+            filter: drop-shadow(0 1px 0 var(--fire-side)) brightness(1.15);
+            transition-duration: 45ms;
+            transition-timing-function: ease-out;
+        }
+
         .dpad-btn:active .dpad-arrow,
         .dpad-btn.active .dpad-arrow {
-            filter: brightness(1.2);
+            --sink: calc(var(--arrow-depth) - 1px);
+            transition-duration: 45ms;
+            transition-timing-function: ease-out;
         }
 
         /* Centre: a small stone stud (tapping it is OK / select) */
@@ -346,6 +355,9 @@
             flex-shrink: 0;
         }
 
+        /* At rest the bar is a raised stone key, lit from the top left, standing on its side wall. Pressed,
+           it sinks onto the wall and its edges flip to the game's own sunken menu bar; letting go springs it
+           back up. */
         .combat-btn {
             width: 100%;
             height: 100%;
@@ -353,12 +365,21 @@
             background: repeating-conic-gradient(var(--stone-mid) 0 25%, var(--ink) 0 50%) 0 0 / 2px 2px;
             border-style: solid;
             border-width: var(--key-edge);
-            border-color: var(--stone-edge) var(--stone-glint) var(--stone-hi) var(--stone-cap);
+            border-color: var(--stone-glint) var(--stone) var(--stone-mid) var(--stone-hi);
+            box-shadow: 0 var(--key-depth) 0 var(--stone-side);
+            transition:
+                transform 170ms cubic-bezier(0.3, 1.6, 0.5, 1),
+                box-shadow 170ms cubic-bezier(0.3, 1.6, 0.5, 1),
+                border-color 120ms ease-out;
         }
 
-        /* The cursor goes round the whole bar, stone edges included */
-        .combat-btn::after {
-            inset: calc(-3px - var(--key-edge));
+        .combat-btn:active,
+        .combat-btn.active {
+            transform: translateY(calc(var(--key-depth) - 1px));
+            box-shadow: 0 1px 0 var(--stone-side);
+            border-color: var(--stone-edge) var(--stone-glint) var(--stone-hi) var(--stone-cap);
+            transition-duration: 45ms;
+            transition-timing-function: ease-out;
         }
 
         .combat-btn-wide {
@@ -392,6 +413,8 @@
                 --pad-size: 146px;
                 --pad-gap: 4px;
                 --key-edge: 5px;
+                --key-depth: 6px;
+                --arrow-depth: 4px;
             }
             .main-pad-row {
                 max-width: 320px;
@@ -522,10 +545,10 @@
                 <canvas id="display" tabindex="0"></canvas>
                 <!-- On-screen softkeys: touch targets over the game's own bottom-corner icons (OPTNS / BACK / PAUSE) -->
                 <button id="screen-btn-lsk" class="ctrl-btn on-screen-softkey softkey-left" data-key="F1" aria-label="Left Soft Key / Options / Info">
-                    <span class="softkey-cursor"></span>
+                    <span class="softkey-press"></span>
                 </button>
                 <button id="screen-btn-rsk" class="ctrl-btn on-screen-softkey softkey-right" data-key="F2" aria-label="Right Soft Key / Back / Pause">
-                    <span class="softkey-cursor"></span>
+                    <span class="softkey-press"></span>
                 </button>
             </div>
         </div>

@@ -110,6 +110,7 @@ In GitHub **Settings ➔ Secrets and variables ➔ Actions**:
 | `VPS_PORT` | SSH Port (optional, defaults to 22) | `22` |
 | `TG_BOT_TOKEN` | Bot token from @BotFather; also used to verify players' Telegram identity | `123456:ABC...` |
 | `WEBAPP_SHORT_NAME` | Optional: short name of the Mini App made with @BotFather `/newapp`, for one-tap Play buttons in groups | `fight` |
+| `ADMIN_ID` | Your Telegram user id: `/feedback` messages are sent to it. Start the bot once from that account (bots can't message someone first). Leave unset to switch `/feedback` off | `123456789` |
 
 ### Initial VPS Provisioning
 Run once on your Ubuntu/Debian VPS:
