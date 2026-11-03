@@ -527,9 +527,20 @@ class TestTelegramIdentity(MatchTestCase):
             self.assertEqual((joined["player_id"], joined["role"]), ("77", "p2"))
 
             # Unknown matches can't be created from the game in production
-            other = await self.join("m_unknown", "1", "X", init_data=signed_init_data(BOT_TOKEN, {"id": 1}))
-            self.assertEqual((await recv_type(other, "match_cancelled"))["reason"], "NOT_FOUND")
+            with patch.object(mp, "NEW_CHALLENGE_WAIT_SECONDS", 0.3):
+                other = await self.join("m_unknown", "1", "X", init_data=signed_init_data(BOT_TOKEN, {"id": 1}))
+                self.assertEqual((await recv_type(other, "match_cancelled"))["reason"], "NOT_FOUND")
             self.assertIsNone(db.get_match("m_unknown"))
+
+    async def test_join_waits_for_an_inline_challenge_that_was_just_sent(self):
+        """The bot creates an inline challenge's match when Telegram reports it sent; a fast tap can beat that."""
+        env = {"REQUIRE_TG_AUTH": "1", "TELEGRAM_BOT_TOKEN": BOT_TOKEN}
+        with patch.dict(os.environ, env):
+            ws = await self.join("m_fast", "", "", init_data=signed_init_data(BOT_TOKEN, {"id": 77, "first_name": "Bob"}))
+            await asyncio.sleep(0.4)
+            db.create_match("m_fast", "inline", "42", "Ann")
+            joined = await recv_type(ws, "joined")
+        self.assertEqual((joined["player_id"], joined["role"]), ("77", "p2"))
 
     async def test_inline_challenge_records_the_chat_it_was_played_in(self):
         db.create_match("m_inline", "inline", "42", "Ann")

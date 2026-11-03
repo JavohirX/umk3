@@ -60,6 +60,42 @@ class TestChallenges(BotTestCase):
         self.assertIsNone(btn.web_app, "Inline query result MUST NOT have web_app attribute!")
         self.assertTrue(btn.url.startswith(f"https://t.me/{bot.BOT_USERNAME}?start=challenge_"))
 
+    async def test_inline_query_creates_no_match_until_one_is_sent(self):
+        query = MagicMock(from_user=MagicMock(id=12345, first_name="SubZero"), query="")
+        query.answer = AsyncMock()
+
+        await bot.handle_inline_query(query)
+        await bot.handle_inline_query(query)  # the user keeps typing, or reopens inline mode
+
+        ids = [call[0][0][0].id.split("_", 1)[1] for call in query.answer.call_args_list]
+        self.assertNotEqual(ids[0], ids[1])
+        self.assertIsNone(db.get_match(ids[0]))
+        self.assertIsNone(db.get_match(ids[1]))
+
+        # Sending the second one creates its match, for the user who sent it, and remembers the message
+        chosen = MagicMock(result_id=f"challenge_{ids[1]}", inline_message_id="INLINE-9",
+                           from_user=MagicMock(id=12345, first_name="SubZero"))
+        await bot.handle_chosen_inline_result(chosen)
+        match = db.get_match(ids[1])
+        self.assertEqual((match["chat_id"], match["creator_id"], match["creator_name"], match["status"]),
+                         ("inline", "12345", "SubZero", "WAITING"))
+        self.assertEqual(match["inline_message_id"], "INLINE-9")
+        self.assertIsNone(db.get_match(ids[0]))
+
+    async def test_forwarded_chat_challenge_keeps_its_match(self):
+        """'Send to a Friend' forwards a challenge made in a chat; sending it must not replace that match."""
+        db.create_match("m_dm", "100", "100", "Alice")
+        chosen = MagicMock(result_id="challenge_m_dm", inline_message_id="INLINE-2",
+                           from_user=MagicMock(id=100, first_name="Alice"))
+        await bot.handle_chosen_inline_result(chosen)
+        match = db.get_match("m_dm")
+        self.assertEqual((match["chat_id"], match["inline_message_id"]), ("100", "INLINE-2"))
+
+    async def test_sharing_a_record_creates_nothing(self):
+        chosen = MagicMock(result_id="record_100", inline_message_id=None, from_user=MagicMock(id=100))
+        await bot.handle_chosen_inline_result(chosen)
+        self.assertIsNone(db.get_match("100"))
+
     async def test_dm_challenge_provides_friend_picker_and_share_link(self):
         message = make_message(55555, "private", 55555, "Scorpion")
         await bot.handle_challenge(message)

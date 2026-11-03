@@ -361,9 +361,11 @@ async def handle_inline_query(inline_query: InlineQuery):
         if candidate_id and db.get_match(candidate_id):
             match_id = candidate_id
 
+    # A new challenge is only an id for now. Telegram sends a query as the user types and each time they reopen
+    # inline mode, and most are never sent; the match is created once a result is actually sent
+    # (handle_chosen_inline_result).
     if not match_id:
         match_id = uuid.uuid4().hex[:8]
-        db.create_match(match_id=match_id, chat_id="inline", creator_id=user_id, creator_name=user_name)
 
     # web_app buttons are rejected in inline results (BUTTON_TYPE_INVALID): link to the app or the bot instead
     kb_challenge = InlineKeyboardMarkup(inline_keyboard=[[play_button(match_id, "inline", private=False)]])
@@ -398,9 +400,19 @@ async def handle_inline_query(inline_query: InlineQuery):
 
 @dp.chosen_inline_result()
 async def handle_chosen_inline_result(chosen: types.ChosenInlineResult):
-    """With inline feedback on (@BotFather /setinlinefeedback), remember the sent challenge to update it later."""
-    if chosen.result_id.startswith("challenge_") and chosen.inline_message_id:
-        db.set_inline_message(chosen.result_id.split("_", 1)[1], chosen.inline_message_id)
+    """
+    A user sent one of our inline results. Needs inline feedback on for every result (@BotFather
+    /setinlinefeedback, 100%). A new challenge's match is created here, and the sent message is remembered so
+    it can follow the match. A challenge forwarded from a chat ("Send to a Friend") already has its match.
+    """
+    if not chosen.result_id.startswith("challenge_"):
+        return
+    match_id = chosen.result_id.split("_", 1)[1]
+    if not db.get_match(match_id):
+        db.create_match(match_id=match_id, chat_id="inline", creator_id=str(chosen.from_user.id),
+                        creator_name=chosen.from_user.first_name or "Fighter")
+    if chosen.inline_message_id:
+        db.set_inline_message(match_id, chosen.inline_message_id)
 
 
 # =========================================================================

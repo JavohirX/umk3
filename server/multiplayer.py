@@ -35,6 +35,9 @@ ROOM_KEEP_AFTER_END_SECONDS = 600     # finished rooms stay in memory this long 
 STALE_ACTIVE_SECONDS = 1800           # an ACTIVE match nobody is connected to after this long is abandoned
 SWEEP_INTERVAL_SECONDS = 60
 INIT_DATA_MAX_AGE_SECONDS = 24 * 3600
+# An inline challenge's match is created when Telegram tells the bot the message was sent, which can land a
+# moment after a fast tap on its Play button; a join waits this long for it before calling it unknown
+NEW_CHALLENGE_WAIT_SECONDS = 3.0
 
 # Fighter names by hero id (the engine's select grid order), for result messages
 HERO_NAMES = ["Scorpion", "Sub-Zero", "Kitana", "Shao Kahn", "Sonya", "Cyrax", "Liu Kang"]
@@ -804,6 +807,10 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
         creator_name=identity["name"],
         create=not auth_required(),  # in production only the bot creates challenges
     )
+    deadline = time.monotonic() + NEW_CHALLENGE_WAIT_SECONDS
+    while room is None and time.monotonic() < deadline and not ws.closed:
+        await asyncio.sleep(0.25)
+        room = coordinator.get_or_create_room(match_id, create=False)
     if room is None:
         await ws.send_str(json.dumps({"type": "match_cancelled", "reason": "NOT_FOUND",
                                       "message": "This challenge doesn't exist."}))
