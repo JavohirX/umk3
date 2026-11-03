@@ -17,12 +17,11 @@
     <style>
         /* Everything drawn around the game borrows the game's own look: its pitch-black
            background, its white pixel font (the A / B / D glyphs are cut from the game's own
-           text), its fire-orange menu arrow, its stone menu bars and its red selected text.
-           The keys are solid blocks of that stone and fire that sink when pressed. */
+           text), its stone menu bars and its red selected text. The d-pad is a cross cut
+           from that stone and the keys are solid blocks of it that sink when pressed. */
         :root {
             --ink: #000000;
             --stone-side: #2e2a20;
-            --fire-side: #7a2410;
             --stone-edge: #0c0a08;
             --stone-cap: #1c1d22;
             --stone-mid: #444133;
@@ -34,17 +33,16 @@
             --fire-yellow: #fccf25;
             --fire-pale: #fee67a;
             --pad-size: 168px;
-            --pad-gap: 6px;
             --key-edge: 6px;
             --key-depth: 7px;
-            --arrow-depth: 5px;
+            --cross-edge: 5px;
+            --cross-depth: 6px;
             --glyph-a: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAdElEQVR42oWPsQmAUBBD33cEcQFbV9E5dBkXcARncAXBzhWsbFwgFp7+jx4YCEdC4JIgiRc+RvYXAPbMCcxAA4ymeyShiMk0kg7z6mCdvDc3qiCnedoHKNJOMxCMnXmLt+7GYHd9h0onvF2745JWUp6se3gCOhxTCYRjKvwAAAAASUVORK5CYII=");
             --glyph-a-red: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAbUlEQVR42mP8z4ABMISYCClgYGB4y4RFwRkGBgYfBgaGlVB+D8N/iOx/KN4N5TP8Z2D4BBXzZvyP2xoY0EI2BRt+8x/N4WcYGBgYoTgdKnYem+9gYCaUvoauSBGL4udwF0N9kvafgUEIyXdwDAAcZDcPCGC1zwAAAABJRU5ErkJggg==");
             --glyph-b: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAaklEQVR42oWQuw2AUAwD7yEGQGIEKhahYRhaRmIH9qBiBWY4miCe+LqypTgXJakA8q5U8K8WFU/1kfvIq0r50FyBJvwAUGT3bEAHVLdahpoDRWBUJ5X88CXzB66+bnrSqH4OjQe+BNLfp3aJS4wVuLkUIwAAAABJRU5ErkJggg==");
             --glyph-b-red: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAbElEQVR42o2QwQmAMAxFX8UBBEfw5CJeOozXjuQO7uGpKzjD9+AvFC3oh5AEkv9CggDAqanQ8a0Z3TZyRPfRfRbQNzYzMLleAbrqnhNYgOG1VqF2ozBGgk12KjqquuDGp1Mrkj6GUsEH/XjUBVeCQ1oVLqvwAAAAAElFTkSuQmCC");
             --glyph-d: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAbUlEQVR42oWPsQ2AMAwEP4gJWIGKPehYKGuwBUNQswFUjEDFAkfjgGUhOCnS53WxlQTIuEMgVT+CJE1VKGZJyc5sXRulzeW+hCitL+sWAeJhCPcTaLx0AA2wOykD8q8i2Qa8SiPQFQFQbd/95AI/F4tbshWLuAAAAABJRU5ErkJggg==");
             --glyph-d-red: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAKCAYAAABmBXS+AAAAb0lEQVR42oWQwQ2AIBAEB0ugBV/24c+GaMMuLIK3HejLEnzZwPoQDFyIbrLJcsyFO5x4VcRKrvsBAJbOFCLgkmOq9RbaizzmYKGt8dyKnoGUPJnzJfAldAq84CigIOou66C8duNyFgwZEOC+PijrBmt8QqDoJOH1AAAAAElFTkSuQmCC");
-            --arrow-up: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACoAAAAXCAYAAAB9J90oAAACHklEQVR42s3Wz0/TYBgH8G+fljIZWzp+bCEIIiYOmIU2/BomEmdiAhrCSb3uwgkTSTz4B3gyHrgsJv4Vxl2QGEMgXAkwNPGiQkiMekCCcNlYXw5lKZOyrvRl4zm1b5/3fT953rftK4BvsP/uBV4DE2+k4icofjoLXvVgAJgSlNlqKsxWU2Gm+IkV2i8X0k9s5c0gMzamWS49zB0r8FruT6/7od8ZsgZuXsbG568Yncxh98DwPB/xQC68akJftAXGn+0TIz+BeqsLS+9ruOxZ8opMT0WgdsfBDn6fTjKec8OSV+TIvXbkf345OzvwkguWvCBvTwzi8Nsv514csOQFmcusl9dTqgdCs56w5AYZkkSkpyIYTsyUjzwZoVmo8TETG5RdYckN8sNEq4lcfHv+b0XNM6jxMSzMDbjCkhuklpz2hgQA5gOkF9D0IVdYqiiyaObHrrDkuCf1q4j1JfgiAUCqA+SkiZ1/5IglJ6T+8C7ymeWLOynISWg3Yo5YqiqyEA0PoGkjJbFkh3wXaUVv483KIAGABQBp3MR+fGqLJTukrkaR3f5R+QOjNA5NH7DFCqWQctSqvthRvG3Etry1LE2SteWu/S3KM3r2T78Yh93mRX3HccN16+F+GAgEsZb5jsT9FHb3slZFC8iYIlenkjah9XYWVVYAwEKSiJ4rtSU7ipEyf8sNubLSfPABALK+xpJ5m1v/sLm1Yy39ZY8jg9/XMA2sslcAAAAASUVORK5CYII=");
         }
 
         * {
@@ -266,80 +264,103 @@
             margin: 0 auto;
         }
 
-        /* --- 1. D-PAD: THE GAME'S OWN MENU ARROW, TURNED EIGHT WAYS, ON BLACK --- */
+        /* --- 1. D-PAD: A PLUS SHAPE CUT FROM THE MENU-BAR STONE ---
+           #dpad-grid stays flat because it is the touch area: the touch code measures every direction from
+           its centre. The cross inside it is a 3 x 3 grid. The four edge cells are the stone arms, the four
+           corner cells are the invisible diagonals, and the middle cell is the stud (tapping it is OK). */
         .dpad-8-grid {
             width: var(--pad-size);
             height: var(--pad-size);
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
-            gap: var(--pad-gap);
             touch-action: none;
             flex-shrink: 0;
             position: relative;
+            --dx: 0;
+            --dy: 0;
         }
 
-        /* Each arrow is a solid block: the shadow under its shape is its dark-fire side. The shadow sits on
-           the button, so it falls straight down whichever way the arrow is turned. Pressing sinks the arrow
-           onto its side; letting go springs it back. */
-        .dpad-btn {
+        /* The cross stands on its own side wall and rocks toward the held direction. The touch code sets
+           --dx / --dy to the direction (-1..1 each) and data-active to its name. */
+        .dpad-cross {
+            position: absolute;
+            inset: 2px 6px 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            pointer-events: none;
+            filter: drop-shadow(0 var(--cross-depth) 0 var(--stone-side));
+            transform: perspective(420px) rotateX(calc(var(--dy) * -7deg)) rotateY(calc(var(--dx) * 7deg));
+            transition: transform 170ms cubic-bezier(0.3, 1.6, 0.5, 1);
+        }
+
+        /* Arms and middle share the menu bar's checker fill. Each arm has the raised bevel on its three
+           outer sides only, so the five cells read as one carved shape. */
+        .dpad-arm,
+        .dpad-hub {
             width: 100%;
             height: 100%;
             padding: 0;
-            filter: drop-shadow(0 var(--arrow-depth) 0 var(--fire-side));
-            transition: filter 160ms cubic-bezier(0.3, 1.6, 0.5, 1);
+            background: repeating-conic-gradient(var(--stone-mid) 0 25%, var(--ink) 0 50%) 0 0 / 2px 2px;
+            border: 0 solid;
+            border-color: var(--stone-glint) var(--stone) var(--stone-mid) var(--stone-hi);
+            transition: border-color 100ms ease-out, box-shadow 100ms ease-out;
         }
 
-        .dpad-arrow {
-            width: 42px;
-            height: 23px;
-            background: var(--arrow-up) center / 100% 100% no-repeat;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-            pointer-events: none;
-            transform: translateY(var(--sink, 0px)) rotate(var(--turn, 0deg)) scale(var(--size, 1)) scaleY(var(--flip, 1));
-            transition: transform 160ms cubic-bezier(0.3, 1.6, 0.5, 1);
-        }
+        .dpad-arm[data-dir="up"]    { border-width: var(--cross-edge) var(--cross-edge) 0 var(--cross-edge); }
+        .dpad-arm[data-dir="left"]  { border-width: var(--cross-edge) 0 var(--cross-edge) var(--cross-edge); }
+        .dpad-arm[data-dir="right"] { border-width: var(--cross-edge) var(--cross-edge) var(--cross-edge) 0; }
+        .dpad-arm[data-dir="down"]  { border-width: 0 var(--cross-edge) var(--cross-edge) var(--cross-edge); }
 
-        [data-dir="down"]       .dpad-arrow { --flip: -1; }
-        [data-dir="left"]       .dpad-arrow { --turn: -90deg; }
-        [data-dir="right"]      .dpad-arrow { --turn: 90deg; }
-        [data-dir="up-left"]    .dpad-arrow { --turn: -45deg; --size: 0.62; }
-        [data-dir="up-right"]   .dpad-arrow { --turn: 45deg; --size: 0.62; }
-        [data-dir="down-left"]  .dpad-arrow { --turn: -135deg; --size: 0.62; }
-        [data-dir="down-right"] .dpad-arrow { --turn: 135deg; --size: 0.62; }
-
-        .dpad-btn:active,
-        .dpad-btn.active {
-            filter: drop-shadow(0 1px 0 var(--fire-side)) brightness(1.15);
-            transition-duration: 45ms;
-            transition-timing-function: ease-out;
-        }
-
-        .dpad-btn:active .dpad-arrow,
-        .dpad-btn.active .dpad-arrow {
-            --sink: calc(var(--arrow-depth) - 1px);
-            transition-duration: 45ms;
-            transition-timing-function: ease-out;
-        }
-
-        /* Centre: a small stone stud (tapping it is OK / select) */
-        .dpad-center-hub {
+        .dpad-corner {
             width: 100%;
             height: 100%;
+            padding: 0;
+        }
+
+        /* Pixel triangle on each arm, pointing outward */
+        .dpad-tri {
+            display: block;
+            width: 18px;
+            height: 11px;
+            background: var(--stone-glint);
+            clip-path: polygon(50% 0, 100% 100%, 0 100%);
+            transition: background-color 80ms ease-out;
+        }
+
+        .dpad-arm[data-dir="right"] .dpad-tri { transform: rotate(90deg); }
+        .dpad-arm[data-dir="down"]  .dpad-tri { transform: rotate(180deg); }
+        .dpad-arm[data-dir="left"]  .dpad-tri { transform: rotate(-90deg); }
+
+        /* Held: the arm flips to the game's sunken bar look, darkens, and its triangle turns the game's red.
+           A diagonal holds both of its arms (up-left lights up and left). */
+        .dpad-8-grid[data-active^="up"]   .dpad-arm[data-dir="up"],
+        .dpad-8-grid[data-active^="down"] .dpad-arm[data-dir="down"],
+        .dpad-8-grid[data-active$="left"]  .dpad-arm[data-dir="left"],
+        .dpad-8-grid[data-active$="right"] .dpad-arm[data-dir="right"],
+        .dpad-arm.active {
+            border-color: var(--stone-edge) var(--stone-glint) var(--stone-hi) var(--stone-cap);
+            box-shadow: inset 0 0 0 40px rgba(0, 0, 0, 0.38);
+            transition-duration: 45ms;
+        }
+
+        .dpad-8-grid[data-active^="up"]   .dpad-arm[data-dir="up"] .dpad-tri,
+        .dpad-8-grid[data-active^="down"] .dpad-arm[data-dir="down"] .dpad-tri,
+        .dpad-8-grid[data-active$="left"]  .dpad-arm[data-dir="left"] .dpad-tri,
+        .dpad-8-grid[data-active$="right"] .dpad-arm[data-dir="right"] .dpad-tri,
+        .dpad-arm.active .dpad-tri {
+            background: #ff0000;
+        }
+
+        .dpad-hub {
             display: flex;
             align-items: center;
             justify-content: center;
-            pointer-events: auto;
-            cursor: pointer;
         }
 
-        .dpad-center-dimple {
-            width: 16px;
-            height: 16px;
+        .dpad-stud {
+            width: 14px;
+            height: 14px;
             background: repeating-conic-gradient(var(--stone-mid) 0 25%, var(--ink) 0 50%) 0 0 / 2px 2px;
-            border-style: solid;
-            border-width: 3px;
+            border: 3px solid;
             border-color: var(--stone-edge) var(--stone-glint) var(--stone-hi) var(--stone-cap);
         }
 
@@ -411,10 +432,10 @@
         @media (max-width: 360px) {
             :root {
                 --pad-size: 146px;
-                --pad-gap: 4px;
                 --key-edge: 5px;
                 --key-depth: 6px;
-                --arrow-depth: 4px;
+                --cross-edge: 4px;
+                --cross-depth: 5px;
             }
             .main-pad-row {
                 max-width: 320px;
@@ -559,22 +580,22 @@
             <div class="main-pad-row">
                 <!-- Left: 8-Directional Tactile D-Pad (Touch & Smooth Glide Pad) -->
                 <div class="dpad-8-grid" id="dpad-grid" aria-label="8-Directional Movement Pad">
-                    <!-- Row 1: Up-Left, Up, Up-Right -->
-                    <button class="dpad-btn btn-mk" data-dir="up-left" aria-label="Jump Up-Left"><span class="dpad-arrow"></span></button>
-                    <button class="dpad-btn btn-mk" data-dir="up" aria-label="Jump Up"><span class="dpad-arrow"></span></button>
-                    <button class="dpad-btn btn-mk" data-dir="up-right" aria-label="Jump Up-Right"><span class="dpad-arrow"></span></button>
+                    <!-- Stone cross: edge cells are the arms, corners are the invisible diagonals -->
+                    <div class="dpad-cross">
+                        <button class="dpad-corner btn-mk" data-dir="up-left" aria-label="Jump Up-Left"></button>
+                        <button class="dpad-arm btn-mk" data-dir="up" aria-label="Jump Up"><span class="dpad-tri"></span></button>
+                        <button class="dpad-corner btn-mk" data-dir="up-right" aria-label="Jump Up-Right"></button>
 
-                    <!-- Row 2: Left, Center Neutral Core, Right -->
-                    <button class="dpad-btn btn-mk" data-dir="left" aria-label="Move Left"><span class="dpad-arrow"></span></button>
-                    <div class="dpad-center-hub" data-dir="center" aria-label="Neutral Center">
-                        <div class="dpad-center-dimple"></div>
+                        <button class="dpad-arm btn-mk" data-dir="left" aria-label="Move Left"><span class="dpad-tri"></span></button>
+                        <div class="dpad-hub" data-dir="center" aria-label="Neutral Center">
+                            <div class="dpad-stud"></div>
+                        </div>
+                        <button class="dpad-arm btn-mk" data-dir="right" aria-label="Move Right"><span class="dpad-tri"></span></button>
+
+                        <button class="dpad-corner btn-mk" data-dir="down-left" aria-label="Crouch Down"></button>
+                        <button class="dpad-arm btn-mk" data-dir="down" aria-label="Crouch Down"><span class="dpad-tri"></span></button>
+                        <button class="dpad-corner btn-mk" data-dir="down-right" aria-label="Crouch Down"></button>
                     </div>
-                    <button class="dpad-btn btn-mk" data-dir="right" aria-label="Move Right"><span class="dpad-arrow"></span></button>
-
-                    <!-- Row 3: Down-Left, Down, Down-Right -->
-                    <button class="dpad-btn btn-mk" data-dir="down-left" aria-label="Crouch Down"><span class="dpad-arrow"></span></button>
-                    <button class="dpad-btn btn-mk" data-dir="down" aria-label="Crouch Down"><span class="dpad-arrow"></span></button>
-                    <button class="dpad-btn btn-mk" data-dir="down-right" aria-label="Crouch Down"><span class="dpad-arrow"></span></button>
                 </div>
 
                 <!-- Right: Combat Action Keypad. A (Punch / Select) is the wide thumb button. -->

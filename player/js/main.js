@@ -379,6 +379,14 @@ function setupInputControls() {
             'down-right': [-2]   // Same function as simple 8 (Down / Crouch)
         };
 
+        // Unit vector per direction: the stone cross rocks toward it (--dx / --dy in play.html)
+        const DIAG = Math.SQRT1_2;
+        const DIR_TILT = {
+            'up': [0, -1], 'down': [0, 1], 'left': [-1, 0], 'right': [1, 0],
+            'up-left': [-DIAG, -DIAG], 'up-right': [DIAG, -DIAG],
+            'down-left': [-DIAG, DIAG], 'down-right': [DIAG, DIAG]
+        };
+
         const joystick = new AdvancedMovementJoystick({
             deadZoneRadius: 16,
             maxRadius: 50,
@@ -399,6 +407,12 @@ function setupInputControls() {
             if (newDir && dpadButtons[newDir]) {
                 dpadButtons[newDir].classList.add('active');
             }
+
+            // The cross lights its arms from data-active (a diagonal lights two) and tilts by --dx / --dy
+            const [tiltX, tiltY] = newDir ? DIR_TILT[newDir] : [0, 0];
+            dpadGrid.dataset.active = newDir || '';
+            dpadGrid.style.setProperty('--dx', tiltX);
+            dpadGrid.style.setProperty('--dy', tiltY);
 
             // Diff previous keys vs new keys -> KeyUp obsolete, KeyDown new
             const newKeys = newDir ? (DIR_KEYS[newDir] || []) : [];
