@@ -846,64 +846,141 @@ function setupCanvas() {
     });
 }
 
-// Bookkeeping for the online fight, null outside one:
-//   resuming        - we reloaded mid-bout and are loading back in
-//   pendingSnapshot - the opponent's view of the fight, applied once our fight is live again
-//   lastHp, frame   - P1 streams health as it changes plus a periodic position/timer sync
-//   rounds          - engine round wins [P1, P2] already reported to the server
+// Online fights run in lockstep. Both phones step the same engine on a fixed 60 ticks/s clock and apply
+// both players' key mask changes on the same tick, `delay` ticks after they happen (the delay hides the
+// network trip). With identical inputs, RNG seed and clock the two simulations stay identical, so nothing
+// is ever corrected or synced back. A tick whose opponent input hasn't arrived yet waits for it.
+const LOCKSTEP_TICK_MS = 1000 / 60;
+
+// The current online fight, null outside one:
+//   setup          - versus info both phones build the fight from (heroes, stage, control types, seed)
+//   segment        - bumped when both phones restart the bout after a reconnect; older inputs are ignored
+//   tick, delay    - next tick to simulate, and our input delay in ticks
+//   local, remote  - tick -> [pressedBits, releasedBits] for us and the opponent
+//   pending        - our key mask changes captured during the tick being simulated
+//   acc, last      - real time banked towards the next tick
+//   rounds         - engine round wins [P1, P2] already reported to the server
 let onlineBout = null;
+// Set while we rejoin a bout: the versus info and the opponent's restart snapshot, whichever arrives first
+let onlineResume = null;
 
-function boutSnapshot() {
-    const fighterB = CoreEngine.val_coreengine_b;
-    const fighterC = CoreEngine.val_coreengine_c;
-    if (!fighterB || !fighterC || CoreEngine.val_int_dN !== 2) return {};
-    return {
-        p1_hp: fighterB.currentHealth,
-        p2_hp: fighterC.currentHealth,
-        p1_x: fighterB.exec_a_to_int(),
-        p2_x: fighterC.exec_a_to_int(),
-        round_timer: CoreEngine.val_int_dS
+function startOnlineSegment(setup, segment, resume) {
+    // Our inputs must reach the opponent before they simulate the tick: one-way trip to them, plus two ticks
+    // for frame timing on both ends. Before a measurement exists, relayed inputs cross the server twice.
+    const peerRtt = mpClient.peerRtt ?? (mpClient.rtt ? mpClient.rtt * 2 : 200);
+    const delay = Math.min(15, Math.max(3, Math.ceil(peerRtt / 2 / LOCKSTEP_TICK_MS) + 2));
+    onlineBout = {
+        setup, segment, tick: 0, delay,
+        local: new Map(), remote: new Map(), pending: [0, 0],
+        acc: 0, last: performance.now(), lastTickAt: performance.now(),
+        rounds: resume ? resume.rounds.slice() : [0, 0]
     };
+    for (let t = 0; t < delay; t++) {
+        onlineBout.local.set(t, [0, 0]);
+        mpClient.sendLockstepInput(segment, t, 0, 0);
+    }
+    mpClient.selfOffline = false;
+    console.log(`[Multiplayer] Lockstep segment ${segment}: input delay ${delay} ticks (opponent round trip ${Math.round(peerRtt)}ms)`);
+
+    // Start from the same engine state on both phones: same seed, first frame delta, round-intro timer
+    // offset (left over from the select screen), no keys held, and no fight phase or clock left over from
+    // an interrupted bout (a reloaded phone starts with none)
+    CoreEngine.val_bool_am = false;
+    CoreEngine.globalRandom.setSeed(setup.seed + segment);
+    CoreEngine.val_long_a = 0;
+    CoreEngine.val_int_aA = 0;
+    CoreEngine.val_int_dN = CoreEngine.val_int_dL = CoreEngine.val_int_dM = 0;
+    CoreEngine.val_int_dO = CoreEngine.val_int_dP = CoreEngine.val_int_dS = 0;
+    CoreEngine.val_int_dF = CoreEngine.val_int_dG = CoreEngine.val_int_dH = 0;
+    CoreEngine.val_int_dI = CoreEngine.val_int_dJ = CoreEngine.val_int_dK = 0;
+    CoreEngine.onlineVersus = {
+        p2Masks: { dI: 0, dJ: 0, dK: 0, dF: 0, dG: 0, dH: 0 },
+        routeLocalBits: (bits, isDown) => {
+            onlineBout.pending[isDown ? 0 : 1] |= bits;
+        },
+        stage: setup.stage,
+        controlTypes: setup.controlTypes,
+        resume
+    };
+
+    // Native versus: a one-rung tower with P2 as the next opponent shows both fighters, then the engine
+    // loads the arcade fight for P1 (left) vs P2 (right). Mirror matches need nothing extra: the engine
+    // skins fighter C from val_arr_int_aT when both heroes are the same.
+    const VERSUS_HEADER_TEXT = 24; // "FIGHT!" in the engine's text table (towers use NOVICE/WARRIOR/MASTER)
+    const rung = [VERSUS_HEADER_TEXT, setup.p2Hero];
+    CoreEngine.val_arr_arr_int_d = [rung, rung.slice(), rung.slice()];
+    CoreEngine.val_int_cy = setup.p1Hero;
+    CoreEngine.val_int_cz = 0;
+    CoreEngine.val_int_cA = 0;
+    CoreEngine.exec_u_int_to_void(4);
 }
 
-function applyBoutSnapshot(snapshot) {
+// Restart point for both phones after a reconnect: the round score, plus health and clock if mid-round
+function boutRestartState() {
     const fighterB = CoreEngine.val_coreengine_b;
     const fighterC = CoreEngine.val_coreengine_c;
-    if (snapshot.p1_hp === undefined || !fighterB || !fighterC) return;
-    fighterB.currentHealth = snapshot.p1_hp;
-    fighterC.currentHealth = snapshot.p2_hp;
-    fighterB.setActorPosition(snapshot.p1_x, 0);
-    fighterC.setActorPosition(snapshot.p2_x, 0);
-    CoreEngine.val_int_dS = snapshot.round_timer;
+    const resume = { rounds: [CoreEngine.val_int_dU, CoreEngine.val_int_dV], health: null, timer: 0 };
+    if (CoreEngine.val_int_dN !== 2 || !fighterB || !fighterC) {
+        resume.rounds = onlineBout ? onlineBout.rounds.slice() : [0, 0];
+    } else if (fighterB.currentHealth > 0 && fighterC.currentHealth > 0) {
+        // A finished round restarts as the next one rather than replaying a knockout
+        resume.health = [fighterB.currentHealth, fighterC.currentHealth];
+        resume.timer = CoreEngine.val_int_dS;
+    }
+    return resume;
 }
 
-// Runs after each engine frame of an online bout. The native arcade flow handles rounds, the timer and
-// KOs on both phones; P1's phone is the authority that streams health and reports scored rounds.
-function stepOnlineBout() {
-    const fighterB = CoreEngine.val_coreengine_b;
-    const fighterC = CoreEngine.val_coreengine_c;
-    if (!fighterB || !fighterC || CoreEngine.val_int_dN !== 2) return;
+function resumeOnlineBout() {
+    if (!onlineResume || !onlineResume.setup || !onlineResume.snapshot) return;
+    const { setup, snapshot } = onlineResume;
+    onlineResume = null;
+    startOnlineSegment(setup, snapshot.segment, snapshot.resume);
+}
 
-    // Back in after a reload: once our round intro is over, take the opponent's view of the fight
-    // and let them unfreeze
-    if (onlineBout.resuming && CoreEngine.val_int_dL === 2 && onlineBout.pendingSnapshot) {
-        onlineBout.resuming = false;
-        applyBoutSnapshot(onlineBout.pendingSnapshot);
-        onlineBout.lastHp = [fighterB.currentHealth, fighterC.currentHealth];
-        mpClient.sendBoutReady();
+function applyTickInput(side, input) {
+    if (input[0]) CoreEngine.applyInputBits(side, input[0], true);
+    if (input[1]) CoreEngine.applyInputBits(side, input[1], false);
+}
+
+// Advances the online fight by as many ticks as real time allows and both players' inputs are in for
+function runOnlineBout(now) {
+    const bout = onlineBout;
+    // Never bank more than a few ticks, so a hitch doesn't fast-forward the fight afterwards
+    bout.acc = Math.min(bout.acc + (now - bout.last), LOCKSTEP_TICK_MS * 4);
+    bout.last = now;
+    // Once the server has decided the match, the end animation plays out without waiting on inputs
+    const decided = mpClient.status === "COMPLETED";
+    const localSide = mpClient.role === 'p1' ? 0 : 1;
+
+    while (bout.acc >= LOCKSTEP_TICK_MS) {
+        const local = bout.local.get(bout.tick);
+        const remote = bout.remote.get(bout.tick);
+        if (!decided) {
+            if (!local || !remote) break; // the opponent's input for this tick is still on its way
+            applyTickInput(localSide, local);
+            applyTickInput(1 - localSide, remote);
+            bout.local.delete(bout.tick);
+            bout.remote.delete(bout.tick);
+        }
+
+        midlet.stepFrame(1000 + Math.floor(bout.tick * 1000 / 60));
+
+        if (!decided) {
+            const target = bout.tick + bout.delay;
+            bout.local.set(target, bout.pending);
+            mpClient.sendLockstepInput(bout.segment, target, bout.pending[0], bout.pending[1]);
+        }
+        bout.pending = [0, 0];
+        bout.tick++;
+        bout.acc -= LOCKSTEP_TICK_MS;
+        bout.lastTickAt = now;
+        reportScoredRounds();
     }
+}
 
-    if (mpClient.role !== "p1") return;
-
-    const p1Hp = fighterB.currentHealth;
-    const p2Hp = fighterC.currentHealth;
-    onlineBout.frame++;
-    if (p1Hp !== onlineBout.lastHp[0] || p2Hp !== onlineBout.lastHp[1] || onlineBout.frame % 30 === 0) {
-        onlineBout.lastHp = [p1Hp, p2Hp];
-        mpClient.sendSync(p1Hp, p2Hp, fighterB.exec_a_to_int(), fighterC.exec_a_to_int(), CoreEngine.val_int_dS);
-    }
-
-    // Report each round as the engine scores it; a time-out on equal health scores both
+// Both simulations score the same rounds; P1's phone reports them (a time-out on equal health scores both)
+function reportScoredRounds() {
+    if (mpClient.role !== "p1" || CoreEngine.val_int_dN !== 2) return;
     const roundsB = CoreEngine.val_int_dU;
     const roundsC = CoreEngine.val_int_dV;
     const wonB = roundsB > onlineBout.rounds[0];
@@ -918,8 +995,15 @@ function startAnimationLoop() {
     function loop() {
         if (midlet && !midlet.isExitRequested) {
             try {
-                // A frozen online bout keeps its last frame on screen; the banner below says why
-                if (!(mpClient && mpClient.isMultiplayer && mpClient.paused)) {
+                const now = performance.now();
+                if (mpClient && mpClient.isMultiplayer && onlineBout && mpClient.status !== "HERO_SELECT") {
+                    // A frozen bout keeps its last frame on screen; the banner below says why
+                    if (mpClient.paused) {
+                        onlineBout.last = now;
+                    } else {
+                        runOnlineBout(now);
+                    }
+                } else {
                     midlet.stepFrame();
                 }
 
@@ -944,13 +1028,11 @@ function startAnimationLoop() {
                         CoreEngine.val_bool_X = false;
                     }
 
-                    // 2. Active Combat Phase
-                    if (mpClient.status === "ACTIVE" && onlineBout && !mpClient.paused) {
-                        stepOnlineBout();
+                    // 2. Status banner (hero locked, opponent dropped, result) drawn over the native frame
+                    let bannerText = mpClient.bannerText();
+                    if (!bannerText && mpClient.status === "ACTIVE" && onlineBout && now - (onlineBout.lastTickAt || now) > 500) {
+                        bannerText = "WAITING FOR OPPONENT...";
                     }
-
-                    // 3. Status banner (hero locked, opponent dropped, result) drawn over the native frame
-                    const bannerText = mpClient.bannerText();
                     if (bannerText && canvas && ctx) {
                         ctx.save();
                         const bH = 34;
@@ -1040,6 +1122,7 @@ async function bootstrap() {
             mpClient.status = "HERO_SELECT";
             CoreEngine.onlineVersus = null;
             onlineBout = null;
+            onlineResume = null;
             if (!mpClient._heroSelected && CoreEngine.val_int_cw !== 1) {
                 CoreEngine.setGameState(11);
                 CoreEngine.exec_u_int_to_void(1);
@@ -1047,90 +1130,45 @@ async function bootstrap() {
         };
 
         mpClient.onVersusStartCallback = (p1Hero, p2Hero, data) => {
-            if (mpClient._boutLive) {
-                // Rejoined after a socket blip: our fight kept its state, so the opponent can unfreeze now
-                mpClient.sendBoutReady();
+            const setup = {
+                p1Hero,
+                p2Hero,
+                stage: data.stage ?? 0,
+                seed: data.seed ?? 1,
+                controlTypes: [data.p1.control === 0 ? 0 : 1, data.p2.control === 0 ? 0 : 1]
+            };
+            console.log(`[Multiplayer] Versus: P1=${p1Hero}, P2=${p2Hero}, stage=${setup.stage}, resume=${!!data.resume}`);
+            mpClient._boutLive = true;
+            if (!data.resume) {
+                startOnlineSegment(setup, 0, null);
                 return;
             }
-            console.log(`[Multiplayer] Versus: P1=${p1Hero}, P2=${p2Hero}, stage=${data.stage}, resume=${!!data.resume}`);
-            mpClient._boutLive = true;
-            const localSide = (mpClient.role === 'p1') ? 0 : 1;
-            const resumeRounds = data.resume ? [data.p1_rounds || 0, data.p2_rounds || 0] : null;
-            onlineBout = {
-                resuming: !!data.resume,
-                pendingSnapshot: null,
-                lastHp: [100, 100],
-                frame: 0,
-                rounds: resumeRounds || [0, 0]
-            };
-
-            // Arcade rules with fighter C as the remote human (see CoreEngine.onlineVersus)
-            CoreEngine.val_bool_am = false;
-            CoreEngine.onlineVersus = {
-                p2Masks: { dI: 0, dJ: 0, dK: 0, dF: 0, dG: 0, dH: 0 },
-                routeLocalBits: (bits, isDown) => {
-                    CoreEngine.applyInputBits(localSide, bits, isDown);
-                    mpClient.sendInput(bits, isDown);
-                },
-                healthFromPeer: localSide === 1,
-                stage: data.stage ?? 0,
-                controlTypes: [data.p1.control === 0 ? 0 : 1, data.p2.control === 0 ? 0 : 1],
-                resumeRounds
-            };
-
-            // Native versus: a one-rung tower with P2 as the next opponent shows both fighters, then the engine
-            // loads the arcade fight for P1 (left) vs P2 (right). Mirror matches need nothing extra: the engine
-            // skins fighter C from val_arr_int_aT when both heroes are the same.
-            const VERSUS_HEADER_TEXT = 24; // "FIGHT!" in the engine's text table (towers use NOVICE/WARRIOR/MASTER)
-            const rung = [VERSUS_HEADER_TEXT, p2Hero];
-            CoreEngine.val_arr_arr_int_d = [rung, rung.slice(), rung.slice()];
-            CoreEngine.val_int_cy = p1Hero;
-            CoreEngine.val_int_cz = 0;
-            CoreEngine.val_int_cA = 0;
-            CoreEngine.exec_u_int_to_void(4);
+            // Rejoining: both phones restart from the opponent's snapshot, which may arrive before or after this
+            onlineResume = { ...onlineResume, setup };
+            resumeOnlineBout();
         };
 
-        // The opponent's key mask changes drive their fighter on our phone: P1 is fighter B, P2 is fighter C
-        mpClient.onPeerInputCallback = (bits, isDown) => {
-            if (!CoreEngine.onlineVersus) return;
-            CoreEngine.applyInputBits(mpClient.role === 'p1' ? 1 : 0, bits, isDown);
+        // The opponent's input for one tick; both paths deliver it, so keep the first copy
+        mpClient.onPeerInputCallback = (segment, tick, pressed, released) => {
+            if (!onlineBout || segment !== (onlineBout.segment & 0xFF)) return; // from before a restart
+            if (tick < onlineBout.tick || onlineBout.remote.has(tick)) return;
+            onlineBout.remote.set(tick, [pressed, released]);
+            if (!mpClient.opponentDropDeadline) {
+                mpClient.waitingForPeer = false;
+            }
         };
 
+        // The opponent rejoined: restart the bout on both phones from our state
         mpClient.onPeerRejoinedCallback = () => {
-            mpClient.sendSnapshot(boutSnapshot());
+            if (!onlineBout) return;
+            const snapshot = { segment: onlineBout.segment + 1, resume: boutRestartState() };
+            mpClient.sendSnapshot(snapshot);
+            startOnlineSegment(onlineBout.setup, snapshot.segment, snapshot.resume);
         };
 
         mpClient.onPeerSnapshotCallback = (data) => {
-            if (onlineBout && onlineBout.resuming) {
-                onlineBout.pendingSnapshot = data;
-            }
-        };
-
-        mpClient.onPeerSyncCallback = (data) => {
-            // P2 receives authoritative sync corrections from P1
-            if (mpClient.role === 'p2' && CoreEngine.val_coreengine_b && CoreEngine.val_coreengine_c) {
-                if (data.p1_hp !== undefined && data.p1_hp >= 0) {
-                    CoreEngine.val_coreengine_b.currentHealth = data.p1_hp;
-                }
-                if (data.p2_hp !== undefined && data.p2_hp >= 0) {
-                    CoreEngine.val_coreengine_c.currentHealth = data.p2_hp;
-                }
-                if (data.round_timer !== undefined && data.round_timer >= 0) {
-                    CoreEngine.val_int_dS = data.round_timer;
-                }
-                if (data.p1_x !== undefined && typeof CoreEngine.val_coreengine_b.exec_a_to_int === 'function') {
-                    const curX = CoreEngine.val_coreengine_b.exec_a_to_int();
-                    if (Math.abs(curX - data.p1_x) > 16) {
-                        CoreEngine.val_coreengine_b.setActorPosition(data.p1_x, 0);
-                    }
-                }
-                if (data.p2_x !== undefined && typeof CoreEngine.val_coreengine_c.exec_a_to_int === 'function') {
-                    const curX = CoreEngine.val_coreengine_c.exec_a_to_int();
-                    if (Math.abs(curX - data.p2_x) > 16) {
-                        CoreEngine.val_coreengine_c.setActorPosition(data.p2_x, 0);
-                    }
-                }
-            }
+            onlineResume = { ...onlineResume, snapshot: { segment: data.segment, resume: data.resume } };
+            resumeOnlineBout();
         };
 
         mpClient.initUI();

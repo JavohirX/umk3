@@ -110,15 +110,35 @@ export const StringBuilder = StringBuffer;
 
 // --- Random Class ---
 
+// java.util.Random's 48-bit LCG: a seed yields the same sequence on every device, which online
+// lockstep fights rely on to keep both phones' simulations identical
+const RANDOM_MULTIPLIER = 0x5DEECE66Dn;
+const RANDOM_MASK = (1n << 48n) - 1n;
+
 export class Random {
     constructor(seed = Date.now()) {
-        this.seed = seed;
+        this.setSeed(seed);
+    }
+    setSeed(seed) {
+        this.seed = (BigInt(Math.trunc(seed)) ^ RANDOM_MULTIPLIER) & RANDOM_MASK;
+    }
+    next(bits) {
+        this.seed = (this.seed * RANDOM_MULTIPLIER + 0xBn) & RANDOM_MASK;
+        return Number(BigInt.asIntN(32, this.seed >> BigInt(48 - bits)));
     }
     nextInt(bound = undefined) {
         if (bound === undefined) {
-            return (Math.random() * 2147483647) | 0;
+            return this.next(32);
         }
-        return Math.floor(Math.random() * bound);
+        if ((bound & -bound) === bound) {
+            return Number((BigInt(bound) * BigInt(this.next(31))) >> 31n);
+        }
+        let bits, val;
+        do {
+            bits = this.next(31);
+            val = bits % bound;
+        } while (((bits - val + (bound - 1)) | 0) < 0);
+        return val;
     }
 }
 

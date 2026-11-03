@@ -51,6 +51,7 @@ class MatchRoom:
         self.p1_rounds: int = 0
         self.p2_rounds: int = 0
         self.stage: Optional[int] = None  # Arena index 0-4, shared so both phones load the same one
+        self.seed: Optional[int] = None  # Engine RNG seed, shared so both lockstep simulations roll the same numbers
         self.hero_select_started = False
 
     def is_expired(self) -> bool:
@@ -64,6 +65,7 @@ class MatchRoom:
             "p2": {"id": self.p2_id or self.opponent_id, "name": self.p2_name or self.opponent_name,
                    "hero_id": self.p2_hero, "control": self.p2_control},
             "stage": self.stage,
+            "seed": self.seed,
             "p1_rounds": self.p1_rounds,
             "p2_rounds": self.p2_rounds,
             "countdown": 3,
@@ -467,6 +469,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         if room.p1_hero is not None and room.p2_hero is not None:
                             # Native 2P versus picks a random arena 0-4; choosing it here keeps both phones identical
                             room.stage = random.randint(0, 4)
+                            room.seed = random.randint(1, 2**31 - 1)
                             logging.info(f"[{match_id}] Both heroes locked! Initiating match on stage {room.stage}.")
                             await room.broadcast(room.versus_payload())
 
@@ -602,6 +605,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         room.p1_hero = None
                         room.p2_hero = None
                         room.stage = None
+                        room.seed = None
                         room.p1_rounds = 0
                         room.p2_rounds = 0
                         await room.broadcast({
@@ -631,9 +635,9 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                         }, exclude_id=current_player_id)
 
                 # -------------------------------------------------------------
-                # 8. MID-BOUT RESUME (fighter state handed to a rejoining player, then unpause)
+                # 8. MID-BOUT RESUME (the state both phones restart the bout from)
                 # -------------------------------------------------------------
-                elif msg_type in ("state_snapshot", "bout_ready"):
+                elif msg_type == "state_snapshot":
                     if room and room.status == "ACTIVE":
                         relay = dict(data)
                         relay["from_role"] = "p1" if current_player_id == (room.p1_id or room.creator_id) else "p2"

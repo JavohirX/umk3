@@ -16,15 +16,13 @@ export class MultiplayerClient {
         this.status = "DISCONNECTED"; // HERO_SELECT, ACTIVE, COMPLETED, CANCELLED
         this.opponent = null;
         this.creator = null;
-        this.inputSeq = 0;
-        this.onPeerInputCallback = null;
+        this.onPeerInputCallback = null; // (segment, tick, pressedBits, releasedBits) per lockstep tick
         this.onMatchStartCallback = null;
         this.onHeroSelectStartCallback = null;
         this.onPeerHeroLockCallback = null;
         this.onVersusStartCallback = null;
         this.onRoundNextCallback = null;
         this.onMatchEndedCallback = null;
-        this.onPeerSyncCallback = null;
         this.onPeerRejoinedCallback = null;
         this.onPeerSnapshotCallback = null;
         this.isMultiplayer = false;
@@ -43,6 +41,10 @@ export class MultiplayerClient {
         this.isP2PActive = false;
         this.pingInterval = null;
         this.rtt = 0;
+        this.peerPingInterval = null;
+        this.peerPingId = 0;
+        this.peerPingSentAt = new Map();
+        this.peerRttSamples = [];
         this.outgoingQueue = [];
 
         this.parseEnvironment();
@@ -200,6 +202,8 @@ export class MultiplayerClient {
                 }
             }
 
+            this.startPeerPing();
+
             // Start latency monitoring ping every 5 seconds
             clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
@@ -265,28 +269,58 @@ export class MultiplayerClient {
         const view = new DataView(buffer);
         const packetType = view.getUint8(0);
 
-        if (packetType === 3 && buffer.byteLength >= 8) { // 0x03: PACKET_INPUT_BITS
-            const isDown = view.getUint8(1) === 1;
-            const bits = view.getUint32(4);
+        if (packetType === 4 && buffer.byteLength >= 16) { // 0x04: PACKET_LOCKSTEP_INPUT
             if (typeof this.onPeerInputCallback === 'function') {
-                this.onPeerInputCallback(bits, isDown);
+                this.onPeerInputCallback(view.getUint8(1), view.getUint32(4), view.getUint32(8), view.getUint32(12));
             }
-        } else if (packetType === 2 && buffer.byteLength >= 11) { // 0x02: PACKET_SYNC
-            const p1Hp = view.getUint8(1);
-            const p2Hp = view.getUint8(2);
-            const p1X = view.getInt16(3);
-            const p2X = view.getInt16(5);
-            const roundTimer = view.getInt32(7);
-            if (typeof this.onPeerSyncCallback === 'function') {
-                this.onPeerSyncCallback({
-                    p1_hp: p1Hp,
-                    p2_hp: p2Hp,
-                    p1_x: p1X,
-                    p2_x: p2X,
-                    round_timer: roundTimer
-                });
+        } else if (packetType === 5) { // 0x05: PEER_PING -> echo it straight back
+            view.setUint8(0, 6);
+            this.sendBinaryBothPaths(buffer);
+        } else if (packetType === 6) { // 0x06: PEER_PONG
+            const sentAt = this.peerPingSentAt.get(view.getUint8(1));
+            if (sentAt !== undefined) {
+                this.peerPingSentAt.delete(view.getUint8(1)); // the copy on the slower path is ignored
+                this.peerRttSamples.push(performance.now() - sentAt);
+                if (this.peerRttSamples.length > 10) this.peerRttSamples.shift();
             }
         }
+    }
+
+    sendBinaryBothPaths(buffer) {
+        if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
+            try {
+                this.dataChannel.send(buffer);
+            } catch (_) {
+                this.isP2PActive = false;
+            }
+        }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                this.ws.send(buffer);
+            } catch (_) {}
+        }
+    }
+
+    // Round trip to the opponent over the same paths lockstep inputs take (fastest of direct and relay).
+    // The ping to the server says nothing about this: relayed inputs cross the server twice.
+    startPeerPing() {
+        clearInterval(this.peerPingInterval);
+        this.peerPingInterval = setInterval(() => {
+            if (this.status !== "HERO_SELECT" && this.status !== "ACTIVE") return;
+            this.peerPingId = (this.peerPingId + 1) & 0xFF;
+            this.peerPingSentAt.set(this.peerPingId, performance.now());
+            const buffer = new ArrayBuffer(4);
+            new DataView(buffer).setUint8(0, 5);
+            new DataView(buffer).setUint8(1, this.peerPingId);
+            this.sendBinaryBothPaths(buffer);
+        }, 500);
+    }
+
+    // A high percentile of recent samples, so occasional jitter doesn't stall the fight; null until measured
+    get peerRtt() {
+        if (this.peerRttSamples.length < 3) return null;
+        const sorted = this.peerRttSamples.slice().sort((x, y) => x - y);
+        return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.8))];
     }
 
     // =========================================================================
@@ -407,64 +441,21 @@ export class MultiplayerClient {
         }
     }
 
-    // Streams the engine's keypad mask change (not the raw key) so the peer feeds it straight to our fighter
-    sendInput(bits, isDown) {
+    // Our input for one lockstep tick: the key mask bits pressed and released during it.
+    // 16-byte binary payload: [0x04, segment, 0, 0, tick (uint32), pressed (uint32), released (uint32)]
+    sendLockstepInput(segment, tick, pressed, released) {
         if (!this.isMultiplayer || this.status !== "ACTIVE") return;
-        this.inputSeq = (this.inputSeq + 1) & 0xFF;
-
-        // 8-byte binary payload: [0x03, isDown, seq, 0, bits (uint32)]
-        const buffer = new ArrayBuffer(8);
+        const buffer = new ArrayBuffer(16);
         const view = new DataView(buffer);
-        view.setUint8(0, 3);
-        view.setUint8(1, isDown ? 1 : 0);
-        view.setUint8(2, this.inputSeq);
-        view.setUint32(4, bits >>> 0);
+        view.setUint8(0, 4);
+        view.setUint8(1, segment & 0xFF);
+        view.setUint32(4, tick);
+        view.setUint32(8, pressed >>> 0);
+        view.setUint32(12, released >>> 0);
 
-        // 1. Direct WebRTC P2P DataChannel (0ms server bounce, UDP transport)
-        if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
-            try {
-                this.dataChannel.send(buffer);
-                return;
-            } catch (_) {
-                this.isP2PActive = false;
-            }
-        }
-
-        // 2. Binary WebSocket relay (TCP_NODELAY enabled). While disconnected, presses are
-        // dropped rather than queued so a reconnect does not replay stale inputs to the peer.
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            try {
-                this.ws.send(buffer);
-            } catch (_) {}
-        }
-    }
-
-    sendSync(p1Hp, p2Hp, p1X, p2X, roundTimer) {
-        if (!this.isMultiplayer || this.status !== "ACTIVE") return;
-
-        const buffer = new ArrayBuffer(11);
-        const view = new DataView(buffer);
-        view.setUint8(0, 2); // 0x02: PACKET_SYNC
-        view.setUint8(1, Math.max(0, Math.min(100, Math.round(p1Hp || 0))));
-        view.setUint8(2, Math.max(0, Math.min(100, Math.round(p2Hp || 0))));
-        view.setInt16(3, Math.round(p1X || 0));
-        view.setInt16(5, Math.round(p2X || 0));
-        view.setInt32(7, Math.round(roundTimer || 0));
-
-        if (this.isP2PActive && this.dataChannel && this.dataChannel.readyState === "open") {
-            try {
-                this.dataChannel.send(buffer);
-                return;
-            } catch (_) {
-                this.isP2PActive = false;
-            }
-        }
-
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            try {
-                this.ws.send(buffer);
-            } catch (_) {}
-        }
+        // Sent on both paths: the peer keeps the first copy of each tick, and the relay still delivers if the
+        // direct channel dies silently. A tick that never arrives would freeze both phones.
+        this.sendBinaryBothPaths(buffer);
     }
 
     // controlType is the engine's val_int_bw, so both phones give our fighter the same key layout
@@ -477,15 +468,9 @@ export class MultiplayerClient {
         this.sendPacket({ type: "round_win", winner_role: winnerRole });
     }
 
-    // Fighter state for an opponent who reloaded mid-bout and is loading back in
+    // Where both phones restart the bout from after the opponent reconnects
     sendSnapshot(snapshot) {
         this.sendPacket({ type: "state_snapshot", ...snapshot });
-    }
-
-    // Our side of the bout is live again; the opponent can unfreeze
-    sendBoutReady() {
-        this.selfOffline = false;
-        this.sendPacket({ type: "bout_ready" });
     }
 
     handlePacket(data) {
@@ -570,18 +555,6 @@ export class MultiplayerClient {
                 }
                 break;
 
-            case "peer_input":
-                if (typeof this.onPeerInputCallback === 'function') {
-                    this.onPeerInputCallback(data.key, data.down);
-                }
-                break;
-
-            case "peer_sync":
-                if (typeof this.onPeerSyncCallback === 'function') {
-                    this.onPeerSyncCallback(data);
-                }
-                break;
-
             case "rtc_signal":
                 this.handleRtcSignal(data.signal);
                 break;
@@ -612,7 +585,7 @@ export class MultiplayerClient {
                 if (this.role === "p1") {
                     this.initWebRTC(true);
                 }
-                // Stay frozen until they send bout_ready; hand them our view of the fight in case they reloaded
+                // Both phones restart the bout from our state; we stay frozen until their inputs arrive
                 if (this._boutLive && typeof this.onPeerRejoinedCallback === 'function') {
                     this.onPeerRejoinedCallback(data);
                 }
@@ -622,10 +595,6 @@ export class MultiplayerClient {
                 if (typeof this.onPeerSnapshotCallback === 'function') {
                     this.onPeerSnapshotCallback(data);
                 }
-                break;
-
-            case "bout_ready":
-                this.waitingForPeer = false;
                 break;
 
             case "match_ended":

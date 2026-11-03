@@ -509,6 +509,9 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         self.assertEqual(vs1["type"], "versus_start")
         self.assertIn(vs1["stage"], range(5))
         self.assertEqual(vs1["stage"], vs2["stage"])
+        # Lockstep: both simulations must roll the same random numbers
+        self.assertIsInstance(vs1["seed"], int)
+        self.assertEqual(vs1["seed"], vs2["seed"])
 
         await ws1.close()
         await ws2.close()
@@ -552,14 +555,13 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         await ws1.send_json({"type": "ping", "time": 1})
         self.assertEqual((await ws1.receive_json())["type"], "pong")
 
-        # The stayer hands over its view of the fight; the rejoiner says when it is fighting again
-        await ws1.send_json({"type": "state_snapshot", "p1_hp": 55, "p2_hp": 30, "round_timer": 61000})
+        # The stayer hands over the state both phones restart the bout from
+        restart = {"rounds": [1, 0], "health": [55, 30], "timer": 61000}
+        await ws1.send_json({"type": "state_snapshot", "segment": 1, "resume": restart})
         snapshot = await ws2_new.receive_json()
         self.assertEqual(snapshot["type"], "state_snapshot")
-        self.assertEqual((snapshot["p1_hp"], snapshot["p2_hp"], snapshot["round_timer"]), (55, 30, 61000))
+        self.assertEqual((snapshot["segment"], snapshot["resume"]), (1, restart))
         self.assertEqual(snapshot["from_role"], "p2")
-        await ws2_new.send_json({"type": "bout_ready"})
-        self.assertEqual((await ws1.receive_json())["type"], "bout_ready")
 
         await ws2_new.close()
         await ws1.close()

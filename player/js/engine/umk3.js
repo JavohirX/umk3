@@ -4463,8 +4463,8 @@ export class CoreEngine {
     // Online versus, null offline. While set, fighter C is a second human instead of the CPU:
     //   p2Masks        - C's keypad masks, latched each frame like dI/dJ/dK -> dF/dG/dH
     //   routeLocalBits - (bits, isDown) receives this phone's keypad mask changes instead of P1's masks
-    //   healthFromPeer - true on the follower phone: damage comes only from the authority's sync
-    //   stage, controlTypes [p1, p2] (val_int_bw values), resumeRounds [p1, p2] or null
+    //   stage, controlTypes [p1, p2] (val_int_bw values)
+    //   resume         - null, or {rounds: [p1, p2], health: [p1, p2] or null, timer} to continue a bout from
     static onlineVersus = null;
     static val_bool_an = false;
     static val_bool_ao = false;
@@ -7227,10 +7227,6 @@ export class CoreEngine {
         return false;
     }
     exec_s_int_to_void(var1) {
-        // The follower phone shows hits but takes health only from the authority's sync, so both phones agree on KOs
-        if (CoreEngine.onlineVersus && CoreEngine.onlineVersus.healthFromPeer) {
-            return;
-        }
         if (((CoreEngine.exec_b_coreengine_to_coreengine(this)) === (null) || (CoreEngine.exec_b_coreengine_to_coreengine(this).currentHealth > 0))) {
             if ((this.characterId) === (6)) {
                 (var1 = Math.trunc(var1 / (2)));
@@ -16344,10 +16340,11 @@ export class CoreEngine {
                 (CoreEngine.val_int_dU = 0);
                 (CoreEngine.val_int_dV = 0);
                 (CoreEngine.val_int_dT = 0);
-                // Rejoining an online bout: continue from the server's round score ("ROUND n" counts on from it)
-                if (CoreEngine.onlineVersus && CoreEngine.onlineVersus.resumeRounds) {
-                    (CoreEngine.val_int_dU = CoreEngine.onlineVersus.resumeRounds[0]);
-                    (CoreEngine.val_int_dV = CoreEngine.onlineVersus.resumeRounds[1]);
+                // Resuming an online bout after a reconnect: continue its round score ("ROUND n" counts on from it)
+                let resume = CoreEngine.onlineVersus && CoreEngine.onlineVersus.resume;
+                if (resume) {
+                    (CoreEngine.val_int_dU = resume.rounds[0]);
+                    (CoreEngine.val_int_dV = resume.rounds[1]);
                     (CoreEngine.val_int_dT = (CoreEngine.val_int_dU + CoreEngine.val_int_dV));
                 }
                 if (CoreEngine.val_bool_am) {
@@ -16355,6 +16352,12 @@ export class CoreEngine {
                 }
                 CoreEngine.exec_K_int_to_void(0);
                 CoreEngine.drawTextLabel(0);
+                // ...and the interrupted round's health and clock, which the round intro just reset
+                if (resume && resume.health) {
+                    (CoreEngine.val_coreengine_b.currentHealth = resume.health[0]);
+                    (CoreEngine.val_coreengine_c.currentHealth = resume.health[1]);
+                    (CoreEngine.val_int_dS = resume.timer);
+                }
                 (CoreEngine.val_byte_s = 6);
                 (CoreEngine.val_byte_t = 5);
         }
@@ -18379,7 +18382,8 @@ export class GameMidletLoop extends MIDlet {
     run() {
         this.initLoop();
     }
-    stepFrame() {
+    // simTime (ms, optional) drives game logic from the online lockstep clock instead of the wall clock
+    stepFrame(simTime) {
         if (this.isExitRequested) {
             return;
         }
@@ -18532,7 +18536,7 @@ export class GameMidletLoop extends MIDlet {
             let var24 = rootState.inputManager;
             let var26 = 0;
             (rootState.lastUpdateTimestamp = (var26 = Date.now()));
-            rootState.flowController.updateFlow((var26 - rootState.gameTimer));
+            rootState.flowController.updateFlow(simTime !== undefined ? simTime : (var26 - rootState.gameTimer));
             (rootState.isScenePaused = true);
             if ((var24.activeKeyBitmask > 0)) {
                 var24.activeKeyBitmask--;
