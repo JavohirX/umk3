@@ -18382,8 +18382,9 @@ export class GameMidletLoop extends MIDlet {
     run() {
         this.initLoop();
     }
-    // simTime (ms, optional) drives game logic from the online lockstep clock instead of the wall clock
-    stepFrame(simTime) {
+    // simTime (ms, optional) drives game logic from the online lockstep clock instead of the wall clock;
+    // skipPaint runs the update without drawing (lockstep catch-up ticks that the next tick will redraw)
+    stepFrame(simTime, skipPaint) {
         if (this.isExitRequested) {
             return;
         }
@@ -18555,7 +18556,7 @@ export class GameMidletLoop extends MIDlet {
             (CoreEngine.isGlobalPaused = true);
             (CoreEngine.val_globalcontext_a.currentScene.isScenePaused = true);
         }
-        if ((CoreEngine.isGlobalPaused && CoreEngine.val_globalcontext_a.currentScene.isScenePaused)) {
+        if (!skipPaint && (CoreEngine.isGlobalPaused && CoreEngine.val_globalcontext_a.currentScene.isScenePaused)) {
             CoreEngine.val_maincanvasbridge_a.repaint();
             try {
                 CoreEngine.val_maincanvasbridge_a.serviceRepaints();

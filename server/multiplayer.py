@@ -12,6 +12,7 @@ import random
 import socket
 import time
 import uuid
+from collections import deque
 from typing import Dict, Optional, Set
 from aiohttp import web, WSMsgType
 import server.db as db
@@ -240,6 +241,24 @@ class MatchCoordinator:
 
 
 coordinator = MatchCoordinator()
+
+# Recent lockstep stats reported by phones every 10s, newest last; numbers only, no player identity
+NET_STATS_FIELDS = (
+    "segment", "secs", "ticks_per_s", "stalls", "stall_ms", "max_stall_ms", "delay", "delay_min", "delay_max",
+    "ticks_ahead", "peer_rtt", "server_rtt", "p2p", "frame_ms", "slow_frames", "tick_ms", "paints_skipped", "catch_up_frames",
+)
+net_stats_log: deque = deque(maxlen=500)
+
+
+def record_net_stats(match_id: str, role: str, data: dict):
+    entry = {"at": round(time.time()), "match_id": match_id, "role": role}
+    for field in NET_STATS_FIELDS:
+        value = data.get(field)
+        if isinstance(value, (int, float, bool)) or value is None:
+            entry[field] = value
+    entry["device"] = str(data.get("device", ""))[:160]
+    net_stats_log.append(entry)
+    logging.info(f"[{match_id}] net_stats {role}: {json.dumps({k: v for k, v in entry.items() if k not in ('at', 'match_id', 'role')})}")
 
 
 # =========================================================================
@@ -623,6 +642,13 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     await ws.send_str(json.dumps({"type": "pong", "time": data.get("time")}))
 
                 # -------------------------------------------------------------
+                # 6b. LOCKSTEP NETWORK STATS (how a bout runs on each phone, for diagnosing lag)
+                # -------------------------------------------------------------
+                elif msg_type == "net_stats":
+                    if room and current_player_id:
+                        record_net_stats(match_id, "p1" if current_player_id == (room.p1_id or room.creator_id) else "p2", data)
+
+                # -------------------------------------------------------------
                 # 7. WEBRTC P2P SIGNALING (SDP Offer/Answer & ICE Candidates)
                 # -------------------------------------------------------------
                 elif msg_type == "rtc_signal":
@@ -703,6 +729,14 @@ async def api_get_match(request: web.Request) -> web.Response:
     return web.json_response({"status": "ok", "match": match})
 
 
+async def api_get_net_stats(request: web.Request) -> web.Response:
+    """Recent lockstep stats, newest first; ?match_id= narrows to one match."""
+    match_id = request.query.get("match_id")
+    limit = min(int(request.query.get("limit", "50")), 500)
+    entries = [e for e in reversed(net_stats_log) if not match_id or e["match_id"] == match_id]
+    return web.json_response({"status": "ok", "stats": entries[:limit]})
+
+
 async def api_get_leaderboard(request: web.Request) -> web.Response:
     """Returns local group leaderboard."""
     chat_id = request.query.get("chat_id", "0")
@@ -739,6 +773,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/match/create", api_create_match)
     app.router.add_get("/api/match/{match_id}", api_get_match)
     app.router.add_get("/api/leaderboard", api_get_leaderboard)
+    app.router.add_get("/api/netstats", api_get_net_stats)
 
     # Static player files & docs
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -646,6 +646,27 @@ class TestMultiplayerWebSocket(AioHTTPTestCase):
         await ws2_new.close()
         await ws1.close()
 
+    async def test_net_stats_are_kept_without_player_identity(self):
+        """Phones report lockstep stats; the API returns them by match with only the known numeric fields."""
+        match_id = "test_net_stats_01"
+        ws1, ws2, _, _ = await self._connect_and_lock(match_id, "group_stats", 0, 1)
+
+        await ws2.send_json({"type": "net_stats", "ticks_per_s": 59.4, "stalls": 3, "delay": 6, "p2p": True,
+                             "device": "TestPhone/1.0", "user_name": "should not be kept"})
+        await ws2.send_json({"type": "ping", "time": 1})
+        await ws2.receive_json()  # pong: the stats were processed
+
+        resp = await self.client.get(f"/api/netstats?match_id={match_id}")
+        stats = (await resp.json())["stats"]
+        self.assertEqual(len(stats), 1)
+        self.assertEqual(stats[0]["role"], "p1")  # the joiner locked first
+        self.assertEqual((stats[0]["ticks_per_s"], stats[0]["stalls"], stats[0]["delay"], stats[0]["p2p"]), (59.4, 3, 6, True))
+        self.assertEqual(stats[0]["device"], "TestPhone/1.0")
+        self.assertNotIn("user_name", stats[0])
+
+        await ws1.close()
+        await ws2.close()
+
     async def test_hero_lock_after_versus_is_ignored(self):
         """Once both heroes are locked, a late lock must not change heroes or re-broadcast versus."""
         match_id = "test_late_lock_01"

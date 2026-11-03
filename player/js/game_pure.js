@@ -851,6 +851,8 @@ function setupCanvas() {
 // network trip). With identical inputs, RNG seed and clock the two simulations stay identical, so nothing
 // is ever corrected or synced back. A tick whose opponent input hasn't arrived yet waits for it.
 const LOCKSTEP_TICK_MS = 1000 / 60;
+const MIN_INPUT_DELAY = 2;
+const MAX_INPUT_DELAY = 15;
 
 // The current online fight, null outside one:
 //   setup          - versus info both phones build the fight from (heroes, stage, control types, seed)
@@ -860,6 +862,14 @@ const LOCKSTEP_TICK_MS = 1000 / 60;
 //   pending        - our key mask changes captured during the tick being simulated
 //   acc, last      - real time banked towards the next tick
 //   rounds         - engine round wins [P1, P2] already reported to the server
+//   delayChange    - +1/-1 advice from the opponent on our delay, applied at the next tick we schedule
+//   peerHintSeq    - sequence number of the last advice we applied
+//   advice         - our current advice on the opponent's delay, sent with every input
+//   window         - this second's waits for their input and the least slack their inputs arrived with
+//   goodSeconds    - the last few seconds' verdicts (every input early enough), for lowering their delay
+//   peerTick, peerTickAt - the latest tick the opponent reported simulating, and when that report arrived
+//   stallStart     - when we started waiting for their input for the current tick, or null
+//   stats          - counters reported to the server every 10s (see reportNetStats)
 let onlineBout = null;
 // Set while we rejoin a bout: the versus info and the opponent's restart snapshot, whichever arrives first
 let onlineResume = null;
@@ -868,12 +878,17 @@ function startOnlineSegment(setup, segment, resume) {
     // Our inputs must reach the opponent before they simulate the tick: one-way trip to them, plus two ticks
     // for frame timing on both ends. Before a measurement exists, relayed inputs cross the server twice.
     const peerRtt = mpClient.peerRtt ?? (mpClient.rtt ? mpClient.rtt * 2 : 200);
-    const delay = Math.min(15, Math.max(3, Math.ceil(peerRtt / 2 / LOCKSTEP_TICK_MS) + 2));
+    const delay = Math.min(MAX_INPUT_DELAY, Math.max(3, Math.ceil(peerRtt / 2 / LOCKSTEP_TICK_MS) + 2));
+    const now = performance.now();
     onlineBout = {
         setup, segment, tick: 0, delay,
         local: new Map(), remote: new Map(), pending: [0, 0],
-        acc: 0, last: performance.now(), lastTickAt: performance.now(),
-        rounds: resume ? resume.rounds.slice() : [0, 0]
+        acc: 0, last: now, lastTickAt: now,
+        rounds: resume ? resume.rounds.slice() : [0, 0],
+        delayChange: 0, peerHintSeq: 0, advice: { hint: 0, seq: 0 },
+        window: { stalls: 0, stallMs: 0, minLead: Infinity, since: now }, goodSeconds: [],
+        peerTick: 0, peerTickAt: 0, heardFromPeer: false, stallStart: null,
+        stats: newNetStats(now, delay)
     };
     for (let t = 0; t < delay; t++) {
         onlineBout.local.set(t, [0, 0]);
@@ -945,37 +960,175 @@ function applyTickInput(side, input) {
 // Advances the online fight by as many ticks as real time allows and both players' inputs are in for
 function runOnlineBout(now) {
     const bout = onlineBout;
-    // Never bank more than a few ticks, so a hitch doesn't fast-forward the fight afterwards
-    bout.acc = Math.min(bout.acc + (now - bout.last), LOCKSTEP_TICK_MS * 4);
+    const stats = bout.stats;
+    const frameMs = now - bout.last;
     bout.last = now;
+    // Two devices never tick at exactly the same rate. If we've run ahead of the opponent, ease off until
+    // they catch up, rather than running into their input frontier and stalling in bursts.
+    const pace = ticksAheadOfPeer(bout, now) > 2 ? 0.8 : 1;
+    // A slow phone runs several ticks in one frame to keep game speed, drawing only the last; never more
+    // than a few, so a hitch doesn't fast-forward the fight
+    bout.acc = Math.min(bout.acc + frameMs * pace, LOCKSTEP_TICK_MS * 4);
     // Once the server has decided the match, the end animation plays out without waiting on inputs
     const decided = mpClient.status === "COMPLETED";
     const localSide = mpClient.role === 'p1' ? 0 : 1;
+    stats.frames++;
+    stats.frameMs += frameMs;
+    if (frameMs > 50) stats.slowFrames++;
 
+    let ran = 0;
     while (bout.acc >= LOCKSTEP_TICK_MS) {
         const local = bout.local.get(bout.tick);
         const remote = bout.remote.get(bout.tick);
+        if (!decided && (!local || !remote)) {
+            // The opponent's input for this tick is still on its way. The waiting time isn't banked, or the
+            // fight would jump ahead once it lands.
+            if (bout.stallStart === null) bout.stallStart = now;
+            bout.acc = Math.min(bout.acc, LOCKSTEP_TICK_MS);
+            break;
+        }
+        if (bout.stallStart !== null) {
+            endStall(bout, now - bout.stallStart, now);
+            bout.stallStart = null;
+        }
         if (!decided) {
-            if (!local || !remote) break; // the opponent's input for this tick is still on its way
             applyTickInput(localSide, local);
             applyTickInput(1 - localSide, remote);
             bout.local.delete(bout.tick);
             bout.remote.delete(bout.tick);
         }
 
-        midlet.stepFrame(1000 + Math.floor(bout.tick * 1000 / 60));
+        // Skip drawing a tick when another one is due this frame and ready to run (it redraws everything)
+        const next = bout.tick + 1;
+        const anotherThisFrame = bout.acc >= 2 * LOCKSTEP_TICK_MS
+            && (decided || (bout.local.has(next) && bout.remote.has(next)));
+        const tickStart = performance.now();
+        midlet.stepFrame(1000 + Math.floor(bout.tick * 1000 / 60), anotherThisFrame);
+        stats.tickMs += performance.now() - tickStart;
+        if (anotherThisFrame) stats.paintsSkipped++;
 
-        if (!decided) {
-            const target = bout.tick + bout.delay;
-            bout.local.set(target, bout.pending);
-            mpClient.sendLockstepInput(bout.segment, target, bout.pending[0], bout.pending[1]);
+        if (decided) {
+            bout.pending = [0, 0];
+        } else {
+            scheduleLocalInput(bout);
         }
-        bout.pending = [0, 0];
         bout.tick++;
         bout.acc -= LOCKSTEP_TICK_MS;
         bout.lastTickAt = now;
+        stats.ticks++;
+        ran++;
         reportScoredRounds();
     }
+    if (ran > 1) stats.catchUpFrames++;
+    if (!decided) updateDelayAdvice(bout, now);
+    if (now - stats.since >= 10000) reportNetStats(bout, now);
+}
+
+// Schedules what we pressed during this tick `delay` ticks ahead, applying the opponent's advice on our
+// delay: raising fills the tick the old delay would have used with an empty input; lowering skips this
+// tick's send and carries our presses into the next tick's input, which lands on that same tick.
+function scheduleLocalInput(bout) {
+    const pending = bout.pending;
+    bout.pending = [0, 0];
+    if (bout.delayChange > 0 && bout.delay < MAX_INPUT_DELAY) {
+        sendLocalInput(bout, bout.tick + bout.delay, [0, 0]);
+        bout.delay++;
+    } else if (bout.delayChange < 0 && bout.delay > MIN_INPUT_DELAY) {
+        bout.delay--;
+        bout.delayChange = 0;
+        bout.pending = pending;
+        return;
+    }
+    bout.delayChange = 0;
+    bout.stats.delayMin = Math.min(bout.stats.delayMin, bout.delay);
+    bout.stats.delayMax = Math.max(bout.stats.delayMax, bout.delay);
+    sendLocalInput(bout, bout.tick + bout.delay, pending);
+}
+
+function sendLocalInput(bout, tick, input) {
+    bout.local.set(tick, input);
+    mpClient.sendLockstepInput(bout.segment, tick, input[0], input[1], bout.advice.hint, bout.advice.seq, bout.tick);
+}
+
+// How many ticks we are ahead of the opponent right now: their last reported tick, plus the ticks they've
+// run while that report travelled here and since it arrived
+function ticksAheadOfPeer(bout, now) {
+    if (!bout.peerTickAt) return 0;
+    const oneWayMs = (mpClient.peerRtt ?? 100) / 2;
+    return bout.tick - (bout.peerTick + (oneWayMs + now - bout.peerTickAt) / LOCKSTEP_TICK_MS);
+}
+
+function endStall(bout, ms, now) {
+    const stats = bout.stats;
+    stats.stalls++;
+    stats.stallMs += ms;
+    stats.maxStallMs = Math.max(stats.maxStallMs, ms);
+    // Only short waits while we're level with the opponent say their delay is too small. Long ones are
+    // outages, waits while we're ahead are pacing (handled by easing off), and the first wait of a bout is
+    // just the opponent finishing loading.
+    if (bout.heardFromPeer && ms < 500 && ticksAheadOfPeer(bout, now) <= 2) {
+        bout.window.stalls++;
+        bout.window.stallMs += ms;
+    }
+}
+
+// Once a second, advise the opponent on their input delay from how their inputs reached us: raise it if we
+// had to wait for them, lower it when in four of the last five seconds every input arrived 3+ ticks early
+function updateDelayAdvice(bout, now) {
+    const w = bout.window;
+    if (now - w.since < 1000) return;
+    let hint = 0;
+    if (w.stalls >= 2 || w.stallMs > 50) {
+        hint = 1;
+        bout.goodSeconds = [];
+    } else {
+        bout.goodSeconds.push(w.stalls === 0 && w.minLead >= 3 && w.minLead !== Infinity);
+        if (bout.goodSeconds.length > 5) bout.goodSeconds.shift();
+        if (bout.goodSeconds.length === 5 && bout.goodSeconds.filter(Boolean).length >= 4) {
+            hint = -1;
+            bout.goodSeconds = [];
+        }
+    }
+    if (hint) {
+        bout.advice = { hint, seq: (bout.advice.seq % 255) + 1 };
+    }
+    bout.window = { stalls: 0, stallMs: 0, minLead: Infinity, since: now };
+}
+
+function newNetStats(now, delay) {
+    return {
+        since: now, frames: 0, frameMs: 0, slowFrames: 0, ticks: 0, tickMs: 0, paintsSkipped: 0, catchUpFrames: 0,
+        stalls: 0, stallMs: 0, maxStallMs: 0, delayMin: delay, delayMax: delay
+    };
+}
+
+// Every 10s the server logs how the bout ran on this phone, so lag reports can be checked against real numbers
+function reportNetStats(bout, now) {
+    const s = bout.stats;
+    const secs = (now - s.since) / 1000;
+    mpClient.sendPacket({
+        type: "net_stats",
+        segment: bout.segment,
+        secs: Math.round(secs * 10) / 10,
+        ticks_per_s: Math.round(s.ticks / secs * 10) / 10,
+        stalls: s.stalls,
+        stall_ms: Math.round(s.stallMs),
+        max_stall_ms: Math.round(s.maxStallMs),
+        delay: bout.delay,
+        delay_min: s.delayMin,
+        delay_max: s.delayMax,
+        ticks_ahead: Math.round(ticksAheadOfPeer(bout, now) * 10) / 10,
+        peer_rtt: mpClient.peerRtt === null ? null : Math.round(mpClient.peerRtt),
+        server_rtt: mpClient.rtt,
+        p2p: mpClient.isP2PActive,
+        frame_ms: s.frames ? Math.round(s.frameMs / s.frames * 10) / 10 : null,
+        slow_frames: s.slowFrames,
+        tick_ms: s.ticks ? Math.round(s.tickMs / s.ticks * 10) / 10 : null,
+        paints_skipped: s.paintsSkipped,
+        catch_up_frames: s.catchUpFrames,
+        device: navigator.userAgent.slice(0, 160)
+    });
+    bout.stats = newNetStats(now, bout.delay);
 }
 
 // Both simulations score the same rounds; P1's phone reports them (a time-out on equal health scores both)
@@ -1149,10 +1302,23 @@ async function bootstrap() {
         };
 
         // The opponent's input for one tick; both paths deliver it, so keep the first copy
-        mpClient.onPeerInputCallback = (segment, tick, pressed, released) => {
-            if (!onlineBout || segment !== (onlineBout.segment & 0xFF)) return; // from before a restart
-            if (tick < onlineBout.tick || onlineBout.remote.has(tick)) return;
-            onlineBout.remote.set(tick, [pressed, released]);
+        mpClient.onPeerInputCallback = (segment, tick, pressed, released, hint, hintSeq, senderTick) => {
+            const bout = onlineBout;
+            if (!bout || segment !== (bout.segment & 0xFF)) return; // from before a restart
+            if (senderTick > bout.peerTick) {
+                bout.peerTick = senderTick;
+                bout.peerTickAt = performance.now();
+            }
+            // Their advice on our delay, once per new sequence number (the two paths can deliver out of order)
+            const newer = (hintSeq - bout.peerHintSeq) & 0xFF;
+            if (hint && newer > 0 && newer < 128) {
+                bout.peerHintSeq = hintSeq;
+                bout.delayChange = hint;
+            }
+            if (tick < bout.tick || bout.remote.has(tick)) return;
+            bout.remote.set(tick, [pressed, released]);
+            bout.window.minLead = Math.min(bout.window.minLead, tick - bout.tick);
+            bout.heardFromPeer = true;
             if (!mpClient.opponentDropDeadline) {
                 mpClient.waitingForPeer = false;
             }

@@ -16,7 +16,7 @@ export class MultiplayerClient {
         this.status = "DISCONNECTED"; // HERO_SELECT, ACTIVE, COMPLETED, CANCELLED
         this.opponent = null;
         this.creator = null;
-        this.onPeerInputCallback = null; // (segment, tick, pressedBits, releasedBits) per lockstep tick
+        this.onPeerInputCallback = null; // (segment, tick, pressed, released, delayHint, hintSeq, senderTick) per lockstep tick
         this.onMatchStartCallback = null;
         this.onHeroSelectStartCallback = null;
         this.onPeerHeroLockCallback = null;
@@ -269,9 +269,10 @@ export class MultiplayerClient {
         const view = new DataView(buffer);
         const packetType = view.getUint8(0);
 
-        if (packetType === 4 && buffer.byteLength >= 16) { // 0x04: PACKET_LOCKSTEP_INPUT
+        if (packetType === 4 && buffer.byteLength >= 20) { // 0x04: PACKET_LOCKSTEP_INPUT
             if (typeof this.onPeerInputCallback === 'function') {
-                this.onPeerInputCallback(view.getUint8(1), view.getUint32(4), view.getUint32(8), view.getUint32(12));
+                this.onPeerInputCallback(view.getUint8(1), view.getUint32(4), view.getUint32(8), view.getUint32(12),
+                                         view.getInt8(2), view.getUint8(3), view.getUint32(16));
             }
         } else if (packetType === 5) { // 0x05: PEER_PING -> echo it straight back
             view.setUint8(0, 6);
@@ -441,17 +442,23 @@ export class MultiplayerClient {
         }
     }
 
-    // Our input for one lockstep tick: the key mask bits pressed and released during it.
-    // 16-byte binary payload: [0x04, segment, 0, 0, tick (uint32), pressed (uint32), released (uint32)]
-    sendLockstepInput(segment, tick, pressed, released) {
+    // Our input for one lockstep tick: the key mask bits pressed and released during it, plus our latest
+    // advice on the opponent's input delay (+1 their inputs arrive late, -1 they have slack) and its sequence
+    // number, so they apply each piece of advice once, and the tick we just simulated, so they can keep pace.
+    // 20-byte binary payload: [0x04, segment, hint (int8), hintSeq, tick (uint32), pressed (uint32),
+    //                          released (uint32), senderTick (uint32)]
+    sendLockstepInput(segment, tick, pressed, released, hint = 0, hintSeq = 0, senderTick = 0) {
         if (!this.isMultiplayer || this.status !== "ACTIVE") return;
-        const buffer = new ArrayBuffer(16);
+        const buffer = new ArrayBuffer(20);
         const view = new DataView(buffer);
         view.setUint8(0, 4);
         view.setUint8(1, segment & 0xFF);
+        view.setInt8(2, hint);
+        view.setUint8(3, hintSeq & 0xFF);
         view.setUint32(4, tick);
         view.setUint32(8, pressed >>> 0);
         view.setUint32(12, released >>> 0);
+        view.setUint32(16, senderTick);
 
         // Sent on both paths: the peer keeps the first copy of each tick, and the relay still delivers if the
         // direct channel dies silently. A tick that never arrives would freeze both phones.
