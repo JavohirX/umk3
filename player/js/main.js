@@ -131,7 +131,20 @@ function sendKeyEvent(keyCode, isDown) {
     }
 
     // Online, the engine hands the resulting key mask change to CoreEngine.onlineVersus.routeLocalBits,
-    // which drives our own fighter and streams the change to the opponent
+    // which drives our own fighter and streams the change to the opponent.
+    // The engine's key queue holds 8 events and empties only when a tick runs. While the fight waits for the
+    // opponent's input it fills, then drops presses (from 5 queued) and releases (from 6), and a dropped
+    // release leaves the key held for good. So in an online fight a key goes to the engine's key handling now,
+    // between frames, exactly as the queue would hand it over at the next tick.
+    if (onlineFightRunning()) {
+        try {
+            if (isDown) CoreEngine.exec_f_int_to_void(keyCode);
+            else CoreEngine.exec_i_int_to_void(keyCode);
+        } catch (e) {
+            console.warn('[Multiplayer] Key event failed:', e);
+        }
+        return;
+    }
     if (isDown) {
         CoreEngine.val_maincanvasbridge_a.keyPressed(keyCode);
     } else {
@@ -867,14 +880,21 @@ const MAX_INPUT_DELAY = 15;
 const MAX_PREDICTION = 8;
 const NO_INPUT = [0, 0];
 
-// Saves and restores the whole engine state (see rollback_state.js). The engine's key event queue is left
-// out: a rewind must not replay or drop a key press, and presses only reach the fight through `pending`.
+// Saves and restores the whole engine state (see rollback_state.js). Left out is what follows this phone's
+// real keys rather than the fight: the engine's key event queue, and the scene's record of which key each
+// key slot holds (sceneExtraShorts, sceneStateId). The engine passes on a release only for the key that
+// record holds, and ignores a press of the key it already holds. A rewind to before a press would forget the
+// key is down, so its release never reached the fight and the key stayed held on both phones; a rewind to
+// before a release would make the next press of that key do nothing. Presses only reach the fight through
+// `pending`, which a rewind never touches either.
 let stateSaver = null;
 function getStateSaver() {
     if (!stateSaver) {
         const engineClasses = Object.values(EngineModule).filter((v) => typeof v === 'function' && /^[A-Z]/.test(v.name));
+        const scene = CoreEngine.val_scenebase_a;
         stateSaver = createStateSaver([CoreEngine, midlet, ...engineClasses.filter((c) => c !== CoreEngine)], {
-            skipFields: [[midlet, 'frameHistoryArray'], [midlet, 'loopState']]
+            skipFields: [[midlet, 'frameHistoryArray'], [midlet, 'loopState'],
+                         [scene, 'sceneExtraShorts'], [scene, 'sceneStateId']]
         });
     }
     return stateSaver;
@@ -907,6 +927,11 @@ let onlineBout = null;
 // Set while we rejoin a bout: the versus info and the opponent's restart snapshot, whichever arrives first
 let onlineResume = null;
 
+// True while runOnlineBout drives the engine instead of the normal frame loop (see startAnimationLoop)
+function onlineFightRunning() {
+    return !!(mpClient && mpClient.isMultiplayer && onlineBout && mpClient.status !== "HERO_SELECT");
+}
+
 function startOnlineSegment(setup, segment, resume) {
     // Our input for a tick must reach the opponent before their guesses run MAX_PREDICTION ticks past it:
     // one-way trip to them in ticks, plus three for frame timing and jitter, less what guessing covers.
@@ -937,7 +962,15 @@ function startOnlineSegment(setup, segment, resume) {
     console.log(`[Multiplayer] Lockstep segment ${segment}: input delay ${delay} ticks (opponent round trip ${Math.round(peerRtt)}ms)`);
 
     resetEngineForBout(setup, segment, resume, (bits, isDown) => {
-        onlineBout.pending[isDown ? 0 : 1] |= bits;
+        const pending = onlineBout.pending;
+        if (isDown) {
+            pending[0] |= bits;
+            // Released and pressed again within one tick: a tick applies its presses before its releases, so
+            // keeping the release would leave the key up while it is held
+            pending[1] &= ~bits;
+        } else {
+            pending[1] |= bits;
+        }
     });
     getStateSaver().refresh();
     // The score this segment starts from, so the server sees both phones agree on it
@@ -1953,7 +1986,7 @@ function startAnimationLoop() {
                 const now = performance.now();
                 if (viewer) {
                     runViewer(now);
-                } else if (mpClient && mpClient.isMultiplayer && onlineBout && mpClient.status !== "HERO_SELECT") {
+                } else if (onlineFightRunning()) {
                     // A frozen bout keeps its last frame on screen; the banner below says why
                     if (mpClient.paused) {
                         onlineBout.last = now;
