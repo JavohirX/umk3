@@ -52,6 +52,8 @@ async def recv_type(ws, wanted, timeout=3.0):
             data = json.loads(msg.data)
             if data.get("type") == wanted:
                 return data
+        elif msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED):
+            raise AssertionError(f"the socket closed while waiting for {wanted}")
 
 
 async def drain(ws, timeout=0.15):

@@ -27,6 +27,7 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web, WSMsgType
 import server.db as db
+from server.telemetry import ServerSampler, clean_client, clean_freezes, clean_window, telemetry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] %(message)s")
 
@@ -40,8 +41,12 @@ INIT_DATA_MAX_AGE_SECONDS = 24 * 3600
 # moment after a fast tap on its Play button; a join waits this long for it before calling it unknown
 NEW_CHALLENGE_WAIT_SECONDS = 3.0
 
-# Fighter names by hero id (the engine's select grid order), for result messages
-HERO_NAMES = ["Scorpion", "Sub-Zero", "Kitana", "Shao Kahn", "Sonya", "Cyrax", "Liu Kang"]
+# Fighter names by hero id, for result messages
+HERO_NAMES = db.HERO_NAMES
+
+# A phone sends a stats report every 10s plus a few extra when a bout restarts or the page hides. Anything far past
+# that isn't a phone behaving normally, so it isn't logged.
+MAX_REPORTS_PER_MINUTE = 30
 
 
 def hero_name(hero_id: Optional[int]) -> Optional[str]:
@@ -178,6 +183,48 @@ class BoutRecorder:
         return {"setup": self.setup, "segments": [self.segment_json(s) for s in self.segments]}
 
 
+class InputGaps:
+    """
+    How steadily each player's inputs reach the server during a fight, measured here so it doesn't depend on any
+    phone reporting back. A phone sends one input per tick it simulates, about one every 17ms, so a long silence
+    means that phone stopped simulating (busy, or waiting on its opponent) or its connection stalled. Whichever phone
+    goes quiet first is where a shared freeze began: the other one only runs out of guesses a moment later.
+    Time with a player gone or away isn't measured (forget), and neither is the silence while a phone loads the
+    bout: the first inputs it sends are a burst from tick 0, before it has simulated anything.
+    """
+    BUCKETS_MS = (25, 50, 100, 250, 500, 1000)
+    LOG_FROM_MS = 250
+    MAX_LOGGED_PER_SEGMENT = 200
+
+    def __init__(self):
+        self.last: List[Optional[float]] = [None, None]
+        self.reset()
+
+    def reset(self):
+        self.hist = [[0] * (len(self.BUCKETS_MS) + 1) for _ in range(2)]
+        self.max_ms = [0.0, 0.0]
+        self.packets = [0, 0]
+        self.logged = [0, 0]
+
+    def forget(self):
+        self.last = [None, None]
+
+    def note(self, side: int, now: float, sender_tick: int) -> Optional[float]:
+        """Counts one input; returns how long the phone had been silent (ms) if that's worth logging."""
+        self.packets[side] += 1
+        previous = self.last[side]
+        self.last[side] = now if sender_tick >= 1 else None
+        if previous is None or sender_tick < 1:
+            return None
+        ms = (now - previous) * 1000
+        self.hist[side][next((i for i, top in enumerate(self.BUCKETS_MS) if ms < top), len(self.BUCKETS_MS))] += 1
+        self.max_ms[side] = max(self.max_ms[side], ms)
+        if ms >= self.LOG_FROM_MS and self.logged[side] < self.MAX_LOGGED_PER_SEGMENT:
+            self.logged[side] += 1
+            return ms
+        return None
+
+
 class MatchRoom:
     def __init__(self, match_id: str, chat_id: str, creator_id: str, creator_name: str,
                  opponent_id: Optional[str] = None, opponent_name: Optional[str] = None):
@@ -233,6 +280,18 @@ class MatchRoom:
         self.notified_creator_of: Optional[str] = None
         self.chat_instance: Optional[str] = None
 
+        # For the fight log
+        self.fight_started_at: Optional[float] = None
+        self.build: Optional[str] = None
+        self.paused_secs: float = 0.0
+        self.pause_started: Optional[float] = None
+        self.gaps = InputGaps()
+        self.clients: Dict[str, dict] = {}       # player id -> what their phone said about itself when it joined
+        self.seen_players: Set[str] = set()      # who has connected before, so a later connection is a reconnect
+        self.restart_reason: Optional[str] = None
+        self.report_times: Dict[str, deque] = {}
+        self.conflict_logged: Optional[Tuple] = None
+
     # ----- who is who -----
 
     def participants(self) -> List[str]:
@@ -262,6 +321,45 @@ class MatchRoom:
         """The bout has been set up (arena and seed chosen), so both phones can run it."""
         return self.heroes_locked() and self.seed is not None
 
+    def fight_running(self) -> bool:
+        return self.status == "ACTIVE" and self.bout_ready()
+
+    # ----- the fight log -----
+
+    def log(self, kind: str, player_id: Optional[str] = None, at: Optional[float] = None, **data):
+        role = self.role_of(player_id) if self.is_participant(player_id) else None
+        telemetry.event(kind, self.match_id, player_id, role, self.segment, at=at, **data)
+
+    def pause_began(self):
+        """A player is gone or away, so the bout stands frozen: that time isn't fight time."""
+        if self.pause_started is None and self.fight_running():
+            self.pause_started = time.time()
+        self.gaps.forget()
+
+    def pause_ended(self):
+        """Call once a grace period is over; the bout runs again when nobody's is left."""
+        if self.pause_started is not None and not self.forfeit_deadlines:
+            self.paused_secs += time.time() - self.pause_started
+            self.pause_started = None
+        self.gaps.forget()
+
+    def log_input_gaps(self):
+        """Closes the input gap counts of the segment that just ended."""
+        for side, player_id in enumerate((self.p1_id, self.p2_id)):
+            if self.gaps.packets[side]:
+                self.log("input_gaps", player_id, buckets_ms=InputGaps.BUCKETS_MS, hist=self.gaps.hist[side],
+                         max_ms=round(self.gaps.max_ms[side]), packets=self.gaps.packets[side])
+        self.gaps.reset()
+        self.gaps.forget()
+
+    def allow_report(self, player_id: str) -> bool:
+        times = self.report_times.setdefault(player_id, deque(maxlen=MAX_REPORTS_PER_MINUTE))
+        now = time.monotonic()
+        if len(times) == MAX_REPORTS_PER_MINUTE and now - times[0] < 60:
+            return False
+        times.append(now)
+        return True
+
     def is_expired(self) -> bool:
         return self.status == "WAITING" and time.time() > self.expires_at
 
@@ -283,7 +381,7 @@ class MatchRoom:
     def state_for_db(self) -> dict:
         return {key: getattr(self, key) for key in (
             "p1_id", "p2_id", "p1_name", "p2_name", "p1_hero", "p2_hero", "p1_control", "p2_control",
-            "p1_rounds", "p2_rounds", "stage", "seed", "segment")}
+            "p1_rounds", "p2_rounds", "stage", "seed", "segment", "fight_started_at", "build", "paused_secs")}
 
     def restore_state(self, state: dict):
         for key, value in state.items():
@@ -332,6 +430,7 @@ class MatchCoordinator:
         self.rooms: Dict[str, MatchRoom] = {}
         # Set by the bot: posts challenge updates and results to Telegram (event name, match info)
         self.notifier: Optional[Notifier] = None
+        self.connections = 0  # open WebSockets, joined or not
 
     def get_or_create_room(self, match_id: str, chat_id: str = "0", creator_id: str = "0",
                            creator_name: str = "Player 1", opponent_id: Optional[str] = None,
@@ -419,6 +518,7 @@ class MatchCoordinator:
                 room.status = "CANCELLED"
                 room.ended_at = time.time()
                 db.cancel_match(room.match_id, reason="JOIN_TIMEOUT")
+                room.log("challenge_expired")
                 await room.broadcast({
                     "type": "match_cancelled",
                     "reason": "JOIN_TIMEOUT",
@@ -477,10 +577,15 @@ class MatchCoordinator:
         room.segment = 0
         room.p1_rounds = room.p2_rounds = 0
         room.score_reports = {}
+        room.fight_started_at = room.fight_started_at or time.time()
+        room.build = room.build or build_version()
         payload = room.versus_payload()
         room.recorder.start(payload)
         room.bout_live = {pid: True for pid in room.sockets}
+        room.gaps.reset()
+        room.gaps.forget()
         room.persist()
+        room.log("fight_started", stage=room.stage, p1=room.p1_id, p2=room.p2_id, p1_hero=room.p1_hero, p2_hero=room.p2_hero)
         logging.info(f"[{room.match_id}] Both heroes locked! Initiating match on stage {room.stage}.")
         await room.broadcast(payload, spectators=False)
         await room.broadcast_spectators(self.spectate_message(room))
@@ -490,7 +595,12 @@ class MatchCoordinator:
                 "p1_rounds": room.p1_rounds, "p2_rounds": room.p2_rounds}
 
     def begin_segment(self, room: MatchRoom, segment: int, resume: Optional[dict]):
+        room.log_input_gaps()
         room.segment = segment
+        # Only a player coming back asks for a restart through the server; otherwise P1's phone found the two
+        # simulations differ and restarted both on its own
+        room.log("segment_restart", reason=room.restart_reason or "desync", resume=resume)
+        room.restart_reason = None
         if room.recorder.setup is None:
             room.recorder.setup = room.versus_payload()
         room.recorder.new_segment(segment, resume)
@@ -508,6 +618,7 @@ class MatchCoordinator:
         other = room.other_participant(rejoined_id)
         source = other if room.bout_live.get(other) else (rejoined_id if room.bout_live.get(rejoined_id) else None)
         segment = room.segment + 1
+        room.restart_reason = "reconnect"
         if source:
             await room.send_to(source, {"type": "restart_request", "segment": segment})
             return
@@ -527,6 +638,7 @@ class MatchCoordinator:
             return
         room.p1_rounds, room.p2_rounds = p1, p2
         room.persist()
+        room.log("round_settled", p1=p1, p2=p2)
         logging.info(f"[{room.match_id}] Round score confirmed by both phones: P1={p1}, P2={p2}")
 
         if p1 >= 2 and p1 == p2:
@@ -537,6 +649,18 @@ class MatchCoordinator:
             await self.finish(room, winner_id, "KNOCKOUT")
         else:
             await room.broadcast({"type": "round_next", "round_num": p1 + p2 + 1, "p1_rounds": p1, "p2_rounds": p2})
+
+    def note_score_conflict(self, room: MatchRoom):
+        """
+        One phone reporting a round before the other is normal for a moment. Both moving past the settled score to
+        different scores isn't: their fights differ and the match can't finish until something changes that.
+        """
+        reports = [room.score_reports.get(pid) for pid in room.participants()]
+        settled = (room.p1_rounds, room.p2_rounds)
+        if len(reports) == 2 and reports[0] and reports[1] and reports[0] != reports[1] \
+                and settled not in reports and room.conflict_logged != tuple(reports):
+            room.conflict_logged = tuple(reports)
+            room.log("score_conflict", reports=reports, settled=settled)
 
     def _result_message(self, room: MatchRoom, winner_id: Optional[str], reason: str) -> dict:
         loser_id = room.other_participant(winner_id) if winner_id else None
@@ -567,7 +691,11 @@ class MatchCoordinator:
             task.cancel()
         room.disconnect_tasks.clear()
         room.forfeit_deadlines.clear()
+        room.pause_ended()
+        room.log_input_gaps()
+        room.persist()
         db.finish_match(room.match_id, winner_id=winner_id, finish_reason=reason)
+        room.log("match_finished", reason=reason, winner=winner_id, p1_rounds=room.p1_rounds, p2_rounds=room.p2_rounds)
         replay = room.recorder.replay_json()
         room.result = self._result_message(room, winner_id, reason)
         room.result["replay"] = bool(replay)
@@ -587,6 +715,7 @@ class MatchCoordinator:
         seconds = max(0, math.ceil(deadline - time.time()))
         name = room.player_names.get(missing_id, "Opponent")
         logging.info(f"[{room.match_id}] {seconds}s forfeit countdown against {missing_id} ({'away' if away else 'dropped'}).")
+        room.pause_began()
         if remaining_id in room.sockets:
             await room.send_to(remaining_id, {
                 "type": "opponent_away" if away else "opponent_disconnected",
@@ -605,6 +734,7 @@ class MatchCoordinator:
         if task:
             task.cancel()
         room.forfeit_deadlines.pop(player_id, None)
+        room.pause_ended()
 
     async def _forfeit_timer(self, room: MatchRoom, missing_id: str):
         try:
@@ -641,9 +771,13 @@ class MatchCoordinator:
             task.cancel()
         room.disconnect_tasks.clear()
         room.forfeit_deadlines.clear()
+        room.pause_ended()
+        room.log_input_gaps()
+        room.persist()
         room.status = "ABANDONED"
         room.ended_at = time.time()
         db.finish_match(room.match_id, winner_id=None, finish_reason="BOTH_DISCONNECTED")
+        room.log("match_finished", reason="BOTH_DISCONNECTED", winner=None, p1_rounds=room.p1_rounds, p2_rounds=room.p2_rounds)
         await room.broadcast({"type": "match_cancelled", "reason": "ABANDONED",
                               "message": "Both fighters left. Match abandoned."})
 
@@ -662,6 +796,7 @@ class MatchCoordinator:
         if room.status == "WAITING":
             if player_id == room.opponent_id and room.creator_id not in room.sockets:
                 logging.info(f"[{room.match_id}] {player_id} left before the creator arrived; the challenge is open again.")
+                room.log("seat_released", player_id)
                 room.opponent_id = None
                 room.opponent_name = None
                 room.notified_creator_of = None
@@ -687,6 +822,8 @@ class MatchCoordinator:
         if room.rematch_id:
             await room.send_to(player_id, {"type": "rematch_start", "match_id": room.rematch_id})
             return
+        if player_id not in room.rematch_requests:
+            room.log("rematch_requested", player_id)
         room.rematch_requests.add(player_id)
         if not all(pid in room.rematch_requests for pid in room.participants()):
             await room.broadcast({"type": "rematch_status", "requested": sorted(room.rematch_requests),
@@ -699,6 +836,7 @@ class MatchCoordinator:
             db.set_match_chat_instance(new_id, room.chat_instance)
         self.get_or_create_room(new_id)
         room.rematch_id = new_id
+        room.log("rematch_agreed", new_match=new_id)
         logging.info(f"[{room.match_id}] Rematch agreed: {new_id}")
         await room.broadcast({"type": "rematch_start", "match_id": new_id})
 
@@ -709,6 +847,17 @@ class MatchCoordinator:
 
     def active_match_count(self) -> int:
         return sum(1 for r in self.rooms.values() if r.status == "ACTIVE" and r.sockets)
+
+    def live_counts(self) -> dict:
+        """Right now, for the server's minute samples."""
+        rooms = self.rooms.values()
+        return {
+            "connections": self.connections,
+            "rooms": len(self.rooms),
+            "live_fights": sum(1 for r in rooms if r.fight_running() and r.sockets),
+            "players": sum(len(r.sockets) for r in rooms),
+            "spectators": sum(len(r.spectators) for r in rooms),
+        }
 
     def sweep(self):
         """Forgets finished rooms nobody is connected to and closes matches a restart left hanging."""
@@ -763,6 +912,43 @@ def record_net_stats(match_id: str, role: str, data: dict):
     logging.info(f"[{match_id}] net_stats {role}: {json.dumps({k: v for k, v in entry.items() if k not in ('at', 'match_id', 'role')})}")
 
 
+def log_net_window(room: MatchRoom, player_id: str, data: dict):
+    """A phone's report on the last few seconds of the fight, for the fight log; its freezes join the timeline."""
+    # What a phone sends must never be able to end its own connection, whatever it is
+    try:
+        if not room.bout_ready():
+            return
+        if not room.allow_report(player_id):
+            telemetry.windows_rejected += 1
+            return
+        now = time.time()
+        window = clean_window(data)
+        role = room.role_of(player_id)
+        telemetry.net_window(room.match_id, player_id, role, room.clients.get(player_id) or {}, build_version(), window, at=now)
+        for freeze in clean_freezes(data.get("freezes")):
+            started = now - freeze.pop("ago_ms") / 1000
+            telemetry.event("freeze", room.match_id, player_id, role, window.get("segment"), at=started, **freeze)
+    except Exception as e:
+        logging.warning(f"[{room.match_id}] Stats report not logged: {e}")
+
+
+def log_net_event(room: MatchRoom, player_id: str, data: dict):
+    """Something a phone noticed that shouldn't wait for its next report."""
+    try:
+        if not room.bout_ready() or not room.allow_report(player_id):
+            return
+        kind = data.get("kind")
+        role = room.role_of(player_id)
+        if kind == "desync":
+            segment, tick = data.get("segment"), data.get("tick")
+            if isinstance(segment, int) and isinstance(tick, int):
+                telemetry.event("desync", room.match_id, player_id, role, segment, tick=tick)
+        elif kind == "loop_error":
+            telemetry.event("loop_error", room.match_id, player_id, role, room.segment, message=str(data.get("message"))[:200])
+    except Exception as e:
+        logging.warning(f"[{room.match_id}] Net event not logged: {e}")
+
+
 def build_version() -> str:
     return os.getenv("BUILD_VERSION", "5dc4ec3")
 
@@ -791,14 +977,24 @@ async def relay_input(room: MatchRoom, sender_id: str, payload: bytes):
     """A player's lockstep input: to the opponent, into the recording, and on to spectators."""
     opponent = room.other_participant(sender_id)
     peer_ws = room.sockets.get(opponent) if opponent else None
+    received = time.perf_counter()
+    telemetry.relay_msgs += 1
+    telemetry.relay_bytes += len(payload)
     if peer_ws is not None and not peer_ws.closed:
         try:
             await peer_ws.send_bytes(payload)
         except Exception as e:
             logging.warning(f"[{room.match_id}] Binary relay error to {opponent}: {e}")
+        send_ms = (time.perf_counter() - received) * 1000
+        telemetry.relay_send_ms_sum += send_ms
+        telemetry.relay_send_max_ms = max(telemetry.relay_send_max_ms, send_ms)
     if len(payload) < 20 or payload[0] != 4:
         return
     side = 0 if room.role_of(sender_id) == "p1" else 1
+    if room.fight_running():
+        silent_ms = room.gaps.note(side, received, int.from_bytes(payload[16:20], "big"))
+        if silent_ms:
+            room.log("input_gap", sender_id, at=time.time() - silent_ms / 1000, ms=round(silent_ms))
     if room.recorder.record(side, payload) and room.spectators:
         tagged = bytes([8, side]) + payload[:20]  # spectators need to know whose input it is
         for spec_ws in list(room.spectators.values()):
@@ -813,6 +1009,7 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
     """Handles a join message. Returns (room, player id if they play, spectator connection id if they watch)."""
     identity = identify(data)
     if identity is None:
+        telemetry.event("auth_failed", match_id)
         await ws.send_str(json.dumps({"type": "auth_failed", "message": "Open the game from Telegram to play."}))
         await ws.close()
         return None, None, None
@@ -829,6 +1026,7 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
         await asyncio.sleep(0.25)
         room = coordinator.get_or_create_room(match_id, create=False)
     if room is None:
+        telemetry.event("join_rejected", match_id, identity["id"], reason="NOT_FOUND")
         await ws.send_str(json.dumps({"type": "match_cancelled", "reason": "NOT_FOUND",
                                       "message": "This challenge doesn't exist."}))
         return None, None, None
@@ -841,6 +1039,7 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
         room.ended_at = time.time()
         db.cancel_match(match_id, reason="JOIN_TIMEOUT")
     if room.status in ("CANCELLED", "ABANDONED"):
+        telemetry.event("join_rejected", match_id, player_id, reason=room.status)
         await ws.send_str(json.dumps({"type": "match_cancelled", "reason": "EXPIRED",
                                       "message": "This challenge is over. Please create a new one."}))
         return None, None, None
@@ -856,12 +1055,14 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
     if room.status == "WAITING" and room.opponent_id is None and player_id != room.creator_id:
         room.opponent_id = player_id
         room.opponent_name = user_name
+        room.log("seat_claimed", player_id)
         logging.info(f"[{match_id}] {user_name} ({player_id}) accepted the challenge.")
 
     if not room.is_participant(player_id):
         # Everyone else watches
         spectator_id = uuid.uuid4().hex[:8]
         room.spectators[spectator_id] = ws
+        telemetry.event("spectator_joined", match_id, player_id, status=room.status)
         await ws.send_str(json.dumps({
             "type": "joined", "role": "spectator", "build_version": build_version(),
             "player_id": player_id, "player_name": user_name, "match_id": match_id, "status": room.status,
@@ -889,6 +1090,13 @@ async def join_room(ws: web.WebSocketResponse, match_id: str, data: dict) -> Tup
     room.away.discard(player_id)
     room.bout_live[player_id] = bool(data.get("bout_live"))
     coordinator.cancel_forfeit(room, player_id)
+
+    client = clean_client(data.get("client"))
+    room.clients[player_id] = client
+    telemetry.player_seen(player_id, user_name, client)
+    room.log("player_connected", player_id, reconnect=player_id in room.seen_players, status=room.status,
+             in_fight=room.fight_running(), restored=room.restored, bout_live=room.bout_live[player_id], client=client)
+    room.seen_players.add(player_id)
 
     await ws.send_str(json.dumps({
         "type": "joined",
@@ -975,6 +1183,8 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
     current_player_id: Optional[str] = None  # set for the two players
     spectator_id: Optional[str] = None        # set for anyone watching
     room: Optional[MatchRoom] = None
+    connected_at = time.time()
+    coordinator.connections += 1
 
     try:
         async for msg in ws:
@@ -1036,6 +1246,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                 else:
                     room.p2_id, room.p2_name, room.p2_hero, room.p2_control = player, player_name, hero_id, control
                     from_role = "p2"
+                room.log("hero_locked", player, hero=hero_id, control=control)
 
                 logging.info(f"[{match_id}] Player {from_role} ({player_name}, id={player}) locked hero {hero_id} (P1={room.p1_hero}, P2={room.p2_hero})")
                 await room.broadcast({
@@ -1060,6 +1271,7 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     except (TypeError, ValueError):
                         continue
                     room.score_reports[player] = score
+                    coordinator.note_score_conflict(room)
                     await coordinator.settle_rounds(room)
 
             # -------------------------------------------------------------
@@ -1068,11 +1280,13 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
             elif msg_type == "away":
                 if room.status == "ACTIVE" and player not in room.away:
                     room.away.add(player)
+                    room.log("player_away", player, in_fight=room.fight_running())
                     await coordinator.start_forfeit(room, player, away=True)
 
             elif msg_type == "back":
                 if player in room.away:
                     room.away.discard(player)
+                    room.log("player_back", player, in_fight=room.fight_running())
                     coordinator.cancel_forfeit(room, player)
                     if room.status == "ACTIVE" and other in room.sockets:
                         await room.send_to(other, {"type": "opponent_back", "player_id": player})
@@ -1089,6 +1303,10 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
             # -------------------------------------------------------------
             elif msg_type == "net_stats":
                 record_net_stats(match_id, room.role_of(player), data)
+                log_net_window(room, player, data)
+
+            elif msg_type == "net_event":
+                log_net_event(room, player, data)
 
             # -------------------------------------------------------------
             # 7. WEBRTC P2P SIGNALING (SDP Offer/Answer & ICE Candidates), between the two players only
@@ -1118,10 +1336,17 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
                 await room.broadcast_spectators(coordinator.spectate_message(room))
 
     finally:
+        coordinator.connections -= 1
         if room and spectator_id:
             room.spectators.pop(spectator_id, None)
+            telemetry.event("spectator_left", match_id, connected_secs=round(time.time() - connected_at, 1))
             await room.broadcast({"type": "spectators", "count": len(room.spectators)})
         elif room and current_player_id:
+            # replaced: the phone already came back on a new connection before the server noticed this one drop.
+            # The close code tells a clean close (1000, 1001) from a connection that just died (1006).
+            room.log("player_disconnected", current_player_id, status=room.status, in_fight=room.fight_running(),
+                     close_code=ws.close_code, replaced=room.sockets.get(current_player_id) is not ws,
+                     connected_secs=round(time.time() - connected_at, 1))
             await coordinator.handle_player_disconnect(room, current_player_id, ws)
 
     return ws
@@ -1197,16 +1422,21 @@ async def cors_middleware(request: web.Request, handler):
 
 
 SWEEPER_KEY = web.AppKey("sweeper", asyncio.Task)
+SAMPLER_KEY = web.AppKey("sampler", asyncio.Task)
 
 
 async def _start_sweeper(app: web.Application):
     app[SWEEPER_KEY] = asyncio.create_task(coordinator.sweep_forever())
+    telemetry.event("server_start", build=build_version())
+    app[SAMPLER_KEY] = asyncio.create_task(ServerSampler(build_version, coordinator.live_counts).run())
 
 
 async def _stop_sweeper(app: web.Application):
-    task = app.get(SWEEPER_KEY)
-    if task:
-        task.cancel()
+    for key in (SWEEPER_KEY, SAMPLER_KEY):
+        task = app.get(key)
+        if task:
+            task.cancel()
+    telemetry.flush()
 
 
 def create_app() -> web.Application:
@@ -1221,6 +1451,10 @@ def create_app() -> web.Application:
     app.router.add_get("/api/leaderboard", api_get_leaderboard)
     app.router.add_get("/api/netstats", api_get_net_stats)
     app.router.add_get("/api/health", api_health)
+
+    # Admin panel (it reads this module's rooms, so it can only be imported from here once this module has loaded)
+    from server import admin
+    admin.add_routes(app)
 
     # Static player files & docs (for local development; production serves them from nginx)
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

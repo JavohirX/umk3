@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Immortal Combat admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232a78d6'/%3E%3Cpath d='M7 22V10h4v12zm7 0V6h4v16zm7 0v-8h4v8z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --raised: #f0efec; --line: rgba(11,11,11,.10); --grid: #e1e0d9; --axis: #c3c2b7;
+  --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #6f6d68; --accent: #2a78d6; --accent-ink: #1c5cab;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --r1: #86b6ef; --r2: #5598e7; --r3: #2a78d6; --r4: #1c5cab; --r5: #104281;
+  --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #8a5a00; --bad: #d03b3b; --bad-ink: #b02a2a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #181818; --surface: #1f1f1f; --raised: #272727; --line: rgba(255,255,255,.10); --grid: #2c2c2a; --axis: #383835;
+    --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #a3a198; --accent: #3987e5; --accent-ink: #86b6ef;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+    --r1: #184f95; --r2: #256abf; --r3: #3987e5; --r4: #6da7ec; --r5: #9ec5f4;
+    --good: #0ca30c; --good-ink: #4cc94c; --warn: #fab219; --warn-ink: #fab219; --bad: #d03b3b; --bad-ink: #ec7a7a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #181818; --surface: #1f1f1f; --raised: #272727; --line: rgba(255,255,255,.10); --grid: #2c2c2a; --axis: #383835;
+  --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #a3a198; --accent: #3987e5; --accent-ink: #86b6ef;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+  --r1: #184f95; --r2: #256abf; --r3: #3987e5; --r4: #6da7ec; --r5: #9ec5f4;
+  --good: #0ca30c; --good-ink: #4cc94c; --warn: #fab219; --warn-ink: #fab219; --bad: #d03b3b; --bad-ink: #ec7a7a;
+}
+* { box-sizing: border-box; }
+html { background: var(--page); }
+body { margin: 0; background: var(--page); color: var(--ink); font: 400 14px/20px Geist, system-ui, -apple-system, "Segoe UI", sans-serif; }
+h1, h2, h3, p { margin: 0; text-wrap: pretty; }
+h1 { font-size: 16px; line-height: 24px; font-weight: 600; }
+h2 { font-size: 20px; line-height: 28px; font-weight: 600; text-wrap: balance; }
+h3 { font-size: 14px; line-height: 20px; font-weight: 600; }
+a { color: var(--accent-ink); }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.skip { position: absolute; left: 16px; top: -64px; background: var(--surface); padding: 8px 12px; border-radius: 8px; z-index: 20; }
+.skip:focus { top: 8px; }
+
+.layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; padding: 16px 12px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.brand { padding: 4px 12px; }
+.brand small { display: block; color: var(--ink-3); font-size: 12px; line-height: 16px; }
+.tabs { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.tabs a { display: block; padding: 8px 12px; border-radius: 8px; color: var(--ink-2); text-decoration: none; font-weight: 500; transition: background-color .3s cubic-bezier(.22,1,.36,1), color .3s cubic-bezier(.22,1,.36,1); white-space: nowrap; }
+.tabs a:hover { background: var(--raised); color: var(--ink); }
+.tabs a[aria-current="page"] { background: var(--raised); color: var(--ink); font-weight: 600; }
+.side-foot { margin-top: auto; padding: 0 12px; color: var(--ink-3); font-size: 12px; line-height: 16px; display: grid; gap: 8px; }
+.main { padding: 16px 24px 64px; min-width: 0; max-width: 1360px; }
+
+.livebar { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 16px; }
+.livebar b { font-weight: 600; }
+.livebar span { color: var(--ink-2); white-space: nowrap; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 8px; }
+.dot.off { background: var(--bad); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 24px; }
+.seg { display: inline-flex; gap: 2px; background: var(--raised); padding: 2px; border-radius: 8px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; color: var(--ink-2); font-weight: 500; transition: background-color .3s cubic-bezier(.22,1,.36,1); }
+.seg button:hover { color: var(--ink); }
+.seg button:active { transform: translateY(1px); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+.check { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.muted { color: var(--ink-3); }
+.small { font-size: 12px; line-height: 16px; }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 4px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block; color: var(--ink); transition: background-color .3s cubic-bezier(.22,1,.36,1); }
+.btn:hover { background: var(--raised); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.link { border: 0; background: none; padding: 0; color: var(--accent-ink); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.input { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 4px 12px; min-width: 240px; }
+select.input { min-width: 0; }
+
+.refreshing { opacity: .6; transition: opacity .3s cubic-bezier(.22,1,.36,1); }
+section.block { margin-bottom: 40px; }
+section.block > h2 { margin-bottom: 4px; }
+section.block > .note { color: var(--ink-2); max-width: 760px; margin-bottom: 12px; }
+.stack { display: grid; gap: 16px; margin-top: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 12px; }
+.kpis.strip { gap: 16px 24px; }
+.kpis.strip .kpi-value { font-size: 24px; line-height: 32px; }
+.kpis.strip .kpi-value.none { font-size: 16px; line-height: 32px; }
+.inner-strip { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.kpi-label { color: var(--ink-2); font-weight: 500; }
+.kpi-value { font-size: 30px; line-height: 36px; font-weight: 600; margin-top: 4px; word-break: break-word; }
+.kpi-value.none { color: var(--ink-3); font-weight: 500; font-size: 18px; line-height: 36px; }
+.kpi-note { color: var(--ink-2); font-size: 12px; line-height: 16px; margin-top: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.chip { font-size: 12px; line-height: 16px; padding: 2px 8px; border-radius: 9999px; background: var(--raised); color: var(--ink-2); white-space: nowrap; }
+.chip.small-sample { background: none; box-shadow: inset 0 0 0 1px var(--warn); color: var(--warn-ink); }
+details.why { margin-top: 8px; }
+details.why summary { cursor: pointer; color: var(--ink-3); font-size: 12px; line-height: 16px; list-style: none; }
+details.why summary::-webkit-details-marker { display: none; }
+details.why summary::before { content: "+ "; }
+details.why[open] summary::before { content: "− "; }
+details.why summary:hover { color: var(--ink); }
+details.why p { margin-top: 4px; color: var(--ink-2); font-size: 12px; line-height: 16px; }
+
+.chart-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 8px; flex-wrap: wrap; }
+.chart-box { position: relative; }
+.chart-box svg { display: block; width: 100%; overflow: visible; }
+.chart-box text { fill: var(--ink-3); font: 400 12px Geist, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; color: var(--ink-2); font-size: 12px; line-height: 16px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 4px; vertical-align: -2px; }
+.legend i.ln { height: 2px; vertical-align: 3px; width: 16px; border-radius: 1px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.16); z-index: 5; min-width: 120px; font-size: 12px; line-height: 16px; opacity: 0; transition: opacity .2s cubic-bezier(.22,1,.36,1); }
+.tip.on { opacity: 1; }
+.tip .tx { color: var(--ink-3); margin-bottom: 4px; white-space: nowrap; }
+.tip .tr { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.tip .tr b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+.tip .tr i { width: 12px; height: 2px; border-radius: 1px; display: inline-block; flex: none; }
+.tip .tr span { color: var(--ink-2); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid-2.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-2 .wide { grid-column: 1 / -1; }
+
+.early { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 24px; padding: 8px 12px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--warn); color: var(--warn-ink); }
+.early b { font-weight: 600; }
+.tile { display: flex; flex-direction: column; }
+.tile-detail { flex-grow: 1; }
+.tile-link { display: inline-block; margin-top: 8px; font-size: 12px; line-height: 16px; text-underline-offset: 2px; }
+.faults { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 12px 16px; }
+.faults.loud { box-shadow: inset 0 0 0 1px var(--bad); }
+.faults details.why { flex-basis: 100%; margin-top: 0; }
+.faults-words { color: var(--ink-2); }
+.faults.loud .faults-words { color: var(--ink); font-weight: 600; }
+.headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; margin-top: 4px; }
+.headline .kpi-value { margin-top: 0; }
+.headline .status { align-self: center; }
+.g-line { position: relative; height: 16px; font-size: 12px; line-height: 16px; white-space: nowrap; color: var(--ink-2); }
+.g-line span { position: absolute; }
+.g-line.strong { color: var(--ink); font-weight: 500; }
+.g-track { position: relative; height: 8px; margin: 8px 0; border-radius: 4px; background: var(--raised); }
+.g-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--r1); border-radius: 4px 0 0 4px; }
+.g-tick { position: absolute; width: 2px; margin-left: -1px; background: var(--ink); }
+.g-scale { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 12px; line-height: 16px; }
+.shares { display: grid; gap: 4px; }
+.share { display: grid; grid-template-columns: 96px minmax(0, 1fr) 48px; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.share > span:first-child { color: var(--ink-2); white-space: nowrap; }
+.share > span:last-child { text-align: right; }
+.share-bar i { display: block; height: 12px; min-width: 2px; background: var(--s1); border-radius: 0 2px 2px 0; }
+.share-goal { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--ink-2); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.share-goal i { flex: 1 1 0; height: 1px; background: var(--axis); }
+.parts-bar { display: flex; gap: 2px; height: 16px; border-radius: 4px; overflow: hidden; background: var(--raised); }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; }
+.parts td { padding: 4px 12px 4px 0; border: 0; }
+.parts td:last-child { padding-right: 0; color: var(--ink-2); }
+.lane { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 8px; align-items: center; margin-bottom: 4px; }
+.lane > span { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+.lane-track { position: relative; height: 24px; background: var(--raised); border-radius: 4px; overflow: hidden; }
+.lane-track i { position: absolute; top: 0; bottom: 0; min-width: 4px; }
+.lane-axis { position: relative; height: 16px; margin-left: 40px; color: var(--ink-3); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.lane-axis span { position: absolute; transform: translateX(-50%); }
+.lane-axis span:first-child { transform: none; }
+.lane-axis span:last-child { transform: translateX(-100%); }
+.head-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.worse { font-weight: 600; color: var(--bad-ink); }
+
+.table-wrap { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 12px; line-height: 16px; padding: 8px 12px 8px 0; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+th button { all: unset; cursor: pointer; }
+th button:hover { color: var(--ink); }
+th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: nowrap; }
+table.prose td { white-space: normal; }
+td.wrap { white-space: normal; }
+td.nowrap, table.prose td.nowrap { white-space: nowrap; }
+td.name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+tr:last-child td { border-bottom: 0; }
+th.num, td.num { text-align: right; }
+td.mono { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
+tr.go { cursor: pointer; }
+tr.go:hover td { background: var(--raised); }
+.pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.empty { color: var(--ink-2); padding: 16px 0; }
+.why-line { color: var(--ink-2); font-size: 12px; line-height: 16px; margin-top: 8px; max-width: 880px; }
+
+.checks { display: grid; gap: 8px; }
+.chk { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.status { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap; }
+.status svg { width: 16px; height: 16px; flex: none; }
+.status.ok { color: var(--good-ink); } .status.warn { color: var(--warn-ink); } .status.fail { color: var(--bad-ink); }
+
+.summary-line { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); margin-top: 4px; }
+.timeline { display: grid; gap: 0; }
+.ev { display: grid; grid-template-columns: 64px 32px minmax(0, 1fr); gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--grid); align-items: baseline; }
+.ev:last-child { border-bottom: 0; }
+.ev .t { font-variant-numeric: tabular-nums; color: var(--ink-3); text-align: right; }
+.ev .r { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+.ev.problem .what { font-weight: 600; }
+.ev .d { color: var(--ink-2); }
+
+.locked { max-width: 480px; margin: 96px auto; }
+.sk { background: var(--raised); border-radius: 8px; animation: pulse 1.4s cubic-bezier(.22,1,.36,1) infinite alternate; }
+.sk.tile { height: 112px; border-radius: 12px; }
+.sk.wide { height: 240px; border-radius: 12px; }
+@keyframes pulse { from { opacity: .5; } to { opacity: 1; } }
+
+@media (max-width: 1180px) {
+  .kpis { grid-template-columns: repeat(var(--cols-mid, 2), minmax(0, 1fr)); }
+  .grid-2.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .layout { display: block; }
+  .side { position: static; height: auto; padding: 8px 16px 0; gap: 8px; overflow: visible; }
+  .tabs { flex-direction: row; overflow-x: auto; padding-bottom: 8px; }
+  .side-foot { display: none; }
+  .brand { padding: 4px 0; }
+  .main { padding: 8px 16px 48px; }
+  .grid-2, .grid-2.three { grid-template-columns: minmax(0, 1fr); }
+  .chk { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .input { min-width: 0; width: 100%; }
+}
+@media (max-width: 560px) {
+  .kpis { grid-template-columns: minmax(0, 1fr); }
+  .kpis.strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpis.strip.inner-strip { grid-template-columns: minmax(0, 1fr); }
+  /* Sentences in five narrow columns read worse than each row stacked. What each line is needs no heading here. */
+  table.rows-on-phone thead { display: none; }
+  table.rows-on-phone tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--grid); }
+  table.rows-on-phone tr:last-child { border-bottom: 0; }
+  table.rows-on-phone td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.rows-on-phone td:first-child { font-weight: 600; }
+  table.rows-on-phone td.num, table.rows-on-phone td.nowrap { display: inline; margin-right: 12px; color: var(--ink-3); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="layout" id="app">
+  <nav class="side" aria-label="Pages">
+    <div class="brand"><h1>Immortal Combat</h1><small>Admin panel</small></div>
+    <ul class="tabs" id="tabs"></ul>
+    <div class="side-foot">
+      <button class="btn" id="theme" type="button">Switch theme</button>
+      <span id="signed-out-hint">Links from /admin last 12 hours.</span>
+    </div>
+  </nav>
+  <main class="main" id="content" tabindex="-1">
+    <div class="livebar" id="live" aria-live="polite"><span class="muted">Checking the server</span></div>
+    <div class="filters" id="filters"></div>
+    <div id="page"></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+const TABS = [["overview", "Overview"], ["funnel", "Funnel"], ["netcode", "Netcode"], ["devices", "Devices"], ["reliability", "Reliability"],
+              ["server", "Server"], ["balance", "Balance"], ["players", "Players"], ["fights", "Fights"], ["quality", "Data quality"]];
+const RANGES = [[1, "24 hours"], [7, "7 days"], [30, "30 days"], [90, "90 days"], [0, "All time"]];
+const SOURCE_TEXT = { server: "Server", phones: "Phones", both: "Server and phones" };
+const SOURCE_WHY = { server: "Measured by the game server itself.", phones: "Reported by phones. Lost if a phone dies before its next report.", both: "Lined up from what the server and both phones recorded." };
+const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5"];
+const RAMP = ["--r1", "--r2", "--r3", "--r4", "--r5"];  // five steps is all the ramp can keep visibly apart; each bar is labelled
+const EARLY_TABS = new Set(["overview", "funnel", "netcode", "devices", "reliability", "balance", "players"]);
+// Column counts that come out even for a number of cards, wide and on a narrower screen, so none is left stranded on a row of its own
+const KPI_COLUMNS = { 1: [1, 1], 2: [2, 2], 3: [3, 3], 4: [4, 2], 5: [5, 3], 6: [3, 3], 8: [4, 2], 9: [3, 3], 12: [4, 3] };
+const MIN_LINE_POINTS = 3;
+const LINE_POINTS = { day: "days of data", clock: "reports", time: "readings" };
+const REFRESH_MS = 30000;
+const LIVE_MS = 10000;
+
+// Player names are chosen by players, so nothing from the server is ever parsed as HTML: every node is built here,
+// and text only ever goes in as text
+function el(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (k === "text") node.textContent = v;
+    else node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) node.append(kid);
+  return node;
+}
+function svg(tag, attrs, ...kids) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v !== null && v !== undefined) node.setAttribute(k, v);
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined) node.append(kid);
+  return node;
+}
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (_) {} },
+};
+
+// ----- sign in -----
+let token = null;
+(function readToken() {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const fromLink = hash.get("key");
+  if (fromLink) {
+    token = fromLink;
+    store.set("ic_admin_token", fromLink);
+    history.replaceState(null, "", location.pathname);
+  } else {
+    token = store.get("ic_admin_token");
+  }
+})();
+
+function showLocked(message) {
+  store.del("ic_admin_token");
+  clearInterval(refreshTimer);
+  clearInterval(liveTimer);
+  document.getElementById("app").replaceChildren(el("main", { class: "locked card", id: "content" },
+    el("h2", { text: "Sign in with the bot" }),
+    el("p", { class: "why-line", text: message || "This panel opens from a signed link. Send /admin to the bot from the admin account, in your private chat with it." })));
+}
+
+async function api(path) {
+  const response = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  if (response.status === 401) {
+    showLocked("This link has expired. Send /admin to the bot for a new one.");
+    throw new Error("signed out");
+  }
+  return response;
+}
+async function apiJson(path) {
+  const response = await api(path);
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.message || `The server answered ${response.status}.`);
+  return body;
+}
+
+// ----- numbers -----
+const dash = "–";
+const singular = (label) => label === "people" ? "person" : label.replace(/s$/, "");
+function fmt(v, unit) {
+  if (v === null || v === undefined || (typeof v === "number" && Number.isNaN(v))) return dash;
+  switch (unit) {
+    case "count": return Math.round(v).toLocaleString();
+    case "pct": { const p = v * 100; return (p === 0 || p === 100 ? p.toFixed(0) : p.toFixed(1)) + "%"; }
+    case "pct100": return v.toFixed(0) + "%";
+    case "ms": return (v >= 10000 ? (v / 1000).toFixed(1) + "s" : v < 10 ? v.toFixed(1) + "ms" : Math.round(v).toLocaleString() + "ms");
+    case "secs": {
+      if (v < 10) return v.toFixed(1) + "s";
+      // Round first and split after, so 119.6 is 2m 0s and never 1m 60s
+      const s = Math.round(v);
+      if (s < 90) return s + "s";
+      if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+      const m = Math.round(s / 60);
+      return `${Math.floor(m / 60)}h ${m % 60}m`;
+    }
+    case "number": case "ratio": return v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+    case "mb": return v.toFixed(1) + " MB";
+    case "time": return v ? new Date(v * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : dash;
+    default: return String(v);
+  }
+}
+function tickFmt(v, unit) {
+  const compact = (x) => x >= 1e6 ? (x / 1e6).toFixed(x % 1e6 ? 1 : 0) + "M" : x >= 1000 ? (x / 1000).toFixed(x % 1000 ? 1 : 0) + "K" : String(Math.round(x * 100) / 100);
+  if (unit === "ms") return v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + "s" : compact(v) + "ms";
+  if (unit === "pct") return Math.round(v * 100) + "%";
+  if (unit === "pct100") return Math.round(v) + "%";
+  if (unit === "mb") return compact(v) + " MB";
+  if (unit === "secs") return compact(v) + "s";
+  return compact(v);
+}
+function niceScale(max, unit) {
+  if (!(max > 0)) return { top: unit === "pct" ? 1 : 1, ticks: [0, 1] };
+  const pow = 10 ** Math.floor(Math.log10(max));
+  const n = max / pow;
+  let step = (n <= 1 ? 0.2 : n <= 2 ? 0.5 : n <= 5 ? 1 : 2) * pow;
+  if (unit === "count") step = Math.max(1, Math.ceil(step));
+  const top = Math.ceil(max / step - 1e-9) * step;
+  const ticks = [];
+  for (let t = 0; t <= top + step / 2; t += step) ticks.push(Math.round(t * 1e6) / 1e6);
+  return { top, ticks };
+}
+function xLabel(x, kind, span) {
+  if (kind === "day") {
+    const [y, m, d] = String(x).split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  if (kind === "time") {
+    const date = new Date(x * 1000);
+    return span > 2 * 86400 ? date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  if (kind === "clock") {
+    const s = Math.max(0, Math.round(x));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+  return String(x);
+}
+
+// ----- charts -----
+const liveCharts = new Set();
+
+function chartBlock(block, opts) {
+  const key = `chart:${block.title}`;
+  const showTable = openState.has(key);
+  const head = el("div", { class: "chart-head" }, el("h3", { text: block.title }),
+    el("button", { class: "link small", type: "button", onclick: () => { toggleState(key); rerender(); } , text: showTable ? "Show as a chart" : "Show as a table" }));
+  const card = el("div", { class: "card" }, head);
+  if (showTable) {
+    card.append(chartTable(block));
+  } else {
+    const box = el("div", { class: "chart-box" });
+    card.append(box);
+    const series = block.series || [];
+    if (series.length > 1) {
+      card.append(el("div", { class: "legend" }, series.map((s, i) => el("span", {},
+        el("i", { class: block.kind === "line" ? "ln" : "", style: `background:var(${COLORS[i % COLORS.length]})` }), s.name))));
+    }
+    box._draw = () => drawChart(box, block);
+    liveCharts.add(box);
+  }
+  const line = whyLine(block.why, block.source, block.n);
+  if (line) card.append(line);
+  return card;
+}
+
+function chartTable(block) {
+  const columns = [{ key: "x", label: "", unit: "text" }, ...block.series.map((s, i) => ({ key: `s${i}`, label: s.name, unit: block.unit }))];
+  let rows;
+  if (block.series[0] && block.series[0].points) {
+    const xs = [...new Set(block.series.flatMap((s) => s.points.map((p) => p[0])))].sort((a, b) => a - b);
+    rows = xs.map((x) => {
+      const row = { x: xLabel(x, block.x_kind) };
+      block.series.forEach((s, i) => { const p = s.points.find((q) => q[0] === x); row[`s${i}`] = p ? p[1] : null; });
+      return row;
+    });
+  } else {
+    rows = (block.x || []).map((x, xi) => {
+      const row = { x: xLabel(x, block.x_kind, spanOf(block)) };
+      block.series.forEach((s, i) => { row[`s${i}`] = s.values[xi]; });
+      return row;
+    });
+  }
+  return dataTable(columns, rows, {});
+}
+function spanOf(block) {
+  const x = block.x || [];
+  return block.x_kind === "time" && x.length > 1 ? x[x.length - 1] - x[0] : 0;
+}
+
+function emptyChart(box, text) {
+  box.replaceChildren(el("p", { class: "empty", text: text || "No data for this range yet." }));
+}
+function hasData(block) {
+  // On a line a zero is a reading like any other. On bars, all zeros draw nothing.
+  return (block.series || []).some((s) => s.points ? s.points.some((p) => p[1] !== null) : (s.values || []).some((v) => v !== null && (block.kind === "line" || v !== 0)));
+}
+
+function drawChart(box, block) {
+  if (!box.isConnected) { liveCharts.delete(box); return; }
+  if (!hasData(block)) return emptyChart(box);
+  if (block.kind === "shares") return drawShares(box, block);
+  const width = Math.max(240, box.clientWidth);
+  if (block.kind === "line") return drawLine(box, block, width);
+  if (block.kind === "stackbar" || block.kind === "funnel") return drawHBars(box, block, width);
+  return drawColumns(box, block, width);
+}
+
+function makeTip(box) {
+  const tip = el("div", { class: "tip", role: "status" });
+  box.append(tip);
+  return tip;
+}
+function showTip(box, tip, title, rows, x, y) {
+  tip.replaceChildren(el("div", { class: "tx", text: title }), ...rows.map((r) => el("div", { class: "tr" },
+    r.color ? el("i", { style: `background:var(${r.color})` }) : null, el("b", { text: r.value }), r.name ? el("span", { text: r.name }) : null)));
+  tip.classList.add("on");
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(0, Math.min(box.clientWidth - w, x + 12)) + "px";
+  tip.style.top = Math.max(0, y - h - 8) + "px";
+}
+function hideTip(tip) { tip.classList.remove("on"); }
+
+function axes(root, scale, x0, x1, y0, h, unit) {
+  for (const t of scale.ticks) {
+    const y = y0 + h - (t / scale.top) * h;
+    root.append(svg("line", { x1: x0, x2: x1, y1: y, y2: y, stroke: t === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }));
+    const label = svg("text", { x: x0 - 8, y: y + 4, "text-anchor": "end" });
+    label.textContent = tickFmt(t, unit);
+    root.append(label);
+  }
+}
+function barPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h);
+  return `M${x} ${y + h}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${y + h}Z`;
+}
+
+function drawShares(box, block) {
+  const biggest = Math.max(...block.rows.map((r) => r.value));
+  const nodes = [];
+  block.rows.forEach((r, i) => {
+    if (r.over_goal && !(i && block.rows[i - 1].over_goal)) nodes.push(el("div", { class: "share-goal" }, el("span", { text: `Over the ${block.goal}ms goal` }), el("i")));
+    nodes.push(el("div", { class: "share" }, el("span", { text: r.label }),
+      el("div", { class: "share-bar" }, el("i", { style: `width:${(r.value / biggest * 100).toFixed(1)}%` })),
+      el("span", { text: r.value < 0.001 ? "<0.1%" : fmt(r.value, "pct") })));
+  });
+  box.replaceChildren(el("div", { class: "shares" }, nodes));
+}
+
+function drawColumns(box, block, width) {
+  const H = block.compact ? 144 : 220, left = 52, right = 8, top = 8, bottom = 24;
+  const plotW = width - left - right, plotH = H - top - bottom;
+  const x = block.x, n = x.length;
+  const totals = x.map((_, i) => block.series.reduce((sum, s) => sum + (s.values[i] || 0), 0));
+  const scale = niceScale(Math.max(...totals), block.unit);
+  const root = svg("svg", { width, height: H, viewBox: `0 0 ${width} ${H}`, role: "img", "aria-label": block.title });
+  axes(root, scale, left, width - right, top, plotH, block.unit);
+  const band = plotW / n;
+  const barW = Math.min(24, Math.max(2, band - Math.min(8, band * 0.3)));
+  const span = spanOf(block);
+  const labelEvery = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plotW / 72))));
+  box.replaceChildren(root);
+  const tip = makeTip(box);
+  x.forEach((xi, i) => {
+    const cx = left + band * (i + 0.5);
+    let base = top + plotH;
+    const topSeries = block.series.reduce((last, s, si) => (s.values[i] ? si : last), -1);
+    block.series.forEach((s, si) => {
+      const v = s.values[i] || 0;
+      if (!v) return;
+      const fullH = (v / scale.top) * plotH;
+      const h = Math.max(1, fullH - (block.series.length > 1 && si < topSeries ? 2 : 0));
+      const y = base - h;
+      root.append(si === topSeries ? svg("path", { d: barPath(cx - barW / 2, y, barW, h, 4), fill: `var(${COLORS[si % COLORS.length]})` })
+                                   : svg("rect", { x: cx - barW / 2, y, width: barW, height: h, fill: `var(${COLORS[si % COLORS.length]})` }));
+      base -= fullH;
+    });
+    if (i % labelEvery === 0) {
+      const label = svg("text", { x: cx, y: H - 8, "text-anchor": "middle" });
+      label.textContent = xLabel(xi, block.x_kind, span);
+      root.append(label);
+    }
+    const hit = svg("rect", { x: left + band * i, y: top, width: band, height: plotH, fill: "transparent", tabindex: n <= 40 ? 0 : null, "aria-label": `${xLabel(xi, block.x_kind, span)}: ${block.series.map((s) => `${s.name} ${fmt(s.values[i], block.unit)}`).join(", ")}` });
+    const show = () => showTip(box, tip, xLabel(xi, block.x_kind, span), block.series.slice().reverse().map((s) => ({
+      name: block.series.length > 1 ? s.name : "", value: fmt(s.values[i] || 0, block.unit), color: block.series.length > 1 ? COLORS[block.series.indexOf(s) % COLORS.length] : COLORS[0] })), cx, base);
+    hit.addEventListener("pointermove", show);
+    hit.addEventListener("focus", show);
+    hit.addEventListener("pointerleave", () => hideTip(tip));
+    hit.addEventListener("blur", () => hideTip(tip));
+    root.append(hit);
+  });
+}
+
+function drawHBars(box, block, width) {
+  const rowH = 32, left = Math.min(180, Math.max(96, width * 0.28)), right = 96, top = 4;
+  const x = block.x;
+  const H = top + x.length * rowH + 4;
+  const plotW = Math.max(40, width - left - right);
+  const funnel = block.kind === "funnel";
+  const totals = x.map((_, i) => block.series.reduce((sum, s) => sum + (s.values[i] || 0), 0));
+  const max = Math.max(...totals, 0) || 1;
+  const root = svg("svg", { width, height: H, viewBox: `0 0 ${width} ${H}`, role: "img", "aria-label": block.title });
+  box.replaceChildren(root);
+  const tip = makeTip(box);
+  x.forEach((xi, i) => {
+    const y = top + i * rowH + 6, barH = 20;
+    const label = svg("text", { x: left - 8, y: y + 14, "text-anchor": "end" });
+    label.textContent = xLabel(xi, block.x_kind);
+    root.append(label);
+    root.append(svg("line", { x1: left, x2: left, y1: y - 6, y2: y + barH + 6, stroke: "var(--axis)" }));
+    let at = left;
+    block.series.forEach((s, si) => {
+      const v = s.values[i] || 0;
+      if (!v) return;
+      const w = Math.max(1, (v / max) * plotW);
+      const color = funnel ? RAMP[Math.min(i, RAMP.length - 1)] : COLORS[si % COLORS.length];
+      root.append(svg("rect", { x: at, y, width: Math.max(1, w - (block.series.length > 1 ? 2 : 0)), height: barH, rx: si === block.series.length - 1 ? 4 : 0, fill: `var(${color})` }));
+      at += w;
+    });
+    const tag = svg("text", { x: at + 8, y: y + 14 });
+    tag.textContent = funnel && i ? `${fmt(totals[i], block.unit)}  ${totals[0] ? Math.round(totals[i] / totals[0] * 100) : 0}%` : fmt(totals[i], block.unit);
+    root.append(tag);
+    const hit = svg("rect", { x: 0, y: y - 6, width, height: rowH, fill: "transparent", tabindex: 0, "aria-label": `${xi}: ${fmt(totals[i], block.unit)}` });
+    const show = () => showTip(box, tip, String(xi), block.series.map((s, si) => ({ name: block.series.length > 1 ? s.name : "", value: fmt(s.values[i] || 0, block.unit), color: funnel ? RAMP[Math.min(i, RAMP.length - 1)] : COLORS[si % COLORS.length] })), left, y + 4);
+    hit.addEventListener("pointermove", show);
+    hit.addEventListener("focus", show);
+    hit.addEventListener("pointerleave", () => hideTip(tip));
+    hit.addEventListener("blur", () => hideTip(tip));
+    root.append(hit);
+  });
+}
+
+function drawLine(box, block, width) {
+  const H = 220, left = 52, right = 12, top = 8, bottom = 24;
+  const plotW = width - left - right, plotH = H - top - bottom;
+  const numeric = block.x_kind === "time" || block.x_kind === "clock";
+  const series = block.series.map((s) => ({ name: s.name, points: s.points || s.values.map((v, i) => [numeric ? block.x[i] : i, v]) }));
+  const allX = series.flatMap((s) => s.points.map((p) => p[0]));
+  const minX = Math.min(...allX), maxX = Math.max(...allX);
+  const labelOf = (v) => numeric ? xLabel(v, block.x_kind, maxX - minX) : xLabel(block.x[v], block.x_kind);
+  // A line needs a few points to be a trend. Before then the numbers say more than a lone dot does.
+  const readings = series.map((s) => s.points.filter((p) => p[1] !== null && p[1] !== undefined));
+  if (new Set(readings.flat().map((p) => p[0])).size < MIN_LINE_POINTS) {
+    box.replaceChildren(el("p", {}, readings.map((points, i) => points.length ? el("div", { text: `${series.length > 1 ? `${series[i].name}: ` : ""}${points.map((p) => `${fmt(p[1], block.unit)} ${block.x_kind === "day" ? "on" : "at"} ${labelOf(p[0])}`).join(", ")}` }) : null)),
+      el("p", { class: "why-line", text: `The chart appears from ${MIN_LINE_POINTS} ${LINE_POINTS[block.x_kind] || "readings"}.` }));
+    box.parentElement.querySelector(".legend")?.remove();
+    return;
+  }
+  const xOf = (v) => left + (maxX === minX ? plotW / 2 : ((v - minX) / (maxX - minX)) * plotW);
+  const scale = niceScale(Math.max(...series.flatMap((s) => s.points.map((p) => p[1] || 0))), block.unit);
+  const yOf = (v) => top + plotH - (v / scale.top) * plotH;
+  const root = svg("svg", { width, height: H, viewBox: `0 0 ${width} ${H}`, role: "img", "aria-label": block.title });
+  axes(root, scale, left, width - right, top, plotH, block.unit);
+  const labels = Math.max(2, Math.floor(plotW / 96));
+  const uniqueX = [...new Set(allX)].sort((a, b) => a - b);
+  const every = Math.max(1, Math.ceil(uniqueX.length / labels));
+  uniqueX.forEach((v, i) => {
+    if (i % every) return;
+    const label = svg("text", { x: xOf(v), y: H - 8, "text-anchor": "middle" });
+    label.textContent = labelOf(v);
+    root.append(label);
+  });
+  series.forEach((s, si) => {
+    const color = `var(${COLORS[si % COLORS.length]})`;
+    let d = "", pen = false;
+    s.points.forEach(([x, y]) => {
+      if (y === null || y === undefined) { pen = false; return; }
+      d += `${pen ? "L" : "M"}${xOf(x).toFixed(1)} ${yOf(y).toFixed(1)}`;
+      pen = true;
+    });
+    root.append(svg("path", { d, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const known = s.points.filter((p) => p[1] !== null && p[1] !== undefined);
+    const last = known[known.length - 1];
+    if (last) root.append(svg("circle", { cx: xOf(last[0]), cy: yOf(last[1]), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2 }));
+    // A lone point between gaps has no line of its own
+    if (known.length && s.points.length < 40) s.points.forEach((p, i) => {
+      const before = s.points[i - 1], after = s.points[i + 1];
+      if (p[1] !== null && (!before || before[1] === null) && (!after || after[1] === null)) root.append(svg("circle", { cx: xOf(p[0]), cy: yOf(p[1]), r: 4, fill: color }));
+    });
+  });
+  const cross = svg("line", { y1: top, y2: top + plotH, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" });
+  root.append(cross);
+  box.replaceChildren(root);
+  const tip = makeTip(box);
+  let at = uniqueX.length - 1;
+  const showAt = (index) => {
+    at = Math.max(0, Math.min(uniqueX.length - 1, index));
+    const v = uniqueX[at];
+    cross.setAttribute("x1", xOf(v));
+    cross.setAttribute("x2", xOf(v));
+    cross.setAttribute("visibility", "visible");
+    const rows = series.map((s, si) => {
+      const near = s.points.reduce((best, p) => (!best || Math.abs(p[0] - v) < Math.abs(best[0] - v) ? p : best), null);
+      return { name: series.length > 1 ? s.name : "", value: fmt(near ? near[1] : null, block.unit), color: COLORS[si % COLORS.length] };
+    });
+    showTip(box, tip, labelOf(v), rows, xOf(v), top + 48);
+  };
+  const hit = svg("rect", { x: left, y: top, width: plotW, height: plotH, fill: "transparent", tabindex: 0, "aria-label": `${block.title}. Use the arrow keys to read values.` });
+  hit.addEventListener("pointermove", (e) => {
+    const rect = root.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    let best = 0, bestD = Infinity;
+    uniqueX.forEach((v, i) => { const d = Math.abs(xOf(v) - px); if (d < bestD) { bestD = d; best = i; } });
+    showAt(best);
+  });
+  hit.addEventListener("pointerleave", () => { hideTip(tip); cross.setAttribute("visibility", "hidden"); });
+  hit.addEventListener("focus", () => showAt(at));
+  hit.addEventListener("blur", () => { hideTip(tip); cross.setAttribute("visibility", "hidden"); });
+  hit.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") { showAt(at - 1); e.preventDefault(); }
+    if (e.key === "ArrowRight") { showAt(at + 1); e.preventDefault(); }
+  });
+  root.append(hit);
+}
+
+new ResizeObserver(() => {
+  clearTimeout(window.__resizeTimer);
+  window.__resizeTimer = setTimeout(() => liveCharts.forEach((box) => box._draw && box._draw()), 120);
+}).observe(document.documentElement);
+
+// ----- blocks -----
+const openState = new Set();
+function toggleState(key) { if (openState.has(key)) openState.delete(key); else openState.add(key); }
+
+function whyLine(why, source, n) {
+  if (!why && !source) return null;
+  return el("p", { class: "why-line" }, source ? `${SOURCE_TEXT[source]}. ` : "", why || "");
+}
+
+const isSmall = (item, lowSample) => item.n !== null && item.n !== undefined && item.n > 0 && item.n < lowSample;
+const countText = (item) => item.n !== null && item.n !== undefined ? `${item.n.toLocaleString()} ${item.n === 1 ? singular(item.n_label) : item.n_label}` : null;
+const smallChip = () => el("span", { class: "chip small-sample", title: "Too few to decide anything from this alone", text: "Small sample" });
+
+function whyDetails(item) {
+  const key = `why:${item.label || item.title}`;
+  return el("details", { class: "why", open: openState.has(key) || null, ontoggle: (e) => { if (e.target.open) openState.add(key); else openState.delete(key); } },
+    el("summary", { text: "How this is worked out" }), el("p", { text: item.why }), el("p", { text: SOURCE_WHY[item.source] }));
+}
+function kpiValue(item) {
+  const none = item.value === null || item.value === undefined;
+  return el("div", { class: `kpi-value${none ? " none" : ""}`, text: none ? "No data yet" : fmt(item.value, item.unit) });
+}
+
+function kpiCard(item, lowSample) {
+  return el("div", { class: "card" },
+    el("div", { class: "kpi-label", text: item.label }),
+    kpiValue(item),
+    item.note ? el("div", { class: "kpi-note", text: item.note }) : null,
+    el("div", { class: "chips" },
+      el("span", { class: "chip", title: SOURCE_WHY[item.source], text: SOURCE_TEXT[item.source] }),
+      countText(item) ? el("span", { class: "chip", text: countText(item) }) : null,
+      isSmall(item, lowSample) ? smallChip() : null),
+    whyDetails(item));
+}
+
+// The same number without a card of its own, for a row of context held in one card
+function kpiCell(item, lowSample) {
+  return el("div", { style: "min-width:0" },
+    el("div", { class: "kpi-label", text: item.label }),
+    kpiValue(item),
+    item.note ? el("div", { class: "kpi-note", text: item.note }) : null,
+    el("div", { class: "kpi-note", text: [SOURCE_TEXT[item.source], countText(item)].filter(Boolean).join(", ") }),
+    isSmall(item, lowSample) ? el("div", { class: "chips" }, smallChip()) : null,
+    whyDetails(item));
+}
+
+function columnStyle(count) {
+  const [wide, mid] = KPI_COLUMNS[count] || [4, 2];
+  return `--cols:${wide};--cols-mid:${mid}`;
+}
+function kpisBlock(block, lowSample) {
+  return block.strip ? el("div", { class: "card kpis strip", style: columnStyle(block.items.length) }, block.items.map((item) => kpiCell(item, lowSample)))
+    : el("div", { class: "kpis", style: columnStyle(block.items.length) }, block.items.map((item) => kpiCard(item, lowSample)));
+}
+
+function statusTile(item) {
+  const page = TABS.find(([id]) => id === item.tab);
+  return el("div", { class: "card tile" },
+    el("div", { class: "kpi-label", text: item.label }),
+    el("div", { class: "headline" }, kpiValue(item), item.tone ? statusBadge(item.tone, item.verdict) : null),
+    el("p", { class: "kpi-note tile-detail", text: item.detail }),
+    el("div", {}, el("a", { class: "tile-link", href: `#${item.tab}`, text: `Open ${page[1]}` })),
+    whyDetails(item));
+}
+
+function faultsBlock(block) {
+  const total = block.counts.total;
+  const see = () => { state.only = "faults"; state.offset = 0; location.hash = "fights"; };
+  if (!block.measured) {
+    return el("div", { class: "card faults" }, el("span", { class: "muted", text: "No phone reports in this range yet, so faults can't be counted." }), whyDetails(block));
+  }
+  return el("div", { class: `card faults${total ? " loud" : ""}` },
+    statusBadge(total ? "fail" : "ok", total ? `${total.toLocaleString()} ${total === 1 ? "fault" : "faults"} that should never happen` : "No faults that should never happen"),
+    el("span", { class: "faults-words", text: (total ? block.words.filter((w) => !w.startsWith("0 ")) : block.words).join(", ") }),
+    total ? el("button", { class: "link", type: "button", text: "See the fights", onclick: see }) : null,
+    el("span", { class: "muted small", text: [SOURCE_TEXT[block.source], `${block.n.toLocaleString()} ${block.n === 1 ? "fight" : "fights"}`].join(", ") }),
+    whyDetails(block));
+}
+
+function gaugeBlock(block, lowSample) {
+  const average = block.average.value, slowest = block.slowest.value;
+  const at = (v) => Math.max(0, Math.min(100, v / block.scale * 100));
+  // Each label has a line to itself and leans away from the edge the nearer it gets, so none can overlap or spill out
+  const line = (v, text, strong) => el("div", { class: `g-line${strong ? " strong" : ""}` }, el("span", { style: `left:${at(v)}%;transform:translateX(-${at(v)}%)`, text }));
+  const card = el("div", { class: "card" }, el("h3", { text: block.title }));
+  if (average === null || average === undefined) {
+    card.append(el("p", { class: "empty", text: "No data for this range yet." }));
+  } else {
+    card.append(
+      el("div", { class: "headline" }, el("span", { class: "kpi-value", text: fmt(average, "ms") }), statusBadge(block.tone, block.verdict)),
+      el("div", { role: "img", style: "margin-top:8px", "aria-label": `On a scale from 0 to ${fmt(block.scale, "ms")}, input delay averages ${fmt(average, "ms")} and the slowest 5% of phones sit at ${fmt(slowest, "ms")}, against a goal of ${fmt(block.goal, "ms")}.` },
+        line(block.goal, `Goal ${fmt(block.goal, "ms")}`),
+        line(average, `${fmt(average, "ms")} average`, true),
+        el("div", { class: "g-track" },
+          el("i", { class: "g-fill", style: `width:${at(block.goal)}%` }),
+          el("i", { class: "g-tick", style: `left:${at(block.goal)}%;top:-6px;bottom:-6px;background:var(--ink-2)` }),
+          el("i", { class: "g-tick", style: `left:${at(average)}%;top:-6px;bottom:0` }),
+          el("i", { class: "g-tick", style: `left:${at(slowest)}%;top:0;bottom:-6px` })),
+        line(slowest, `${fmt(slowest, "ms")} slowest 5% of phones`, true),
+        el("div", { class: "g-scale" }, el("span", { text: "0" }), el("span", { text: fmt(block.scale, "ms") }))),
+      whyDetails({ title: block.title, why: `${block.average.why} ${block.slowest.why}`, source: block.average.source }));
+  }
+  card.append(el("div", { class: "kpis strip inner-strip", style: columnStyle(block.items.length) }, block.items.map((item) => kpiCell(item, lowSample))));
+  return card;
+}
+
+function partsBlock(block) {
+  const card = el("div", { class: "card" }, el("h3", { text: block.title, style: "margin-bottom:8px" }));
+  if (!block.n) {
+    card.append(el("p", { class: "empty", text: "No finished fights in this range yet." }));
+  } else {
+    const color = (i) => `background:var(${COLORS[i % COLORS.length]})`;
+    card.append(
+      el("div", { class: "parts-bar", role: "img", "aria-label": block.items.map((p) => `${p.label} ${fmt(p.value, p.unit)}`).join(", ") },
+        block.items.map((p, i) => p.count ? el("div", { style: `flex:${p.count} 1 0;${color(i)}` }) : null)),
+      el("table", { class: "parts", style: "margin-top:8px" }, el("tbody", {}, block.items.map((p, i) => el("tr", {},
+        el("td", {}, el("i", { class: "swatch", style: color(i) }), p.label),
+        el("td", { class: "num", text: p.count.toLocaleString() }),
+        el("td", { class: "num", text: fmt(p.value, p.unit) }))))));
+  }
+  const rematch = block.rematch;
+  card.append(el("p", { class: "why-line" }, `${SOURCE_TEXT[block.source]}. ${rematch.n ? `${rematch.label}: ${rematch.count.toLocaleString()} of ${rematch.n.toLocaleString()}. ` : ""}${block.why}`));
+  return card;
+}
+
+function dataTable(columns, rows, opts) {
+  const sortKey = opts.sortKey;
+  const head = el("tr", {}, columns.map((c) => {
+    const numeric = !["text", "time"].includes(c.unit);
+    const label = opts.sort ? el("button", { type: "button", text: c.label + (sortKey && sortKey.key === c.key ? (sortKey.dir > 0 ? " ↑" : " ↓") : ""), onclick: () => opts.sort(c.key) }) : c.label;
+    return el("th", { class: numeric ? "num" : "", scope: "col" }, label);
+  }));
+  const body = rows.map((row) => {
+    const cells = columns.map((c) => {
+      const numeric = !["text", "time"].includes(c.unit);
+      const raw = row[c.key];
+      const text = c.unit === "text" ? (raw === null || raw === undefined || raw === "" ? dash : String(raw)) : fmt(raw, c.unit);
+      const name = c.key === "p1" || c.key === "p2" || c.key === "player";
+      return el("td", { class: `${numeric ? "num" : ""}${c.key.endsWith("_id") ? " mono" : ""}${name ? " name" : ""}${c.unit === "time" ? " nowrap" : ""}`, title: name ? text : null, text });
+    });
+    if (opts.onRow) {
+      return el("tr", { class: "go", tabindex: 0, role: "link", onclick: () => opts.onRow(row), onkeydown: (e) => { if (e.key === "Enter") opts.onRow(row); } }, cells);
+    }
+    return el("tr", {}, cells);
+  });
+  // A short table of sentences reads better wrapped than scrolling sideways on a phone
+  return el("div", { class: "table-wrap" }, el("table", { class: opts.prose ? "prose rows-on-phone" : columns.length <= 3 ? "prose" : null }, el("thead", {}, head), el("tbody", {}, body)));
+}
+
+function tableBlock(block) {
+  const key = `sort:${block.title.replace(/^\d+ /, "")}`;
+  const sort = sortState[key];
+  let rows = block.rows;
+  if (sort) {
+    rows = rows.slice().sort((a, b) => {
+      const x = a[sort.key], y = b[sort.key];
+      if (x === null || x === undefined) return 1;
+      if (y === null || y === undefined) return -1;
+      return (x > y ? 1 : x < y ? -1 : 0) * sort.dir;
+    });
+  }
+  const card = el("div", { class: "card" }, block.hide_title ? null : el("h3", { text: block.title, style: "margin-bottom:8px" }));
+  if (!block.rows.length) {
+    card.append(el("p", { class: "empty", text: block.empty }));
+  } else {
+    card.append(dataTable(block.columns, rows, {
+      prose: block.prose,
+      sortKey: sort,
+      sort: (k) => { sortState[key] = { key: k, dir: sort && sort.key === k ? -sort.dir : (["text", "time"].includes(block.columns.find((c) => c.key === k).unit) && k !== "started" ? 1 : -1) }; rerender(); },
+      onRow: block.link ? (row) => { location.hash = `fight/${encodeURIComponent(row[block.link])}`; } : null,
+    }));
+    if (block.total !== undefined && block.total > block.limit) {
+      card.append(el("div", { class: "pager" },
+        el("button", { class: "btn", type: "button", disabled: block.offset === 0 || null, text: "Newer", onclick: () => { state.offset = Math.max(0, block.offset - block.limit); load(); } }),
+        el("span", { class: "muted", text: `${block.offset + 1} to ${Math.min(block.total, block.offset + block.limit)} of ${block.total}` }),
+        el("button", { class: "btn", type: "button", disabled: block.offset + block.limit >= block.total || null, text: "Older", onclick: () => { state.offset = block.offset + block.limit; load(); } })));
+    }
+  }
+  const line = whyLine(block.why, block.source);
+  if (line) card.append(line);
+  if (block.more && block.rows.length) card.append(el("p", { class: "why-line" }, el("a", { href: `#${block.more.tab}`, text: block.more.text, onclick: () => { state.only = ""; state.offset = 0; } })));
+  return card;
+}
+const sortState = {};
+
+const ICONS = {
+  ok: ["M3.5 8.5l3 3 6-7"],
+  warn: ["M8 3.5v6", "M8 12v.5"],
+  fail: ["M4 4l8 8", "M12 4l-8 8"],
+};
+function statusBadge(status, text) {
+  const icon = svg("svg", { viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" },
+    ICONS[status].map((d) => svg("path", { d })));
+  return el("span", { class: `status ${status}` }, icon, text || { ok: "Passed", warn: "Warning", fail: "Failed" }[status]);
+}
+function checksBlock(block) {
+  const counts = { ok: 0, warn: 0, fail: 0 };
+  block.items.forEach((c) => counts[c.status]++);
+  const order = { fail: 0, warn: 1, ok: 2 };
+  const items = block.items.slice().sort((a, b) => order[a.status] - order[b.status]);
+  return el("div", { class: "card" },
+    el("div", { class: "summary-line", style: "margin:0 0 12px" }, el("b", { text: `${counts.ok} of ${block.items.length} passed` }),
+      counts.fail ? el("span", { text: `${counts.fail} failed` }) : null, counts.warn ? el("span", { text: `${counts.warn} with a warning` }) : null),
+    el("div", { class: "checks" }, items.map((c) => el("div", { class: "chk", style: "padding:8px 0;border-top:1px solid var(--grid)" },
+      statusBadge(c.status),
+      el("div", {}, el("div", { style: "font-weight:500", text: c.name }), el("div", { class: "why-line", style: "margin-top:0", text: c.proves }),
+        c.detail ? el("div", { class: "why-line", style: "margin-top:0", text: c.detail }) : null,
+        c.examples.length ? el("div", { class: "why-line", style: "margin-top:4px" }, "For example ", c.examples.flatMap((id, i) => [i ? ", " : "",
+          el("a", { href: `#fight/${encodeURIComponent(id)}`, text: id })])) : null),
+      el("div", { class: "muted", style: "white-space:nowrap;font-variant-numeric:tabular-nums", text: c.bad ? `${c.bad.toLocaleString()} found` : "None found" })))));
+}
+
+function renderBlock(block, scope) {
+  if (block.type === "kpis") return kpisBlock(block, scope.low_sample);
+  if (block.type === "status") return el("div", { class: "kpis", style: columnStyle(block.items.length) }, block.items.map(statusTile));
+  if (block.type === "side_by_side") return el("div", { class: "grid-2" }, block.blocks.map((b) => renderBlock(b, scope)));
+  if (block.type === "faults") return faultsBlock(block);
+  if (block.type === "gauge") return gaugeBlock(block, scope.low_sample);
+  if (block.type === "parts") return partsBlock(block);
+  if (block.type === "chart") return chartBlock(block);
+  if (block.type === "table") return tableBlock(block);
+  if (block.type === "checks") return checksBlock(block);
+  if (block.type === "text") return el("div", { class: "card" }, block.items.map((t) => el("p", { text: t, style: "margin-bottom:8px;max-width:880px" })));
+  return null;
+}
+
+// ----- pages -----
+const state = {
+  tab: "overview", fight: null,
+  days: Number(store.get("ic_admin_days") ?? 7),
+  includeAdmin: store.get("ic_admin_mine") === "1",
+  q: "", only: "", offset: 0,
+};
+let lastData = null;
+let loadSeq = 0;
+let refreshTimer = null, liveTimer = null;
+const pageEl = document.getElementById("page");
+const filtersEl = document.getElementById("filters");
+
+function renderTabs() {
+  document.getElementById("tabs").replaceChildren(...TABS.map(([id, label]) => el("li", {},
+    el("a", { href: `#${id}`, "aria-current": !state.fight && state.tab === id ? "page" : null, text: label }))));
+}
+
+function renderFilters(scope) {
+  const hidden = scope && scope.hidden_fights;
+  // replaceChildren would print a null as the word "null", so the optional parts are filtered out first
+  filtersEl.replaceChildren(...[
+    el("div", { class: "seg", role: "group", "aria-label": "Time range" }, RANGES.map(([days, label]) => el("button", {
+      type: "button", "aria-pressed": state.days === days ? "true" : "false", text: label,
+      onclick: () => { state.days = days; store.set("ic_admin_days", String(days)); state.offset = 0; load(); },
+    }))),
+    !scope || scope.can_hide_admin ? el("label", { class: "check" },
+      el("input", { type: "checkbox", checked: state.includeAdmin || null, onchange: (e) => { state.includeAdmin = e.target.checked; store.set("ic_admin_mine", e.target.checked ? "1" : "0"); state.offset = 0; load(); } }),
+      "Include my own fights") : null,
+    hidden ? el("span", { class: "muted", text: `${hidden.toLocaleString()} of your fights hidden` }) : null,
+    scope ? el("span", { class: "muted small", text: `Updated ${new Date(scope.generated_at * 1000).toLocaleTimeString()}, days in your time zone` }) : null,
+  ].filter(Boolean));
+}
+
+function renderFightControls() {
+  const options = [["", "All fights"], ["played", "Played to the end"], ["forfeit", "Forfeited"], ["abandoned", "Abandoned"], ["running", "Running"],
+                   ["freezes", "With a freeze"], ["drops", "With a lost connection"], ["desyncs", "With a desync"], ["faults", "With a fault"], ["no_reports", "Mostly unreported"]];
+  let timer = null;
+  return el("div", { class: "filters", style: "margin-bottom:12px" },
+    el("input", { class: "input", type: "search", placeholder: "Find a player or match id", "aria-label": "Find a player or match id", value: state.q,
+      oninput: (e) => { clearTimeout(timer); const value = e.target.value; timer = setTimeout(() => { state.q = value; state.offset = 0; load(true); }, 300); } }),
+    el("select", { class: "input", "aria-label": "Which fights", onchange: (e) => { state.only = e.target.value; state.offset = 0; load(); } },
+      options.map(([v, label]) => el("option", { value: v, selected: state.only === v || null, text: label }))));
+}
+
+function downloads() {
+  const items = [["fights", "Fights"], ["events", "Timeline events"], ["windows", "Phone reports"], ["server", "Server samples"], ["players", "Players"]];
+  const note = el("p", { class: "why-line", text: "CSV for the time range above, whichever fights are hidden. Times are Unix seconds. Names that look like spreadsheet formulas get a leading quote." });
+  return el("section", { class: "block" }, el("h2", { text: "Download the raw log" }), el("p", { class: "note", text: "For anything this panel doesn't answer." }),
+    el("div", { class: "card" }, el("div", { style: "display:flex;flex-wrap:wrap;gap:8px" }, items.map(([name, label]) => el("button", { class: "btn", type: "button", text: label,
+      onclick: async (e) => {
+        const button = e.target;
+        button.disabled = true;
+        try {
+          const response = await api(`/api/admin/export/${name}?days=${state.days}`);
+          if (!response.ok) throw new Error(`The server answered ${response.status}.`);
+          const url = URL.createObjectURL(await response.blob());
+          const a = el("a", { href: url, download: `immortal_combat_${name}.csv` });
+          document.body.append(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          note.textContent = `${label} downloaded.`;
+        } catch (err) {
+          if (err.message !== "signed out") note.textContent = `Download failed. ${err.message}`;
+        } finally {
+          button.disabled = false;
+        }
+      } }))), note));
+}
+
+function rerender() {
+  if (state.fight) { if (lastFight) renderFight(lastFight); return; }
+  if (lastData) renderTab(lastData);
+}
+
+// Puts a page on screen and draws its charts before anything is painted, keeping the reader's place
+function showPage(nodes) {
+  const y = window.scrollY;
+  pageEl.replaceChildren(...nodes);
+  liveCharts.forEach((box) => box._draw());
+  window.scrollTo(0, y);
+}
+
+function renderTab(data) {
+  liveCharts.clear();
+  const nodes = [];
+  const fightCount = data.scope.fights_in_range;
+  // With a small range nearly every number is a small sample: one note says it once. Past that, cards still mark their own.
+  const early = EARLY_TABS.has(state.tab) && fightCount > 0 && fightCount < data.scope.low_sample;
+  if (early) {
+    nodes.push(el("p", { class: "early" }, el("b", { text: "Early numbers." }),
+      el("span", { text: `Only ${fightCount.toLocaleString()} ${fightCount === 1 ? "fight" : "fights"} in this range, so these can swing a lot. Don't decide from them alone.` })));
+  }
+  if (state.tab === "fights") nodes.push(renderFightControls());
+  const scope = early ? { ...data.scope, low_sample: 0 } : data.scope;
+  data.sections.forEach((section, i) => {
+    nodes.push(el("section", { class: "block" }, section.title ? el("h2", { text: section.title }) : null,
+      section.note ? el("p", { class: "note", text: section.note }) : null,
+      el("div", { class: "stack" }, section.blocks.map((b) => renderBlock(b, scope)))));
+    if (!i && state.tab === "overview" && lastLive && lastLive.fights.length) {
+      nodes.push(el("section", { class: "block" }, el("h2", { text: "Fights running now" }), el("div", { class: "stack" }, tableBlock({
+        title: `${lastLive.fights.length} running`, rows: lastLive.fights, link: "match_id", empty: "",
+        columns: [{ key: "phase", label: "Phase", unit: "text" }, { key: "p1", label: "P1", unit: "text" }, { key: "p2", label: "P2", unit: "text" }, { key: "heroes", label: "Fighters", unit: "text" },
+                  { key: "score", label: "Score", unit: "text" }, { key: "secs", label: "Running for", unit: "secs" }, { key: "connected", label: "Connected", unit: "count" }, { key: "restarts", label: "Restarts", unit: "count" }, { key: "spectators", label: "Watching", unit: "count" }],
+        source: "server", why: "From the server's memory, this second.",
+      }))));
+    }
+  });
+  if (state.tab === "quality") nodes.push(downloads());
+  if (state.tab === "overview" && !data.scope.fights_in_range) {
+    const hidden = data.scope.hidden_fights;
+    nodes.unshift(el("div", { class: "card", style: "margin-bottom:24px" }, el("h3", { text: "No fights in this range yet" }),
+      el("p", { class: "why-line", text: hidden ? `${hidden.toLocaleString()} fights that include you are hidden. Tick Include my own fights to see them.`
+        : "Fights show up here as soon as both players in a match lock a fighter. Challenges that don't get that far are on the Funnel page." })));
+  }
+  showPage(nodes);
+  renderFilters(data.scope);
+}
+
+function skeleton() {
+  pageEl.replaceChildren(el("div", { class: "kpis", "aria-busy": "true", "aria-label": "Loading" }, [0, 1, 2, 3].map(() => el("div", { class: "sk tile" }))),
+    el("div", { class: "sk wide", style: "margin-top:16px" }), el("div", { class: "sk wide", style: "margin-top:16px" }));
+}
+
+async function load(quiet) {
+  const seq = ++loadSeq;
+  renderTabs();
+  if (state.fight) return loadFight(seq);
+  if (!lastData || lastData.tab !== state.tab) { if (!quiet) skeleton(); renderFilters(null); } else pageEl.classList.add("refreshing");
+  const query = new URLSearchParams({ days: state.days, include_admin: state.includeAdmin ? "1" : "0", tz: -new Date().getTimezoneOffset() });
+  if (state.tab === "fights") {
+    if (state.q) query.set("q", state.q);
+    if (state.only) query.set("only", state.only);
+    if (state.offset) query.set("offset", state.offset);
+  }
+  try {
+    const data = await apiJson(`/api/admin/tab/${state.tab}?${query}`);
+    if (seq !== loadSeq) return;
+    data.tab = state.tab;
+    lastData = data;
+    const active = document.activeElement;
+    const typing = active && active.type === "search";
+    const position = typing ? active.selectionStart : 0;
+    renderTab(data);
+    if (typing) {
+      const again = pageEl.querySelector('input[type="search"]');
+      if (again) { again.focus(); again.setSelectionRange(position, position); }
+    }
+  } catch (err) {
+    if (seq !== loadSeq || err.message === "signed out") return;
+    pageEl.replaceChildren(el("div", { class: "card" }, el("h3", { text: "This page couldn't load" }),
+      el("p", { class: "why-line", text: `${err.message} Check your connection, then try again.` }),
+      el("button", { class: "btn", type: "button", style: "margin-top:12px", text: "Try again", onclick: () => load() })));
+  } finally {
+    if (seq === loadSeq) pageEl.classList.remove("refreshing");
+  }
+}
+
+// ----- one fight -----
+let lastFight = null;
+const heroOr = (h) => h || "?";
+
+function lanesBlock(story) {
+  const at = (v) => Math.max(0, Math.min(100, v / story.span * 100));
+  const clock = (t) => xLabel(Math.max(0, t), "clock");
+  const spoken = [];
+  const lanes = ["p1", "p2"].map((role) => el("div", { class: "lane" }, el("span", { text: role.toUpperCase() }),
+    el("div", { class: "lane-track" }, story.lanes[role].map((m) => {
+      const own = m.kind === "hitch";
+      const what = `${role.toUpperCase()} ${own ? "froze" : "waited"} for ${fmt(m.ms, "ms")} at ${clock(m.t)}`;
+      spoken.push(what);
+      return el("i", { title: what, style: `left:${at(m.t)}%;width:${at(m.ms / 1000)}%;background:var(${own ? "--s2" : "--s1"})` });
+    }))));
+  const step = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].find((s) => story.span / s <= 5) || 7200;
+  const ticks = [];
+  for (let t = step; t < story.span - step * 0.4; t += step) ticks.push(t);
+  return [
+    el("div", { role: "img", "aria-label": `The fight on two lanes. ${spoken.join(". ")}.` }, lanes,
+      el("div", { class: "lane-axis" }, el("span", { style: "left:0", text: "0:00" }), ticks.map((t) => el("span", { style: `left:${at(t)}%`, text: clock(t) })), el("span", { style: "left:100%", text: clock(story.span) }))),
+    el("div", { class: "legend" }, el("span", {}, el("i", { style: "background:var(--s2)" }), "Its own frame froze"), el("span", {}, el("i", { style: "background:var(--s1)" }), "Waiting for the opponent")),
+    story.unlisted ? el("p", { class: "why-line", text: `${story.unlisted.toLocaleString()} more ${story.unlisted === 1 ? "freeze was" : "freezes were"} counted but not drawn: a phone report lists at most 20.` }) : null,
+    story.paused ? el("p", { class: "why-line", text: `The strip runs on the clock, so it includes the ${fmt(story.paused, "secs")} the bout stood frozen with a player gone.` }) : null,
+  ];
+}
+
+function renderFight(data) {
+  liveCharts.clear();
+  const f = data.fight;
+  const zero = f.fight_started_at || f.created_at;
+  const title = `${f.p1_name || "P1"} (${heroOr(f.heroes[0])}) vs ${f.p2_name || "P2"} (${heroOr(f.heroes[1])})`;
+  const result = f.outcome === "running" ? "Still running" : f.finish_reason === "DRAW" ? "Draw" : f.finish_reason === "AUTOWIN_DISCONNECT" ? "Won by forfeit" : f.finish_reason === "KNOCKOUT" ? "Won on rounds" : f.finish_reason || f.status;
+  const winner = f.winner_id ? (f.winner_id === f.p1_id ? f.p1_name : f.p2_name) : null;
+  const facts = [
+    `${result}${winner ? `: ${winner}` : ""}`, f.p1_rounds !== null ? `${f.p1_rounds ?? 0} to ${f.p2_rounds ?? 0}` : null,
+    f.active_secs !== null ? `Fought for ${fmt(f.active_secs, "secs")}` : null, f.paused_secs ? `Frozen for ${fmt(f.paused_secs, "secs")}` : null,
+    f.segment ? `Restarted ${f.segment} time${f.segment > 1 ? "s" : ""}` : null, f.stage !== null ? `Arena ${f.stage + 1}` : null,
+    f.source, f.build ? `Build ${f.build}` : null,
+  ].filter(Boolean);
+
+  const nodes = [
+    el("button", { class: "link", type: "button", text: "Back to all fights", onclick: () => { location.hash = "fights"; } }),
+    el("section", { class: "block", style: "margin-top:8px" },
+      el("h2", { text: title }),
+      el("div", { class: "summary-line" }, facts.map((t) => el("span", { text: t }))),
+      el("div", { class: "summary-line" }, el("span", { class: "muted", text: `${f.match_id}, ${fmt(f.fight_started_at || f.created_at, "time")}` }),
+        f.has_replay ? el("a", { href: `/player/play.html?replay=${encodeURIComponent(f.match_id)}`, target: "_blank", rel: "noopener", text: "Watch the replay" }) : null,
+        f.rematch ? el("a", { href: `#fight/${encodeURIComponent(f.rematch)}`, text: "Rematch" }) : null,
+        f.rematch_of ? el("a", { href: `#fight/${encodeURIComponent(f.rematch_of)}`, text: "Match before this" }) : null)),
+  ];
+
+  if (!f.fight_started_at) nodes.push(el("div", { class: "card" }, el("p", { text: "No fight started in this match. The timeline shows how far it got." })));
+
+  // What happened: the story first, then the same moments in order
+  const story = data.story;
+  const lanesDrawn = story && (story.lanes.p1.length || story.lanes.p2.length);
+  const causeRows = Object.entries(data.causes || {});
+  const problems = data.timeline.filter((e) => e.problem);
+  const allKey = `all_events:${f.match_id}`;
+  const problemsOnly = problems.length > 0 && !openState.has(allKey);
+  const items = problemsOnly ? problems : data.timeline;
+  const happened = [];
+  if (lanesDrawn || causeRows.length) {
+    happened.push(el("div", { class: "card" }, lanesDrawn ? lanesBlock(story) : null,
+      causeRows.length ? el("div", { style: "margin-top:12px" }, dataTable([{ key: "cause", label: "Likely cause", unit: "text" }, { key: "count", label: "Freezes", unit: "count" }],
+        causeRows.map(([k, v]) => ({ cause: data.cause_labels[k] || k, count: v })), {})) : null,
+      el("p", { class: "why-line", text: "Server and phones. In live rounds only. A freeze that shows on both phones counts on each. Lining up both phones' reports with what the server received, to within about 300ms." })));
+  }
+  happened.push(el("div", { class: "card" },
+    el("div", { class: "head-row" }, el("h3", { text: "Timeline" }),
+      problems.length ? el("label", { class: "check" }, el("input", { type: "checkbox", checked: problemsOnly || null, onchange: () => { toggleState(allKey); rerender(); } }), "Only what went wrong") : null),
+    items.length ? el("div", { class: "timeline" }, items.map((e) => el("div", { class: `ev${e.problem ? " problem" : ""}` },
+      el("span", { class: "t", text: e.t < 0 ? `\u2212${xLabel(-e.t, "clock")}` : xLabel(e.t, "clock") }),
+      el("span", { class: "r", text: e.role ? e.role.toUpperCase() : "" }),
+      el("span", {}, e.who ? `${e.who} ` : "", el("span", { class: "what", text: e.text }), e.detail ? el("span", { class: "d", text: `: ${e.detail}` }) : null)))) : el("p", { class: "empty", text: "Nothing to show." }),
+    el("p", { class: "why-line", text: `${items.length.toLocaleString()} of ${data.timeline.length.toLocaleString()} events. Times are minutes and seconds from the start of the fight, on the server's clock; a minus sign means before it. Freezes come from phones and are placed to within about a network trip.` })));
+  nodes.push(el("section", { class: "block" }, el("h2", { text: "What happened" }), story ? el("p", { class: "note", style: "margin:4px 0 0", text: story.sentence }) : null, el("div", { class: "stack" }, happened)));
+
+  const sideGroups = [
+    ["Freezes", [["Freezes waiting for the opponent", "stall_freezes", "count"], ["Freezes from its own slow frames", "hitch_freezes", "count"], ["Freezes outside rounds", "freezes_other", "count"],
+                 ["Stalls", "stalls", "count"], ["Time stalled", "stall_ms", "ms"], ["Longest stall", "max_stall_ms", "ms"], ["Waiting for the opponent to load", "load_wait_ms", "ms"]]],
+    ["The phone itself", [["Phone", "platform", "text"], ["Device", "device", "text"], ["Average frame", "frame_ms", "ms"], ["Worst frame", "worst_frame", "ms"],
+                          ["Slow frames in rounds", "slow_share", "pct"], ["Main thread busy", "busy", "pct"], ["Game loop errors", "errors", "count"]]],
+    ["Connection", [["Connection when last reported", "transport", "text"], ["Speed, ticks a second (60 is full)", "speed", "number"], ["Input delay", "delay_ms", "ms"],
+                    ["Opponent round trip", "peer_rtt", "ms"], ["Server round trip", "server_rtt", "ms"], ["Inputs first by UDP", "inputs_udp", "pct"]]],
+    ["Rollback and reporting", [["Rollbacks", "rollbacks", "count"], ["Deepest rollback", "max_rollback_ms", "ms"], ["Fight time reported", "reported_secs", "secs"], ["Share of the fight reported", "coverage", "pct"]]],
+  ];
+  const p1 = data.sides.p1 || {}, p2 = data.sides.p2 || {};
+  if (data.sides.p1 || data.sides.p2) {
+    const cell = (side, role, key, unit) => el("td", { class: `num wrap${data.worse[key] === role ? " worse" : ""}`, text: unit === "text" ? (side[key] ?? dash) : fmt(side[key], unit) });
+    nodes.push(el("section", { class: "block" }, el("h2", { text: "How it ran on each phone" }),
+      el("p", { class: "note", style: "margin:4px 0 0", text: `From phone reports. P1 is ${f.p1_name || "unnamed"}, P2 is ${f.p2_name || "unnamed"}. Marked values are where one phone did clearly worse: at least double the other, and bad enough to matter.` }),
+      el("div", { class: "grid-2", style: "margin-top:12px" }, sideGroups.map(([title, rows]) => el("div", { class: "card" }, el("div", { class: "table-wrap" }, el("table", {},
+        el("thead", {}, el("tr", {}, el("th", { scope: "col", style: "color:var(--ink);font-size:14px;line-height:20px;font-weight:600", text: title }), el("th", { class: "num", scope: "col", text: "P1" }), el("th", { class: "num", scope: "col", text: "P2" }))),
+        el("tbody", {}, rows.map(([label, key, unit]) => el("tr", {}, el("td", { class: "wrap", text: label }), cell(p1, "p1", key, unit), cell(p2, "p2", key, unit)))))))))));
+  } else if (f.fight_started_at) {
+    nodes.push(el("div", { class: "card", style: "margin-bottom:40px" }, el("h3", { text: "No phone reports for this fight" }),
+      el("p", { class: "why-line", text: "Reports go out every 10 seconds and when a fight ends. A fight this short, or phones that lost their connection, send none. The timeline above is the server's own record." })));
+  }
+
+  const lines = [["Worst frame per report", "max_frame_ms", "ms"], ["Time stalled per report", "stall_ms", "ms"], ["Opponent round trip", "peer_rtt", "ms"], ["Rollbacks per report", "rollbacks", "count"], ["Input delay", "delay", "ms"]]
+    .filter(([, key]) => (data.lines[key] || []).length);
+  if (lines.length) {
+    const key = "reports";
+    const show = openState.has(key);
+    nodes.push(el("section", { class: "block" }, el("h2", { text: "Over the fight" }), el("p", { class: "note", text: "One point for each report a phone sent, at minutes and seconds into the fight." }),
+      el("div", { class: "grid-2 three", style: "margin-top:12px" }, lines.map(([title, lineKey, unit]) => chartBlock({
+        title, kind: "line", series: data.lines[lineKey], unit, x_kind: "clock", source: null, why: null,
+      })),
+      el("div", { class: `card${show ? " wide" : ""}` }, el("h3", { text: "Raw phone reports", style: "margin-bottom:8px" }),
+        el("button", { class: "link", type: "button", text: show ? "Hide reports" : `Show ${data.windows.length} reports`, onclick: () => { toggleState(key); rerender(); } }),
+        show ? dataTable([{ key: "role", label: "Phone", unit: "text" }, { key: "t", label: "At", unit: "text" }, { key: "segment", label: "Segment", unit: "count" }, { key: "seq", label: "Number", unit: "count" }, { key: "reason", label: "Sent because", unit: "text" },
+                          { key: "secs", label: "Wall clock", unit: "secs" }, { key: "active_secs", label: "Fight time", unit: "secs" }, { key: "paused_ms", label: "Paused", unit: "ms" }, { key: "hidden_ms", label: "Hidden", unit: "ms" }, { key: "ticks", label: "Ticks", unit: "count" },
+                          { key: "delay", label: "Delay, ticks", unit: "count" }, { key: "peer_rtt", label: "Round trip", unit: "ms" }, { key: "stalls", label: "Stalls", unit: "count" }, { key: "stall_ms", label: "Stalled", unit: "ms" }, { key: "rollbacks", label: "Rollbacks", unit: "count" }, { key: "max_frame_ms", label: "Worst frame", unit: "ms" }],
+          data.windows.map((w) => ({ ...w, t: xLabel(w.received_at - zero, "clock") })), {}) : null))));
+  }
+  showPage(nodes);
+  filtersEl.replaceChildren();
+}
+
+async function loadFight(seq) {
+  if (!lastFight || lastFight.fight.match_id !== state.fight) { skeleton(); filtersEl.replaceChildren(); }
+  try {
+    const data = await apiJson(`/api/admin/fight/${encodeURIComponent(state.fight)}`);
+    if (seq !== loadSeq) return;
+    lastFight = data;
+    renderFight(data);
+  } catch (err) {
+    if (seq !== loadSeq || err.message === "signed out") return;
+    pageEl.replaceChildren(el("div", { class: "card" }, el("h3", { text: "This fight couldn't load" }), el("p", { class: "why-line", text: err.message }),
+      el("button", { class: "btn", type: "button", style: "margin-top:12px", text: "Back to all fights", onclick: () => { location.hash = "fights"; } })));
+  }
+}
+
+// ----- live strip -----
+let lastLive = null;
+async function loadLive() {
+  const bar = document.getElementById("live");
+  try {
+    const live = await apiJson("/api/admin/live");
+    const hadFights = lastLive && lastLive.fights.length;
+    lastLive = live;
+    const up = live.uptime_secs;
+    bar.replaceChildren(
+      el("span", {}, el("i", { class: "dot" }), el("b", { text: `${live.live_fights} fighting now` })),
+      el("span", { text: `${live.players} players connected` }), el("span", { text: `${live.spectators} watching` }), el("span", { text: `${live.waiting} challenges open` }),
+      el("span", { class: "muted", text: `Up for ${fmt(up, "secs")}` }), el("span", { class: "muted", text: `Build ${live.build}` }));
+    if (!state.fight && state.tab === "overview" && lastData && lastData.tab === "overview" && (hadFights || live.fights.length)) rerender();
+  } catch (err) {
+    if (err.message === "signed out") return;
+    bar.replaceChildren(el("span", {}, el("i", { class: "dot off" }), el("b", { text: "Can't reach the server" })), el("span", { class: "muted", text: "Numbers below may be out of date." }));
+  }
+}
+
+// ----- moving around -----
+function route() {
+  const hash = location.hash.replace(/^#/, "");
+  if (hash.startsWith("fight/")) {
+    state.fight = decodeURIComponent(hash.slice(6));
+  } else {
+    state.fight = null;
+    state.tab = TABS.some(([id]) => id === hash) ? hash : "overview";
+  }
+  window.scrollTo(0, 0);
+  load();
+}
+window.addEventListener("hashchange", route);
+
+document.getElementById("theme").addEventListener("click", () => {
+  const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+  document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+  store.set("ic_admin_theme", dark ? "light" : "dark");
+  liveCharts.forEach((box) => box._draw && box._draw());
+});
+const savedTheme = store.get("ic_admin_theme");
+if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
+if (!token) {
+  showLocked();
+} else {
+  route();
+  loadLive();
+  refreshTimer = setInterval(() => { if (!document.hidden && !state.fight) load(true); }, REFRESH_MS);
+  liveTimer = setInterval(() => { if (!document.hidden) loadLive(); }, LIVE_MS);
+}
+</script>
+</body>
+</html>

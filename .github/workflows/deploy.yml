@@ -30,7 +30,7 @@ jobs:
         # test_advanced_joystick.py is a manual Playwright script for a real browser, not part of CI
         run: python -m pytest -q tests --ignore=tests/test_advanced_joystick.py
       - name: Client tests
-        run: node tests/test_match_end.mjs && node tests/test_rollback_state.mjs
+        run: node tests/test_match_end.mjs && node tests/test_rollback_state.mjs && node tests/test_net_telemetry.mjs
 
   pages:
     name: Deploy Game to GitHub Pages
@@ -135,7 +135,7 @@ jobs:
               echo "REQUIRE_TG_AUTH=1" >> .env
               # Optional: short name of the Direct Link Mini App (@BotFather /newapp) for one-tap Play buttons
               echo "WEBAPP_SHORT_NAME=${{ secrets.WEBAPP_SHORT_NAME }}" >> .env
-              # Telegram user id that /feedback is delivered to (empty switches /feedback off)
+              # Telegram user id that /feedback is delivered to and /admin answers (empty switches both off)
               echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
             else
               # No bot token but still stamp build version for non-bot deployments
@@ -259,6 +259,14 @@ jobs:
             }
             if wait_healthy; then
               echo "Server is up: $(health)"
+              # The admin API holds player data: the code now running must refuse anyone without a signed link
+              for ADMIN_PATH in /api/admin/live /api/admin/tab/players /api/admin/export/players; do
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8080${ADMIN_PATH}" || echo "000")
+                if [ "$CODE" != "401" ]; then
+                  echo "ERROR: ${ADMIN_PATH} answered ${CODE} without a token."
+                  exit 1
+                fi
+              done
             else
               echo "ERROR: the server did not come up as user umk3. Last log lines:"
               $SUDO journalctl -u umk3-bot -n 60 --no-pager || true

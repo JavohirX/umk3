@@ -77,6 +77,8 @@ export class MultiplayerClient {
         this.peerPingSentAt = new Map();
         this.peerRttSamples = [];
         this.outgoingQueue = [];
+        this.rxPath = "tcp"; // the way the packet being handled came: "tcp" (WebSocket) or "udp" (WebRTC channel)
+        this.bootMs = null;  // how long this page took to load the game
 
         this.parseEnvironment();
     }
@@ -258,7 +260,8 @@ export class MultiplayerClient {
                 user_name: this.userName,
                 init_data: this.initData,
                 // A phone that still runs the bout can hand both phones the state to restart from
-                bout_live: typeof this.boutLiveProvider === 'function' ? !!this.boutLiveProvider() : false
+                bout_live: typeof this.boutLiveProvider === 'function' ? !!this.boutLiveProvider() : false,
+                client: this.clientInfo()
             });
 
             while (this.outgoingQueue.length > 0) {
@@ -282,6 +285,7 @@ export class MultiplayerClient {
         ws.onmessage = (event) => {
             if (this.ws !== ws) return;
             if (event.data instanceof ArrayBuffer) {
+                this.rxPath = "tcp";
                 this.handleBinaryPacket(event.data);
             } else {
                 try {
@@ -318,6 +322,22 @@ export class MultiplayerClient {
     // match stays connected for a rematch, so a drop there reconnects too
     shouldReconnect() {
         return this.isMultiplayer && this.status !== "CANCELLED" && this.status !== "REJECTED";
+    }
+
+    // What this phone is, for the server's fight log: slow devices and networks show up next to their numbers
+    clientInfo() {
+        const tg = window.Telegram?.WebApp;
+        return {
+            platform: tg?.platform || "browser",
+            tg_version: tg?.version || null,
+            ua: navigator.userAgent.slice(0, 400),
+            cores: navigator.hardwareConcurrency || null,
+            memory_gb: navigator.deviceMemory || null,
+            net: navigator.connection?.effectiveType || null,
+            screen: `${window.screen.width}x${window.screen.height}`,
+            dpr: window.devicePixelRatio || null,
+            boot_ms: this.bootMs
+        };
     }
 
     // Moves to a new match (a rematch): new socket, fresh match state, and a URL a reload would come back to
@@ -627,6 +647,7 @@ export class MultiplayerClient {
 
         dc.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer) {
+                this.rxPath = "udp";
                 this.handleBinaryPacket(event.data);
             }
         };
@@ -714,6 +735,12 @@ export class MultiplayerClient {
     // Where both phones restart the bout from (after a reconnect, or if the two simulations ever differ)
     sendSnapshot(snapshot) {
         this.sendPacket({ type: "state_snapshot", ...snapshot });
+    }
+
+    // Something the fight log should hear about now rather than in the next stats report
+    sendNetEvent(kind, fields) {
+        if (!this.isMultiplayer || this.isSpectator) return;
+        this.sendPacket({ type: "net_event", kind, ...fields });
     }
 
     // We left the app (minimised, phone call) or came back: the opponent's screen shows the grace countdown

@@ -87,7 +87,11 @@ immortal_combat/
 │   └── deploy.yml              # Tests, then GitHub Pages + VPS deployment
 ├── server/
 │   ├── multiplayer.py          # Match rooms, lockstep relay, spectators, replays, rematches
-│   └── db.py                   # SQLite: matches, leaderboards, replays
+│   ├── db.py                   # SQLite: matches, leaderboards, replays, fight log tables
+│   ├── telemetry.py            # Fight log writer: a background thread, so logging can't slow a fight
+│   ├── admin.py                # Admin panel routes and sign-in links
+│   ├── admin_stats.py          # Every number the panel shows, with its definition
+│   └── admin_panel.html        # The panel itself
 ├── requirements.txt            # Bot + server dependencies
 ├── run_server.py               # Local dev server
 └── bot.py                      # Telegram bot launcher
@@ -110,7 +114,7 @@ In GitHub **Settings ➔ Secrets and variables ➔ Actions**:
 | `VPS_PORT` | SSH Port (optional, defaults to 22) | `22` |
 | `TG_BOT_TOKEN` | Bot token from @BotFather; also used to verify players' Telegram identity | `123456:ABC...` |
 | `WEBAPP_SHORT_NAME` | Optional: short name of the Mini App made with @BotFather `/newapp`, for one-tap Play buttons in groups | `fight` |
-| `ADMIN_ID` | Your Telegram user id: `/feedback` messages are sent to it. Start the bot once from that account (bots can't message someone first). Leave unset to switch `/feedback` off | `123456789` |
+| `ADMIN_ID` | Your Telegram user id: `/feedback` messages are sent to it and `/admin` answers it. Start the bot once from that account (bots can't message someone first). Leave unset to switch both off | `123456789` |
 
 ### Initial VPS Provisioning
 Run once on your Ubuntu/Debian VPS:
@@ -118,3 +122,27 @@ Run once on your Ubuntu/Debian VPS:
 sudo bash vps/setup.sh your-domain.com
 ```
 After setting the GitHub Secrets, any push to `main` will automatically update `/var/www/umk3`, reload Nginx, and restart the Telegram bot service.
+
+---
+
+## 5. Fight Log & Admin Panel
+
+Every online fight is logged to the SQLite database (`data/immortal_combat.db`) from the moment a challenge is created. Nothing here slows a fight: rows go on a queue and a background thread writes them about once a second.
+
+**Opening the panel.** Send `/admin` to the bot from the `ADMIN_ID` account, in your private chat with it. You get a link that signs you in for 12 hours; there is no password to manage. Running locally without a bot, set `ADMIN_PANEL_SECRET` to anything and `run_server.py` prints a link.
+
+**What gets logged**
+
+| Table | One row per | Source |
+|-------|-------------|--------|
+| `matches` | challenge, with its fight's setup, result, timing and build | server |
+| `match_events` | thing that happened in a match: connects, drops, locks, rounds, restarts, freezes... | server, plus phones for `freeze`, `desync`, `loop_error` |
+| `net_windows` | stats report from a phone, about every 10s of fight (frame times, stalls, input delay, rollbacks, path) | phones |
+| `server_samples` | minute of the server's life (event loop lag, CPU, memory, relay traffic) | server |
+| `players` | account that has opened a match, with their last device | both |
+
+Event kinds in `match_events`: `seat_claimed`, `seat_released`, `player_connected`, `player_disconnected`, `player_away`, `player_back`, `hero_locked`, `fight_started`, `segment_restart`, `round_settled`, `score_conflict`, `match_finished`, `rematch_requested`, `rematch_agreed`, `challenge_expired`, `input_gap`, `input_gaps`, `freeze`, `desync`, `loop_error`, `spectator_joined`, `spectator_left`, `join_rejected`, `auth_failed`, `bot_start`, `server_start`.
+
+**Trusting the numbers.** Every number in the panel shows where it came from (server or phones), how it is worked out, and how many fights or phones stand behind it. The Data quality page compares independently written records (for example the leaderboard against the match table, and phone reported fight time against the server's clock) and says if any disagree. The full raw log downloads as CSV from the panel for deeper analysis.
+
+**What is stored about players:** Telegram id and first name, device model and OS, network type and how the game ran on their phone. No IP addresses and no chat contents. Tell your testers before the beta.

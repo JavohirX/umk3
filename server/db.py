@@ -16,6 +16,9 @@ CHALLENGE_WINDOW_SECONDS = 600
 # Replays kept on disk; older ones are pruned
 REPLAYS_KEPT = 500
 
+# Fighter names by hero id (the engine's select grid order)
+HERO_NAMES = ["Scorpion", "Sub-Zero", "Kitana", "Shao Kahn", "Sonya", "Cyrax", "Liu Kang"]
+
 # Columns added after the first release; init_db adds any that an older database lacks
 MATCH_EXTRA_COLUMNS = {
     "room_state": "TEXT",          # JSON fight setup + score, so a restarted server can resume the bout
@@ -24,6 +27,104 @@ MATCH_EXTRA_COLUMNS = {
     "message_id": "INTEGER",
     "inline_message_id": "TEXT",   # the same for a challenge sent through inline mode
     "rematch_of": "TEXT",
+    # The fight itself, for the fight log. started_at is when hero select began, and a match can finish (by
+    # forfeit) without a fight ever starting, so fight_started_at is what says a fight happened.
+    "fight_started_at": "REAL",    # both heroes locked and the versus screen sent to both phones
+    "paused_secs": "REAL",         # time the bout stood frozen with a player gone or away
+    "segment": "INTEGER",          # restarts of the bout so far (after a reconnect or a desync)
+    "build": "TEXT",               # server build the fight started on
+    "p1_id": "TEXT",
+    "p2_id": "TEXT",
+    "p1_name": "TEXT",
+    "p2_name": "TEXT",
+    "p1_hero": "INTEGER",
+    "p2_hero": "INTEGER",
+    "p1_control": "INTEGER",
+    "p2_control": "INTEGER",
+    "p1_rounds": "INTEGER",
+    "p2_rounds": "INTEGER",
+    "stage": "INTEGER",
+}
+
+# The room state fields that also live in their own column, so the fight log can query them
+ROOM_STATE_COLUMNS = ("fight_started_at", "paused_secs", "segment", "build", "p1_id", "p2_id", "p1_name", "p2_name",
+                      "p1_hero", "p2_hero", "p1_control", "p2_control", "p1_rounds", "p2_rounds", "stage")
+
+# One row per stats report from a phone: how the last few seconds of a fight ran there (player/js/net_telemetry.js
+# sends them, server/telemetry.py cleans them). Every counter covers that report's time only, so they add up.
+NET_WINDOW_COLUMNS = {
+    "match_id": "TEXT NOT NULL",
+    "player_id": "TEXT",
+    "role": "TEXT",
+    "received_at": "REAL NOT NULL",
+    "build": "TEXT",
+    "platform": "TEXT",            # Telegram's name for the client: android, ios, tdesktop...
+    "os": "TEXT",
+    "model": "TEXT",
+    "perf_class": "TEXT",          # Telegram for Android's own LOW / AVERAGE / HIGH device class
+    "segment": "INTEGER",
+    "seq": "INTEGER",              # numbers the reports of one bout segment, so a lost one shows
+    "reason": "TEXT",              # what sent it: interval, restart, hidden, pagehide, final
+    "secs": "REAL",                # wall clock the report covers...
+    "paused_ms": "REAL",           # ...of which the bout stood frozen...
+    "hidden_ms": "REAL",           # ...or the page wasn't on screen
+    "active_secs": "REAL",         # secs less those two: the fight time everything below is measured over
+    "live_secs": "REAL",           # active time inside a live round (not loading, intro or knockout)
+    "ticks": "INTEGER",
+    "live_ticks": "INTEGER",
+    "setup_ms": "REAL",            # building the fight at the start of a segment
+    "frames": "INTEGER",
+    "frame_ms_sum": "REAL",
+    "max_frame_ms": "REAL",
+    "slow_frames": "INTEGER",      # frames over 50ms
+    "live_frames": "INTEGER",
+    "live_slow_frames": "INTEGER",
+    "live_frame_hist": "TEXT",     # JSON counts, see FRAME_BUCKETS_MS in net_telemetry.js
+    "tick_ms_sum": "REAL",         # simulating and drawing new ticks
+    "work_ms_sum": "REAL",         # everything the fight did on the main thread
+    "max_work_ms": "REAL",
+    "paints_skipped": "INTEGER",
+    "catch_up_frames": "INTEGER",
+    "stalls": "INTEGER",           # waits for the opponent's input (not counting their loading screen)
+    "stall_ms": "REAL",
+    "max_stall_ms": "REAL",
+    "live_stalls": "INTEGER",
+    "live_stall_ms": "REAL",
+    "live_stall_hist": "TEXT",     # JSON counts, see STALL_BUCKETS_MS in net_telemetry.js
+    "load_wait_ms": "REAL",        # waiting for the opponent's phone to start the fight at all
+    "stall_freezes_live": "INTEGER",  # in-round stalls of FREEZE_MS or more...
+    "hitch_freezes_live": "INTEGER",  # ...and in-round single frames that long
+    "freeze_live_ms": "REAL",
+    "freezes_other": "INTEGER",    # freezes outside a live round (loading, intro, knockout)
+    "delay": "INTEGER",
+    "delay_min": "INTEGER",
+    "delay_max": "INTEGER",
+    "live_delay_hist": "TEXT",     # JSON: in-round ticks spent at each input delay (index = delay in ticks)
+    "ticks_ahead": "REAL",
+    "peer_rtt": "REAL",
+    "server_rtt": "REAL",
+    "rollbacks": "INTEGER",
+    "rollback_ticks": "INTEGER",
+    "max_rollback": "INTEGER",
+    "rollback_misses": "INTEGER",
+    "predict_sum": "INTEGER",      # sum over ticks of how far past the opponent's last input the tick ran
+    "saves": "INTEGER",
+    "save_ms_sum": "REAL",
+    "loads": "INTEGER",
+    "load_ms_sum": "REAL",
+    "resim_ms_sum": "REAL",        # replaying ticks after a rollback
+    "inputs_udp": "INTEGER",       # opponent inputs that reached us first over the WebRTC channel...
+    "inputs_tcp": "INTEGER",       # ...or the WebSocket
+    "late_inputs": "INTEGER",      # opponent inputs for a tick we had already run on a guess
+    "lead_sum": "REAL",
+    "lead_min": "REAL",
+    "p2p": "INTEGER",
+    "ice_state": "TEXT",
+    "ice_path": "TEXT",
+    "ice_local": "TEXT",
+    "ice_remote": "TEXT",
+    "ice_failures": "INTEGER",
+    "loop_errors": "INTEGER",
 }
 
 
@@ -95,8 +196,78 @@ def init_db():
             )
         """)
 
+        # The fight log. Append-only: rows are written by server/telemetry.py and never changed.
+        # A match's timeline: what the server saw, plus discrete events the phones reported.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS match_events (
+                id INTEGER PRIMARY KEY,
+                match_id TEXT,
+                at REAL NOT NULL,
+                kind TEXT NOT NULL,
+                player_id TEXT,
+                role TEXT,
+                segment INTEGER,
+                data TEXT
+            )
+        """)
+        conn.execute("CREATE TABLE IF NOT EXISTS net_windows (id INTEGER PRIMARY KEY, match_id TEXT NOT NULL, received_at REAL NOT NULL)")
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(net_windows)")}
+        for column, sql_type in NET_WINDOW_COLUMNS.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE net_windows ADD COLUMN {column} {sql_type}")
+
+        # The server's own health, one row a minute
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS server_samples (
+                at REAL PRIMARY KEY,
+                build TEXT,
+                uptime_secs REAL,
+                secs REAL,
+                lag_p50_ms REAL,
+                lag_p99_ms REAL,
+                lag_max_ms REAL,
+                cpu_pct REAL,
+                rss_mb REAL,
+                load1 REAL,
+                db_mb REAL,
+                connections INTEGER,
+                rooms INTEGER,
+                live_fights INTEGER,
+                players INTEGER,
+                spectators INTEGER,
+                relay_msgs INTEGER,
+                relay_kb REAL,
+                relay_send_max_ms REAL,
+                relay_send_ms_sum REAL,
+                log_queue_max INTEGER,
+                log_write_max_ms REAL,
+                log_dropped INTEGER
+            )
+        """)
+
+        # Everyone who has opened a match, and the device they last did it from
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS players (
+                player_id TEXT PRIMARY KEY,
+                name TEXT,
+                first_seen_at REAL NOT NULL,
+                last_seen_at REAL NOT NULL,
+                platform TEXT,
+                os TEXT,
+                model TEXT,
+                perf_class TEXT
+            )
+        """)
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_chat ON matches(chat_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_created ON matches(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_fight ON matches(fight_started_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_rematch ON matches(rematch_of)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_match ON match_events(match_id, at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_kind ON match_events(kind, at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_windows_match ON net_windows(match_id, role, segment, seq)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_windows_received ON net_windows(received_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_lb_chat_wins ON local_leaderboard(chat_id, wins DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_instances_chat ON chat_instances(chat_id)")
         conn.commit()
@@ -155,7 +326,8 @@ def join_match(match_id: str, user_id: str, user_name: str) -> Optional[Dict[str
         if match["status"] != "WAITING":
             return None
         if now > match["expires_at"]:
-            conn.execute("UPDATE matches SET status = 'CANCELLED', finish_reason = 'JOIN_TIMEOUT' WHERE match_id = ?", (match_id,))
+            conn.execute("UPDATE matches SET status = 'CANCELLED', finish_reason = 'JOIN_TIMEOUT', ended_at = ? WHERE match_id = ?",
+                         (now, match_id))
             conn.commit()
             return None
         if str(match["creator_id"]) == str(user_id):
@@ -349,8 +521,10 @@ def get_user_totals(user_id: str) -> Optional[Dict[str, Any]]:
 
 def save_room_state(match_id: str, state: Dict[str, Any]):
     """Stores the fight setup and score, so a restarted server can put both players back into the bout."""
+    columns = ", ".join(f"{column} = ?" for column in ROOM_STATE_COLUMNS)
     with get_db_connection() as conn:
-        conn.execute("UPDATE matches SET room_state = ? WHERE match_id = ?", (json.dumps(state), match_id))
+        conn.execute(f"UPDATE matches SET room_state = ?, {columns} WHERE match_id = ?",
+                     (json.dumps(state), *(state.get(column) for column in ROOM_STATE_COLUMNS), match_id))
         conn.commit()
 
 

@@ -8,6 +8,7 @@ Supports:
 - Challenge messages that follow the match (accepted, live with a Watch button, result with a replay)
 - Local group-isolated leaderboards (/leaderboard) tracking Wins, Losses, Games, and Win Rate
 - /feedback, delivered to the admin (ADMIN_ID) as a message from the bot
+- /admin, a signed link to the admin panel, for the admin (ADMIN_ID) only
 - In-match disconnect grace period and autowin rules
 """
 
@@ -38,7 +39,9 @@ from aiogram.types import (
     MenuButtonWebApp
 )
 
+import server.admin as admin
 import server.db as db
+from server.telemetry import telemetry
 
 load_dotenv()
 
@@ -222,6 +225,7 @@ async def handle_start(message: types.Message, command: CommandObject):
     args = command.args or ""
     chat_id = str(message.chat.id)
     user_id = str(message.from_user.id)
+    telemetry.event("bot_start", player_id=user_id, entry=args.split("_", 1)[0] or "direct", chat_type=message.chat.type)
 
     # Deep-linked replay: /start replay_<match_id>
     if args.startswith("replay_"):
@@ -437,7 +441,37 @@ async def handle_chosen_inline_result(chosen: types.ChosenInlineResult):
 
 
 # =========================================================================
-# 5. /FEEDBACK (DELIVERED TO THE ADMIN)
+# 5. /ADMIN (THE ADMIN PANEL)
+# =========================================================================
+
+def site_root() -> str:
+    base_url = WEBAPP_URL.rstrip('/')
+    return base_url.split("/player")[0] if "/player" in base_url else base_url
+
+
+@dp.message(Command("admin"))
+async def handle_admin(message: types.Message):
+    """
+    A link that signs the admin in for 12 hours. Everyone else gets no answer, as for any command the bot doesn't have,
+    and it's only ever sent in the private chat: in a group, everyone there could open it.
+    """
+    if ADMIN_ID is None or message.from_user.id != ADMIN_ID:
+        return
+    if message.chat.type != "private":
+        await message.answer("Send /admin in your private chat with me.")
+        return
+    url = admin.login_url(site_root())
+    if not url:
+        await message.answer("The admin panel can't sign links without a bot token.")
+        return
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📊 Open the admin panel", url=url)]])
+    hours = admin.LOGIN_LINK_SECONDS // 3600
+    await message.answer(f"This link signs you in for {hours} hours. Don't forward it: anyone with it can see player data.",
+                         reply_markup=keyboard)
+
+
+# =========================================================================
+# 6. /FEEDBACK (DELIVERED TO THE ADMIN)
 # =========================================================================
 
 FEEDBACK_COOLDOWN_SECONDS = 30
@@ -531,7 +565,7 @@ async def handle_feedback_message(message: types.Message, state: FSMContext, bot
 
 
 # =========================================================================
-# 6. MATCH UPDATES FROM THE GAME SERVER
+# 7. MATCH UPDATES FROM THE GAME SERVER
 # =========================================================================
 
 def result_line(info: dict) -> str:
@@ -629,7 +663,7 @@ async def on_match_event(bot: Bot, event: str, info: dict):
 
 
 # =========================================================================
-# 7. BOT BOOTSTRAP & MENU BUTTON
+# 8. BOT BOOTSTRAP & MENU BUTTON
 # =========================================================================
 
 async def main():

@@ -6,6 +6,9 @@ import { initEngine, SDKMIDlet, CoreEngine } from './engine/umk3.js';
 import { MultiplayerClient } from './network_pure.js';
 import { stepMatchEnd } from './match_end.js';
 import { createStateSaver } from './rollback_state.js';
+import {
+    newNetStats, noteFrame, noteTick, noteWork, noteInput, stallBegin, stallAdvance, stallSkip, stallEnd, reportFields
+} from './net_telemetry.js';
 
 let midlet = null;
 let animFrameId = null;
@@ -923,6 +926,10 @@ function getStateSaver() {
 //   peerTick, peerTickAt - the latest tick the opponent reported simulating, and when that report arrived
 //   stallStart     - when we started waiting for their input for the current tick, or null
 //   stats          - counters reported to the server every 10s (see reportNetStats)
+//   openStall      - the same wait as the stats see it (see stallBegin in net_telemetry.js)
+//   hiddenAt       - when the page left the screen, or null
+//   skipFrame      - the next frame's length isn't the fight's: the page was hidden, or the fight was being built
+//   statsClosed    - the final report went out; the fight's last moments play out unmeasured
 let onlineBout = null;
 // Set while we rejoin a bout: the versus info and the opponent's restart snapshot, whichever arrives first
 let onlineResume = null;
@@ -933,6 +940,8 @@ function onlineFightRunning() {
 }
 
 function startOnlineSegment(setup, segment, resume) {
+    // What the bout being replaced did since its last report
+    if (onlineBout) closeNetStats(onlineBout, performance.now(), "restart");
     // Our input for a tick must reach the opponent before their guesses run MAX_PREDICTION ticks past it:
     // one-way trip to them in ticks, plus three for frame timing and jitter, less what guessing covers.
     // Before a measurement exists, relayed inputs cross the server twice.
@@ -950,7 +959,8 @@ function startOnlineSegment(setup, segment, resume) {
         window: { stalls: 0, stallMs: 0, minLead: Infinity, since: now }, goodSeconds: [],
         peerTick: 0, peerTickAt: 0, heardFromPeer: false, stallStart: null,
         hashes: new Map(), peerHashes: new Map(), lastResyncAt: 0,
-        stats: newNetStats(now, delay)
+        stats: newNetStats(now, delay),
+        openStall: null, hiddenAt: document.hidden ? now : null, skipFrame: true, statsClosed: false
     };
     for (let t = 0; t < delay; t++) {
         onlineBout.local.set(t, [0, 0]);
@@ -973,6 +983,7 @@ function startOnlineSegment(setup, segment, resume) {
         }
     });
     getStateSaver().refresh();
+    onlineBout.stats.setupMs = performance.now() - now;
     // The score this segment starts from, so the server sees both phones agree on it
     mpClient.sendRoundScore(onlineBout.rounds[0], onlineBout.rounds[1]);
 }
@@ -1078,9 +1089,13 @@ function runOnlineBout(now) {
     bout.acc = Math.min(bout.acc + frameMs * pace, LOCKSTEP_TICK_MS * 4);
     // Once the server has decided the match, the end animation plays out without waiting on inputs
     const decided = mpClient.status === "COMPLETED";
-    stats.frames++;
-    stats.frameMs += frameMs;
-    if (frameMs > 50) stats.slowFrames++;
+    const live = inLiveRound();
+    if (bout.skipFrame) {
+        bout.skipFrame = false;
+        if (bout.openStall) stallSkip(bout.openStall, now);
+    } else if (!bout.statsClosed) {
+        noteFrame(stats, frameMs, live, bout.tick, now);
+    }
 
     if (!decided && bout.rollbackTo !== null) rollBack(bout);
 
@@ -1090,7 +1105,11 @@ function runOnlineBout(now) {
         if (!decided && !canRunTick(bout, t)) {
             // Too far past the opponent's last input to keep guessing. The waiting time isn't banked, or the
             // fight would jump ahead once it lands.
-            if (bout.stallStart === null) bout.stallStart = now;
+            if (bout.stallStart === null) {
+                bout.stallStart = now;
+                // Until the opponent has simulated anything, the wait is them finishing loading
+                bout.openStall = stallBegin(now, t, live, bout.peerTick === 0);
+            }
             bout.acc = Math.min(bout.acc, LOCKSTEP_TICK_MS);
             break;
         }
@@ -1107,6 +1126,7 @@ function runOnlineBout(now) {
         simulateTick(bout, t, anotherThisFrame, decided);
         stats.tickMs += performance.now() - tickStart;
         if (anotherThisFrame) stats.paintsSkipped++;
+        noteTick(stats, inLiveRound(), bout.delay);
 
         if (decided) {
             bout.pending = [0, 0];
@@ -1116,7 +1136,6 @@ function runOnlineBout(now) {
         bout.tick++;
         bout.acc -= LOCKSTEP_TICK_MS;
         bout.lastTickAt = now;
-        stats.ticks++;
         if (!decided) stats.predictSum += Math.max(0, bout.tick - bout.remoteNext);
         ran++;
     }
@@ -1126,7 +1145,12 @@ function runOnlineBout(now) {
         if (onlineBout !== bout) return; // a desync restarted the bout
         updateDelayAdvice(bout, now);
     }
-    if (now - stats.since >= 10000) reportNetStats(bout, now);
+    if (!bout.statsClosed && mpClient.status === "ACTIVE" && now - stats.since >= 10000) reportNetStats(bout, now, "interval");
+}
+
+// A round is being fought: the fighters take input and the clock runs (not loading, the round intro or a knockout)
+function inLiveRound() {
+    return CoreEngine.val_int_dN === 2 && CoreEngine.val_int_dL === 2;
 }
 
 function canRunTick(bout, t) {
@@ -1175,6 +1199,8 @@ function rollBack(bout) {
     getStateSaver().load(snaps[i].state);
     bout.stats.loads++;
     bout.stats.loadMs += performance.now() - started;
+    const resimStart = performance.now();
+    const savesBefore = bout.stats.saveMs;
     window.__rollbackResim = true;
     try {
         for (let t = from; t < bout.tick; t++) {
@@ -1185,6 +1211,7 @@ function rollBack(bout) {
     } finally {
         window.__rollbackResim = false;
     }
+    bout.stats.resimMs += performance.now() - resimStart - (bout.stats.saveMs - savesBefore);
     const ticks = bout.tick - from;
     bout.stats.rollbacks++;
     bout.stats.rollbackTicks += ticks;
@@ -1267,6 +1294,7 @@ function compareStateHash(bout, tick) {
     }
     if (ours === theirs) return;
     totalDesyncs++;
+    mpClient.sendNetEvent("desync", { segment: bout.segment, tick });
     console.warn(`[Multiplayer] Simulations differ at tick ${tick} (segment ${bout.segment}); restarting from P1's state`);
     const now = performance.now();
     if (mpClient.role === "p1" && mpClient.status === "ACTIVE" && now - bout.lastResyncAt > 3000) {
@@ -1311,10 +1339,10 @@ function ticksAheadOfPeer(bout, now) {
 }
 
 function endStall(bout, ms, now) {
-    const stats = bout.stats;
-    stats.stalls++;
-    stats.stallMs += ms;
-    stats.maxStallMs = Math.max(stats.maxStallMs, ms);
+    if (bout.openStall) {
+        stallEnd(bout.stats, bout.openStall, now);
+        bout.openStall = null;
+    }
     // Only short waits while we're level with the opponent say their delay is too small. Long ones are
     // outages, waits while we're ahead are pacing (handled by easing off), and the first wait of a bout is
     // just the opponent finishing loading.
@@ -1351,53 +1379,98 @@ function updateDelayAdvice(bout, now) {
     bout.window = { stalls: 0, stallMs: 0, minLead: Infinity, since: now };
 }
 
-function newNetStats(now, delay) {
-    return {
-        since: now, frames: 0, frameMs: 0, slowFrames: 0, ticks: 0, tickMs: 0, paintsSkipped: 0, catchUpFrames: 0,
-        stalls: 0, stallMs: 0, maxStallMs: 0, delayMin: delay, delayMax: delay,
-        rollbacks: 0, rollbackTicks: 0, maxRollback: 0, rollbackMisses: 0, predictSum: 0,
-        saves: 0, saveMs: 0, loads: 0, loadMs: 0
-    };
+// Every 10s the server logs how the bout ran on this phone, so lag reports can be checked against real numbers.
+// reason says what sent this one: "interval", or a moment that could otherwise lose the time since the last one
+// ("restart", "hidden", "pagehide", "final").
+function reportNetStats(bout, now, reason) {
+    // Measuring must never get in the way of the fight
+    try {
+        sendNetStats(bout, now, reason);
+    } catch (err) {
+        console.warn('[Multiplayer] Stats report failed:', err);
+    }
 }
 
-// Every 10s the server logs how the bout ran on this phone, so lag reports can be checked against real numbers
-function reportNetStats(bout, now) {
+function sendNetStats(bout, now, reason) {
     const s = bout.stats;
-    const secs = (now - s.since) / 1000;
+    if (bout.openStall) stallAdvance(s, bout.openStall, now);
+    const fields = reportFields(s, now);
+    if (!fields) return;
     mpClient.sendPacket({
         type: "net_stats",
+        reason,
         segment: bout.segment,
-        secs: Math.round(secs * 10) / 10,
-        ticks_per_s: Math.round(s.ticks / secs * 10) / 10,
-        stalls: s.stalls,
-        stall_ms: Math.round(s.stallMs),
-        max_stall_ms: Math.round(s.maxStallMs),
+        ...fields,
         delay: bout.delay,
-        delay_min: s.delayMin,
-        delay_max: s.delayMax,
         ticks_ahead: Math.round(ticksAheadOfPeer(bout, now) * 10) / 10,
         peer_rtt: mpClient.peerRtt === null ? null : Math.round(mpClient.peerRtt),
         server_rtt: mpClient.rtt,
         p2p: mpClient.isP2PActive,
         ...mpClient.iceSummary(),
         frame_ms: s.frames ? Math.round(s.frameMs / s.frames * 10) / 10 : null,
-        slow_frames: s.slowFrames,
         tick_ms: s.ticks ? Math.round(s.tickMs / s.ticks * 10) / 10 : null,
-        paints_skipped: s.paintsSkipped,
-        catch_up_frames: s.catchUpFrames,
+        // cumulative for this page, unlike everything else here; the fight log counts desync events instead
         desyncs: totalDesyncs,
         netcode: "rollback",
-        rollbacks: s.rollbacks,
-        rollback_ticks: s.rollbackTicks,
-        max_rollback: s.maxRollback,
-        rollback_misses: s.rollbackMisses,
         // how many ticks past the opponent's last input we ran, on average (how much was guessed)
         predict_ticks: s.ticks ? Math.round(s.predictSum / s.ticks * 10) / 10 : null,
         save_ms: s.saves ? Math.round(s.saveMs / s.saves * 100) / 100 : null,
         load_ms: s.loads ? Math.round(s.loadMs / s.loads * 100) / 100 : null,
         device: navigator.userAgent.slice(0, 160)
     });
-    bout.stats = newNetStats(now, bout.delay);
+    bout.stats = newNetStats(now, bout.delay, s.seq + 1);
+}
+
+// No more reports from this bout: the last one, with any wait still open counted as it stands
+function closeNetStats(bout, now, reason) {
+    if (bout.statsClosed) return;
+    bout.statsClosed = true;
+    if (bout.openStall) {
+        stallEnd(bout.stats, bout.openStall, now, true);
+        bout.openStall = null;
+    }
+    if (bout.hiddenAt !== null) {
+        bout.stats.hiddenMs += now - bout.hiddenAt;
+        bout.hiddenAt = now;
+    }
+    reportNetStats(bout, now, reason);
+}
+
+// The page left the screen or came back. A hidden page may never run again, so this is the last sure moment to
+// report; and no frames run while it's hidden, so the first one back is as long as the whole absence.
+function noteVisibility(hidden) {
+    const bout = onlineBout;
+    if (!bout || bout.statsClosed) return;
+    const now = performance.now();
+    if (hidden && bout.hiddenAt === null) {
+        if (mpClient.status === "ACTIVE") reportNetStats(bout, now, "hidden");
+        bout.hiddenAt = now;
+    } else if (!hidden && bout.hiddenAt !== null) {
+        bout.stats.hiddenMs += now - bout.hiddenAt;
+        bout.hiddenAt = null;
+        bout.skipFrame = true;
+        if (bout.openStall) stallSkip(bout.openStall, now);
+    }
+}
+
+// A frame with the bout frozen. Time spent hidden is already counted as hidden, whether or not frames ran through it.
+function notePaused(bout, now) {
+    if (bout.openStall) stallSkip(bout.openStall, now);
+    if (bout.skipFrame) bout.skipFrame = false;
+    else if (bout.hiddenAt === null) bout.stats.pausedMs += now - bout.last;
+}
+
+// An uncaught error in the game loop: it can leave the picture frozen while everything else carries on. Reported the
+// first few times, since it usually repeats every frame.
+let loopErrorsReported = 0;
+function noteLoopError(err) {
+    try {
+        if (onlineBout) onlineBout.stats.loopErrors++;
+        if (mpClient.isMultiplayer && loopErrorsReported < 3) {
+            loopErrorsReported++;
+            mpClient.sendNetEvent("loop_error", { message: String(err && err.message || err).slice(0, 200) });
+        }
+    } catch (_) {}
 }
 
 // Both phones report the engine's round score whenever it changes, as of a confirmed tick (never a guess);
@@ -1989,9 +2062,11 @@ function startAnimationLoop() {
                 } else if (onlineFightRunning()) {
                     // A frozen bout keeps its last frame on screen; the banner below says why
                     if (mpClient.paused) {
+                        notePaused(onlineBout, now);
                         onlineBout.last = now;
                     } else {
                         runOnlineBout(now);
+                        if (onlineBout) noteWork(onlineBout.stats, performance.now() - now);
                     }
                 } else if (!mpClient.isReplay) {
                     midlet.stepFrame();
@@ -2024,6 +2099,7 @@ function startAnimationLoop() {
                 }
             } catch (err) {
                 console.error("[Game Loop Error]:", err);
+                noteLoopError(err);
             }
         }
         animFrameId = requestAnimationFrame(loop);
@@ -2131,6 +2207,7 @@ async function bootstrap() {
             if (tick < bout.remoteNext || bout.remote.has(tick)) return;
             bout.remote.set(tick, [pressed, released]);
             while (bout.remote.has(bout.remoteNext)) bout.remoteNext++;
+            noteInput(bout.stats, tick - bout.tick, mpClient.rxPath);
             // We already ran this tick guessing "no change"; any key change means it ran wrong
             if (tick < bout.tick && (pressed || released)) {
                 bout.rollbackTo = bout.rollbackTo === null ? tick : Math.min(bout.rollbackTo, tick);
@@ -2167,6 +2244,7 @@ async function bootstrap() {
 
         mpClient.onMatchEndedCallback = (data) => {
             mpClient.resultAt = Date.now();
+            if (onlineBout) closeNetStats(onlineBout, performance.now(), "final");
             if (viewer && !viewer.replay) viewer.final = true; // the fight plays out without more inputs
             const haptics = window.Telegram?.WebApp?.HapticFeedback;
             if (haptics && !mpClient.isSpectator && data.winner_id) {
@@ -2191,15 +2269,24 @@ async function bootstrap() {
 
         // Leaving the app mid-fight (minimised, phone call): the opponent sees a countdown instead of a freeze
         // (pagehide comes before the hidden visibilitychange of a page that is reloading or closing)
-        window.addEventListener('pagehide', () => { mpClient.leavingPage = true; });
+        window.addEventListener('pagehide', () => {
+            mpClient.leavingPage = true;
+            if (onlineBout && !onlineBout.statsClosed && mpClient.status === "ACTIVE") {
+                reportNetStats(onlineBout, performance.now(), "pagehide");
+            }
+        });
         window.addEventListener('beforeunload', () => { mpClient.leavingPage = true; });
         window.addEventListener('pageshow', () => { mpClient.leavingPage = false; });
-        document.addEventListener('visibilitychange', () => mpClient.setAway(document.hidden));
+        document.addEventListener('visibilitychange', () => {
+            mpClient.setAway(document.hidden);
+            noteVisibility(document.hidden);
+        });
         try {
             window.Telegram?.WebApp?.onEvent?.('deactivated', () => mpClient.setAway(true));
             window.Telegram?.WebApp?.onEvent?.('activated', () => mpClient.setAway(false));
         } catch (_) {}
 
+        mpClient.bootMs = Math.round(performance.now());
         mpClient.initUI();
         if (mpClient.isReplay) startReplay();
 

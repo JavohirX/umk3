@@ -14,6 +14,7 @@ import socket
 import webbrowser
 import logging
 from aiohttp import web
+from server.admin import login_url
 from server.multiplayer import create_app
 
 PORT = 8080
@@ -46,6 +47,9 @@ def run():
     print(f"[*] HTML Architecture Debrief: http://localhost:{port}/docs/multiplayer-explainer.html")
     print(f"[*] WebSocket Match Gateway: ws://localhost:{port}/ws/match/<id>")
     print(f"[*] Local Leaderboard API  : http://localhost:{port}/api/leaderboard?chat_id=0")
+    # Without a bot to ask, set ADMIN_PANEL_SECRET to any value to get a link here
+    panel = login_url(f"http://localhost:{port}")
+    print(f"[*] Admin Panel            : {panel or 'set ADMIN_PANEL_SECRET to get a sign-in link'}")
     print("=" * 65)
 
     if "--no-browser" not in sys.argv:
