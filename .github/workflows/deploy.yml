@@ -226,7 +226,7 @@ jobs:
               fi
               if command -v ufw >/dev/null 2>&1 && $SUDO ufw status | grep -q "Status: active"; then
                 $SUDO ufw allow 3478/udp >/dev/null
-                $SUDO ufw allow 49160:49200/udp >/dev/null
+                $SUDO ufw allow 49160:49400/udp >/dev/null
               fi
               $SUDO systemctl enable coturn >/dev/null 2>&1 || true
               $SUDO systemctl restart coturn
