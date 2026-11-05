@@ -674,6 +674,7 @@ async def main():
     bot = Bot(token=TOKEN)
 
     # 1. Start real-time multiplayer WebSocket & API server on port 8080
+    # Loopback only: players reach it through nginx, which adds TLS
     try:
         from aiohttp import web
         from server.multiplayer import create_app, coordinator
@@ -681,9 +682,9 @@ async def main():
         app = create_app()
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 8080)
+        site = web.TCPSite(runner, '127.0.0.1', 8080)
         await site.start()
-        logging.info("Real-time Multiplayer WebSocket & REST server started on http://0.0.0.0:8080")
+        logging.info("Real-time Multiplayer WebSocket & REST server started on http://127.0.0.1:8080")
     except Exception as e:
         logging.warning(f"Could not bind WebSocket server on port 8080 (may already be running): {e}")
 
