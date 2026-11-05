@@ -10,6 +10,7 @@ import sqlite3
 import tempfile
 import unittest
 
+import server.admin_read as admin_read
 import server.admin_stats as stats
 import server.db as db
 from server.telemetry import clean_client, clean_freezes, clean_window, describe_device
@@ -91,6 +92,37 @@ class StatsCase(unittest.TestCase):
         self.conn.execute("INSERT INTO match_events (match_id, at, kind, player_id, role, segment, data) VALUES (?, ?, ?, ?, ?, ?, ?)",
                           (match_id, NOW - DAY + 30 if at is None else at, event_kind, player, role, segment, json.dumps(data)))
         self.conn.commit()
+
+
+class ArrivesBetweenQueries:
+    """A connection on which something lands in the database right before the second query."""
+
+    def __init__(self, conn, arrive):
+        self.conn, self.arrive, self.queries = conn, arrive, 0
+
+    def execute(self, *args):
+        self.queries += 1
+        if self.queries == 2:
+            self.arrive()
+        return self.conn.execute(*args)
+
+
+class TestOneReadSeesOneMoment(StatsCase):
+    def test_a_fight_that_starts_during_a_read_cant_break_it(self):
+        delays = json.dumps([0] * 16)
+        self.match("earlier")
+        self.window("earlier", live_delay_hist=delays)
+
+        def newcomer():
+            self.match("newcomer")
+            self.window("newcomer", live_delay_hist=delays)
+
+        reader = admin_read.read_connection(self.path)
+        try:
+            sides = stats.load_sides(ArrivesBetweenQueries(reader, newcomer), self.scope())
+        finally:
+            reader.close()
+        self.assertEqual(list(sides), [("earlier", "p1")])
 
 
 class TestPopulations(StatsCase):

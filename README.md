@@ -90,6 +90,7 @@ immortal_combat/
 │   ├── db.py                   # SQLite: matches, leaderboards, replays, fight log tables
 │   ├── telemetry.py            # Fight log writer: a background thread, so logging can't slow a fight
 │   ├── admin.py                # Admin panel routes and sign-in links
+│   ├── admin_read.py           # One panel read, in its own process so it can't slow a fight
 │   ├── admin_stats.py          # Every number the panel shows, with its definition
 │   └── admin_panel.html        # The panel itself
 ├── requirements.txt            # Bot + server dependencies

@@ -6,6 +6,7 @@ break its connection, and that the panel answers nobody without a signed link.
 import asyncio
 import json
 import os
+import tempfile
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -414,6 +415,35 @@ class TestAdminPanelAccess(MatchTestCase):
         while msg is None or msg.type.name != "BINARY":
             msg = await ws1.receive(timeout=2)
         self.assertEqual(msg.data, input_packet(0, 0, pressed=16))
+
+    async def test_requests_for_the_same_page_share_one_read(self):
+        admin._cache.clear()
+        with patch.object(admin, "run_read", side_effect=admin.run_read) as run:
+            responses = await asyncio.gather(*(self.client.get("/api/admin/tab/server", headers=self.bearer()) for _ in range(3)))
+        self.assertEqual([r.status for r in responses], [200, 200, 200])
+        self.assertEqual(run.call_count, 1)
+
+    async def test_a_failed_read_says_why_and_the_next_one_works(self):
+        telemetry.flush()
+        fd, empty = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.addCleanup(os.remove, empty)
+        with patch.object(db, "DB_PATH", empty):
+            response = await self.client.get("/api/admin/tab/overview?fresh=1", headers=self.bearer())
+        self.assertEqual(response.status, 500)
+        body = await response.json()
+        self.assertEqual(body["status"], "error")
+        self.assertIn("no such table", body["message"])
+        self.assertEqual((await self.client.get("/api/admin/tab/overview?fresh=1", headers=self.bearer())).status, 200)
+
+    async def test_a_slow_page_is_kept_for_longer(self):
+        admin._cache.clear()
+        admin.remember("quick", b"{}", read_secs=0.1)
+        admin.remember("slow", b"{}", read_secs=30)
+        left = {key: admin._cache[key][0] - time.monotonic() for key in ("quick", "slow")}
+        self.assertLessEqual(left["quick"], admin.CACHE_SECONDS)
+        self.assertGreater(left["slow"], 299)
+        admin._cache.clear()
 
 
 class TestBotCommand(MatchTestCase):

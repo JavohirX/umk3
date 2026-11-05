@@ -6,21 +6,21 @@ The panel holds player ids, names and devices, so nothing here answers without a
 the link's #fragment, which browsers don't send anywhere, so it never reaches a server or access log; the page reads it
 and sends it as a bearer token.
 
-Queries run on a worker thread with their own read-only connection: the event loop stays free to relay inputs, however
-much the panel is asked to add up.
+Reads run one at a time in a process of their own (server/admin_read.py), so the event loop stays free to relay inputs,
+however much the panel is asked to add up.
 """
 
 import asyncio
 import base64
-import csv
 import hashlib
 import hmac
-import io
+import json
 import logging
 import os
-import sqlite3
+import subprocess
+import sys
 import time
-from typing import Callable, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from aiohttp import web
 
@@ -30,7 +30,11 @@ from server.telemetry import telemetry
 
 LOGIN_LINK_SECONDS = 12 * 3600
 CACHE_SECONDS = 10
+CACHE_READ_TIMES = 10            # a page is kept at least this many times as long as it took to read, however often the panel refreshes
+READ_SECONDS = 180
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PANEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin_panel.html")
+READS = web.AppKey("admin_reads", asyncio.Lock)
 # Everything the page loads is its own, except its typeface. If a player's name ever got past the page's escaping, a
 # script still couldn't send the token anywhere.
 PANEL_HEADERS = {
@@ -93,13 +97,6 @@ def admin_id() -> Optional[str]:
 # READING
 # =========================================================================
 
-def read_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(db.DB_PATH, timeout=10.0)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA query_only=ON")
-    return conn
-
-
 def scope_from(request: web.Request) -> stats.Scope:
     def number(name: str, default: int, low: int, high: int) -> int:
         try:
@@ -110,12 +107,25 @@ def scope_from(request: web.Request) -> stats.Scope:
                        tz_minutes=number("tz", 0, -840, 840))
 
 
-def read(work: Callable[[sqlite3.Connection], object]):
-    conn = read_connection()
+def scope_fields(scope: stats.Scope) -> dict:
+    return {"days": scope.days, "include_admin": scope.include_admin, "admin_id": scope.admin_id, "tz_minutes": scope.tz_minutes}
+
+
+def run_read(what: dict) -> bytes:
+    done = subprocess.run([sys.executable, "-m", "server.admin_read"], input=json.dumps({**what, "db_path": db.DB_PATH}).encode(),
+                          capture_output=True, timeout=READ_SECONDS, cwd=ROOT, check=True)
+    return done.stdout
+
+
+async def read_elsewhere(what: dict) -> bytes:
     try:
-        return work(conn)
-    finally:
-        conn.close()
+        return await asyncio.to_thread(run_read, what)
+    except (subprocess.SubprocessError, OSError) as e:
+        lines = (getattr(e, "stderr", None) or b"").decode(errors="replace").strip().splitlines()
+        reason = f"it took over {READ_SECONDS} seconds" if isinstance(e, subprocess.TimeoutExpired) else lines[-1] if lines else str(e)
+        logging.warning(f"Admin panel: {what['kind']} read failed: {reason}")
+        raise web.HTTPInternalServerError(text=json.dumps({"status": "error", "message": f"The panel couldn't read the log: {reason}"}),
+                                          content_type="application/json")
 
 
 def authorized(request: web.Request) -> bool:
@@ -128,15 +138,23 @@ def refuse() -> web.Response:
                              headers={"Cache-Control": "no-store"})
 
 
-_cache: Dict[Tuple, Tuple[float, dict]] = {}
+_cache: Dict[Tuple, Tuple[float, bytes]] = {}  # key -> (good until, the page)
 
 
-def remember(key: Tuple, value: dict) -> dict:
+def remember(key: Tuple, body: bytes, read_secs: float):
     # A handful of ranges and tabs; old entries are dropped rather than managed
     if len(_cache) > 200:
         _cache.clear()
-    _cache[key] = (time.monotonic(), value)
-    return value
+    _cache[key] = (time.monotonic() + max(CACHE_SECONDS, read_secs * CACHE_READ_TIMES), body)
+
+
+def cached(key: Tuple) -> Optional[bytes]:
+    entry = _cache.get(key)
+    return entry[1] if entry and time.monotonic() < entry[0] else None
+
+
+def json_body(body: bytes) -> web.Response:
+    return web.Response(body=body, content_type="application/json", charset="utf-8", headers={"Cache-Control": "no-store"})
 
 
 async def api_tab(request: web.Request) -> web.Response:
@@ -153,35 +171,28 @@ async def api_tab(request: web.Request) -> web.Response:
     except ValueError:
         offset = 0
     key = (tab, scope.days, scope.include_admin, scope.tz_minutes, query, only, offset)
-    cached = _cache.get(key)
-    if cached and time.monotonic() - cached[0] < CACHE_SECONDS and request.query.get("fresh") != "1":
-        return web.json_response(cached[1], headers={"Cache-Control": "no-store"})
-
-    def work(conn: sqlite3.Connection) -> dict:
-        if tab == "fights":
-            sections = stats.tab_fights(conn, scope, query, only, offset=offset)
-        elif tab == "quality":
-            sections = stats.tab_quality(conn, scope, telemetry.health())
-        else:
-            sections = stats.TABS[tab](conn, scope)
-        return {"status": "ok", "scope": stats.scope_summary(conn, scope), "sections": sections}
-
-    try:
-        result = await asyncio.to_thread(read, work)
-    except sqlite3.Error as e:
-        logging.warning(f"Admin panel: {tab} failed: {e}")
-        return web.json_response({"status": "error", "message": f"The database couldn't answer: {e}"}, status=500)
-    return web.json_response(remember(key, result), headers={"Cache-Control": "no-store"})
+    fresh = request.query.get("fresh") == "1"
+    body = None if fresh else cached(key)
+    if body is None:
+        async with request.app[READS]:
+            # Another request may have read this very page while this one waited its turn
+            body = None if fresh else cached(key)
+            if body is None:
+                started = time.monotonic()
+                body = await read_elsewhere({"kind": "tab", "tab": tab, "scope": scope_fields(scope), "query": query, "only": only, "offset": offset,
+                                             "writer_health": telemetry.health() if tab == "quality" else None})
+                remember(key, body, time.monotonic() - started)
+    return json_body(body)
 
 
 async def api_fight(request: web.Request) -> web.Response:
     if not authorized(request):
         return refuse()
-    match_id = request.match_info["match_id"]
-    detail = await asyncio.to_thread(read, lambda conn: stats.fight_detail(conn, match_id))
-    if detail is None:
+    async with request.app[READS]:
+        body = await read_elsewhere({"kind": "fight", "match_id": request.match_info["match_id"]})
+    if body == b"null":
         return web.json_response({"status": "error", "message": "No such fight."}, status=404)
-    return web.json_response({"status": "ok", **detail}, headers={"Cache-Control": "no-store"})
+    return json_body(body)
 
 
 async def api_live(request: web.Request) -> web.Response:
@@ -215,19 +226,9 @@ async def api_export(request: web.Request) -> web.Response:
     name = request.match_info["name"]
     if name not in stats.EXPORTS:
         return web.json_response({"status": "error", "message": "No such export."}, status=404)
-    scope = scope_from(request)
-
-    def work(conn: sqlite3.Connection) -> str:
-        columns, rows = stats.export_rows(conn, name, scope)
-        out = io.StringIO()
-        out.write("\ufeff")  # without this mark Excel garbles Cyrillic names
-        writer = csv.writer(out)
-        writer.writerow(columns)
-        writer.writerows(rows)
-        return out.getvalue()
-
-    body = await asyncio.to_thread(read, work)
-    return web.Response(text=body, content_type="text/csv", charset="utf-8", headers={
+    async with request.app[READS]:
+        body = await read_elsewhere({"kind": "export", "name": name, "scope": scope_fields(scope_from(request))})
+    return web.Response(body=body, content_type="text/csv", charset="utf-8", headers={
         "Content-Disposition": f'attachment; filename="immortal_combat_{name}.csv"', "Cache-Control": "no-store"})
 
 
@@ -240,6 +241,7 @@ async def redirect_to_panel(request: web.Request) -> web.Response:
 
 
 def add_routes(app: web.Application):
+    app[READS] = asyncio.Lock()
     app.router.add_get("/admin", redirect_to_panel)
     app.router.add_get("/admin/", serve_panel)
     app.router.add_get("/api/admin/tab/{tab}", api_tab)
