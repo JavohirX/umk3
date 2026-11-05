@@ -461,7 +461,7 @@ function fmt(v, unit) {
   switch (unit) {
     case "count": return Math.round(v).toLocaleString();
     case "pct": { const p = v * 100; return (p === 0 || p === 100 ? p.toFixed(0) : p.toFixed(1)) + "%"; }
-    case "pct100": return v.toFixed(0) + "%";
+    case "pct100": return (v > 0 && v < 10 ? v.toFixed(1) : v.toFixed(0)) + "%";
     case "ms": return (v === 0 ? "0ms" : v >= 10000 ? (v / 1000).toFixed(1) + "s" : v < 10 ? v.toFixed(1) + "ms" : Math.round(v).toLocaleString() + "ms");
     case "secs": {
       if (v === 0) return "0s";
@@ -483,7 +483,7 @@ function tickFmt(v, unit) {
   const compact = (x) => x >= 1e6 ? (x / 1e6).toFixed(x % 1e6 ? 1 : 0) + "M" : x >= 1000 ? (x / 1000).toFixed(x % 1000 ? 1 : 0) + "K" : String(Math.round(x * 100) / 100);
   if (unit === "ms") return v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + "s" : compact(v) + "ms";
   if (unit === "pct") return (v > 0 && v < 0.1 ? +(v * 100).toFixed(1) : Math.round(v * 100)) + "%";
-  if (unit === "pct100") return Math.round(v) + "%";
+  if (unit === "pct100") return (v < 10 ? +v.toFixed(2) : Math.round(v)) + "%";
   if (unit === "mb") return compact(v) + " MB";
   if (unit === "secs") return compact(v) + "s";
   return compact(v);
