@@ -36,7 +36,7 @@ def block_of(sections, *titles):
 def value(sections, label):
     for block in blocks_in(sections):
         items = block.get("items", []) if block["type"] in ("kpis", "status", "parts", "gauge") else []
-        for item in [*items, block.get("average"), block.get("slowest"), block.get("rematch")]:
+        for item in [*items, *block.get("headlines", []), block.get("average"), block.get("slowest"), block.get("rematch")]:
             if item and item["label"] == label:
                 return item
     raise KeyError(label)
@@ -174,10 +174,10 @@ class TestFunnel(StatsCase):
         self.match("the_rematch", rematch_of="played_rematched")  # not a challenge: left out of the steps
 
         page = stats.tab_funnel(self.conn, self.scope())
-        steps = {r["step"]: r["count"] for r in block_of(page, "Step by step")["rows"]}
+        steps = {r["step"]: r["count"] for r in block_of(page, "Challenges at each step")["rows"]}
         self.assertEqual(steps, {"Challenge created": 7, "Someone accepted": 5, "Both players in": 4, "Fight started": 3,
                                  "Played to the end": 2, "Rematch agreed": 1})
-        rows = {r["step"]: r for r in block_of(page, "Step by step")["rows"]}
+        rows = {r["step"]: r for r in block_of(page, "Challenges at each step")["rows"]}
         self.assertAlmostEqual(rows["Fight started"]["of_first"], 3 / 7)
         self.assertAlmostEqual(rows["Fight started"]["of_previous"], 3 / 4)
         self.assertIsNone(rows["Challenge created"]["of_previous"])
@@ -200,8 +200,8 @@ class TestFunnel(StatsCase):
         self.conn.commit()
         page = stats.tab_funnel(self.conn, self.scope())
         self.assertEqual(value(page, "Started the bot")["value"], 4)
-        self.assertEqual(value(page, "Of those, opened a match")["value"], 0.5)
-        self.assertEqual(value(page, "Of those, fought")["value"], 0.25)
+        self.assertEqual(value(page, "Then opened a match")["value"], 0.5)
+        self.assertEqual(value(page, "Then fought")["value"], 0.25)
 
 
 class TestNetcode(StatsCase):
@@ -223,6 +223,16 @@ class TestNetcode(StatsCase):
         page = stats.tab_netcode(self.conn, self.scope())
         self.assertAlmostEqual(value(page, "Input delay")["value"], (300 * 3 + 100 * 9) / 400 * TICK_MS)
         self.assertAlmostEqual(value(page, "Time within the goal")["value"], 0.75)
+
+    def test_rollback_depth_reaches_to_the_deepest_on_either_phone(self):
+        self.match("m1")
+        self.window("m1", "p1", active=60, rollbacks=10, rollback_ticks=30, max_rollback=8)
+        self.window("m1", "p2", active=60, rollbacks=10, rollback_ticks=10, max_rollback=2)
+        item = value(stats.tab_netcode(self.conn, self.scope()), "Average depth")
+        # 40 ticks over 20 rollbacks is 2 ticks deep. The line on the bar is the worst single one.
+        self.assertAlmostEqual(item["value"], 2 * TICK_MS)
+        self.assertAlmostEqual(item["viz"]["to"], 8 * TICK_MS)
+        self.assertEqual(item["viz"]["label"], "Deepest")
 
     def test_the_goal_is_six_ticks(self):
         self.assertEqual(stats.GOAL_DELAY_TICKS * TICK_MS, stats.GOAL_DELAY_MS)
@@ -317,7 +327,7 @@ class TestNetcode(StatsCase):
         self.window("unknown", "p2", active=20)
         item = value(stats.tab_overview(self.conn, self.scope()), "Fights without a freeze")
         self.assertEqual((item["value"], item["n"]), (0.5, 2))
-        self.assertEqual(item["detail"], "1 of 2 fights froze. Longest stall: 0.0ms. 1 more had too few reports to judge.")
+        self.assertEqual(item["detail"], "1 of 2 fights froze. Longest stall: 0ms. 1 more had too few reports to judge.")
 
 
 class TestRightNow(StatsCase):
@@ -395,6 +405,38 @@ class TestRightNow(StatsCase):
         item = value(stats.tab_overview(self.conn, self.scope()), "Data quality")
         self.assertEqual(item["verdict"], f"{fails} failed")
         self.assertIn(f"Also {warns} warning", item["detail"])
+        # One cell a check, worst first, and the same counts as the words
+        self.assertEqual(item["viz"]["statuses"], ["fail"] * fails + ["warn"] * warns + ["ok"] * (len(checks) - fails - warns))
+
+    def test_the_day_lines_are_worked_out_like_the_number_above_them(self):
+        two_ago, yesterday = NOW - 2 * DAY, NOW - DAY
+        at_3, at_6 = [0] * 16, [0] * 16
+        at_3[3], at_6[6] = 100, 100
+        # Two days ago: one clean fight at 3 ticks of delay. Yesterday: one clean and one frozen, at 6 ticks.
+        self.match("a", created=two_ago, length=100)
+        self.window("a", "p1", active=100, live_delay_hist=json.dumps(at_3))
+        self.window("a", "p2", active=100, live_delay_hist=json.dumps(at_3))
+        self.match("b", created=yesterday, length=100)
+        self.window("b", "p1", active=100, live_delay_hist=json.dumps(at_6))
+        self.window("b", "p2", active=100, live_delay_hist=json.dumps(at_6))
+        self.match("c", created=yesterday, length=100)
+        self.window("c", "p1", active=100, hitch_freezes_live=1, live_delay_hist=json.dumps(at_6))
+        self.window("c", "p2", active=100, live_delay_hist=json.dumps(at_6))
+        scope = self.scope()
+        page = stats.tab_overview(self.conn, scope)
+
+        def by_day(label):
+            trend = value(page, label)["trend"]
+            return dict(zip(trend["x"], trend["values"]))
+
+        freeze_free, delay = by_day("Fights without a freeze"), by_day("Input delay")
+        self.assertEqual(freeze_free[scope.day(two_ago)], 1.0)
+        self.assertEqual(freeze_free[scope.day(yesterday)], 0.5)
+        self.assertAlmostEqual(delay[scope.day(two_ago)], 3 * TICK_MS)
+        self.assertAlmostEqual(delay[scope.day(yesterday)], 6 * TICK_MS)
+        # A day without fights has no reading, which isn't a reading of zero
+        self.assertIsNone(freeze_free[scope.day(NOW)])
+        self.assertIsNone(delay[scope.day(NOW)])
 
 
 class TestFightsToLookAt(StatsCase):
@@ -495,6 +537,27 @@ class TestOneFightStory(StatsCase):
         self.assertEqual([(round(m["t"], 1), m["ms"], m["kind"]) for m in story["lanes"]["p2"]], [(18.0, 908, "hitch"), (22.0, 905, "hitch")])
         self.assertEqual(story["unlisted"], 0)
 
+    def test_time_gone_comes_from_the_servers_own_record(self):
+        self.match("m1", length=100)
+        start = NOW - DAY + 20
+        self.event("m1", "player_disconnected", at=start + 10, player="a", role="p1", in_fight=True, close_code=1006, replaced=False)
+        self.event("m1", "player_connected", at=start + 14, player="a", role="p1", reconnect=True, in_fight=True)
+        self.event("m1", "player_disconnected", at=start + 30, player="b", role="p2", in_fight=True, close_code=1006, replaced=True)  # the phone was already back: no time lost
+        self.event("m1", "player_away", at=start + 50, player="b", role="p2", in_fight=True)
+        self.event("m1", "player_back", at=start + 53, player="b", role="p2", in_fight=True)
+        self.event("m1", "player_disconnected", at=start + 70, player="a", role="p1", in_fight=True, close_code=1001, replaced=False)  # never back: gone until the end
+        self.event("m1", "player_disconnected", at=start + 120, player="b", role="p2", in_fight=False, close_code=1001, replaced=False)  # the match was over
+        gone = self.story()["gone"]
+        self.assertEqual([(g["t"], g["secs"], g["kind"], g["came_back"]) for g in gone["p1"]], [(10, 4, "lost", True), (70, 30, "lost", False)])
+        self.assertEqual([(g["t"], g["secs"], g["kind"], g["came_back"]) for g in gone["p2"]], [(50, 3, "away", True)])
+
+    def test_each_settled_round_keeps_its_score_and_time(self):
+        self.match("m1", length=100)
+        start = NOW - DAY + 20
+        self.event("m1", "round_settled", at=start + 40, p1=1, p2=0)
+        self.event("m1", "round_settled", at=start + 80, p1=1, p2=1)
+        self.assertEqual(self.story()["rounds"], [{"t": 40, "p1": 1, "p2": 0}, {"t": 80, "p1": 1, "p2": 1}])
+
     def test_freezes_past_the_listing_limit_are_admitted(self):
         self.match("m1", length=26)
         self.window("m1", "p1", active=26, hitch_freezes_live=25)
@@ -590,8 +653,8 @@ class TestWhichPhoneDidWorse(unittest.TestCase):
 
 class TestWordsMatchThePage(unittest.TestCase):
     def test_times_read_the_way_the_page_writes_them(self):
-        self.assertEqual([stats.ms_text(v) for v in (2, 908, 1347, 12345)], ["2.0ms", "908ms", "1,347ms", "12.3s"])
-        self.assertEqual([stats.secs_text(v) for v in (2, 26.4, 89.4, 119.6, 3700)], ["2.0s", "26s", "89s", "2m 0s", "1h 2m"])
+        self.assertEqual([stats.ms_text(v) for v in (0, 2, 908, 1347, 12345)], ["0ms", "2.0ms", "908ms", "1,347ms", "12.3s"])
+        self.assertEqual([stats.secs_text(v) for v in (0, 2, 26.4, 89.4, 119.6, 3700)], ["0s", "2.0s", "26s", "89s", "2m 0s", "1h 2m"])
 
 
 class TestReliability(StatsCase):
@@ -604,8 +667,8 @@ class TestReliability(StatsCase):
         self.event("m1", "player_disconnected", at=base + 300, player="a", role="p1", in_fight=True, close_code=1001, replaced=False)  # never back
         self.event("m1", "player_disconnected", at=base + 700, player="a", role="p1", in_fight=False, close_code=1001, replaced=False)  # after the end
         page = stats.tab_reliability(self.conn, self.scope())
-        self.assertAlmostEqual(value(page, "Connections lost per 10 minutes")["value"], 3.0)
-        self.assertEqual(value(page, "Fights with a lost connection")["value"], 1.0)
+        self.assertAlmostEqual(value(page, "Drops per 10 minutes")["value"], 3.0)
+        self.assertEqual(value(page, "Fights with a drop")["value"], 1.0)
         came_back = value(page, "Players who came back")
         self.assertAlmostEqual(came_back["value"], 2 / 3)
         self.assertEqual(came_back["n"], 3)
@@ -661,7 +724,85 @@ class TestReliability(StatsCase):
         self.assertEqual(rows, {"A player reconnected": 1, "The simulations differed": 1})
 
 
+    def test_drops_by_day_are_per_ten_minutes_of_that_days_fights(self):
+        two_ago, yesterday = NOW - 2 * DAY, NOW - DAY
+        self.match("busy", created=two_ago, length=600)
+        for t in (100, 200, 300):
+            self.event("busy", "player_disconnected", at=two_ago + t, player="a", role="p1", in_fight=True, close_code=1006, replaced=False)
+        self.match("quiet", created=yesterday, length=1200)
+        scope = self.scope()
+        item = value(stats.tab_reliability(self.conn, scope), "Drops per 10 minutes")
+        # 3 drops over 30 minutes of fight in all
+        self.assertAlmostEqual(item["value"], 1.0)
+        by_day = dict(zip(item["trend"]["x"], item["trend"]["values"]))
+        self.assertEqual(by_day[scope.day(two_ago)], 3.0)
+        self.assertEqual(by_day[scope.day(yesterday)], 0)
+        self.assertIsNone(by_day[scope.day(NOW)])
+
+    def test_time_to_come_back_reaches_to_the_slowest(self):
+        self.match("m1", length=600)
+        base = NOW - DAY
+        for i, away in enumerate((2, 4, 6, 8, 100)):
+            at = base + 100 + i * 50
+            self.event("m1", "player_disconnected", at=at, player="a", role="p1", in_fight=True, close_code=1006, replaced=False)
+            self.event("m1", "player_connected", at=at + away, player="a", role="p1", reconnect=True, in_fight=True, client={})
+        item = value(stats.tab_reliability(self.conn, self.scope()), "Time to come back")
+        self.assertEqual(item["value"], 6)
+        # The 95th percentile of five is 3.8 places along them: 8 + (100 - 8) * 0.8
+        self.assertAlmostEqual(item["viz"]["to"], 81.6)
+
+    def test_server_restarts_by_day_and_the_latest_first(self):
+        two_ago, yesterday = NOW - 2 * DAY, NOW - DAY
+        for build, at in (("old", two_ago), ("older_fix", two_ago + 60), ("new", yesterday)):
+            self.event(None, "server_start", at=at, build=build)
+        scope = self.scope()
+        page = stats.tab_reliability(self.conn, scope)
+        block = block_of(page, "Server restarts by day")
+        by_day = dict(zip(block["x"], block["series"][0]["values"]))
+        self.assertEqual((by_day[scope.day(two_ago)], by_day[scope.day(yesterday)], by_day[scope.day(NOW)]), (2, 1, 0))
+        self.assertEqual(value(page, "Server restarts")["value"], 3)
+        self.assertEqual([r["build"] for r in block_of(page, "Most recent")["rows"]], ["new", "older_fix", "old"])
+
+
+class TestDevices(StatsCase):
+    def test_load_time_and_what_phones_report_when_they_first_join(self):
+        self.match("m1")
+        self.event("m1", "player_connected", player="a", role="p1", client={"platform": "ios", "boot_ms": 1000, "memory_gb": 4})
+        self.event("m1", "player_connected", player="b", role="p2", client={"platform": "android", "boot_ms": 2000, "memory_gb": 2})
+        self.match("m2")
+        self.event("m2", "player_connected", player="a", role="p1", client={"platform": "android", "boot_ms": 4000, "memory_gb": 8})
+        self.event("m2", "player_connected", player="b", role="p2", client={"platform": "android", "boot_ms": 6000})
+        self.event("m2", "player_connected", player="b", role="p2", reconnect=True, client={"platform": "android", "boot_ms": 99000})  # a reconnect loads nothing
+        page = stats.tab_devices(self.conn, self.scope())
+        rows = {r["platform"]: (r["ms"], r["phones"]) for r in block_of(page, "Load time by platform")["rows"]}
+        self.assertEqual(rows, {"android": (4000, 3), "ios": (1000, 1)})
+        # All four: 1000, 2000, 4000, 6000. Halfway is between the middle two; the 95th percentile is 85% from 4000 to 6000.
+        self.assertEqual(value(page, "Load time")["value"], 3000)
+        self.assertAlmostEqual(value(page, "Load time, slowest 5%")["value"], 5700)
+        # Sizes keep their own order, however many of each there are
+        self.assertEqual([r["value"] for r in block_of(page, "Reported memory")["rows"]], ["2 GB", "4 GB", "8 GB", "Not reported"])
+
+
 class TestBalance(StatsCase):
+    def test_who_beats_whom_mirrors_and_only_holds_fighters_with_games(self):
+        self.match("win1", hero1=0, hero2=1, winner="a")
+        self.match("win2", hero1=0, hero2=1, winner="b")
+        self.match("win3", hero1=0, hero2=2, winner="a")
+        self.match("forfeit", hero1=0, hero2=3, winner="a", reason="AUTOWIN_DISCONNECT")  # says nothing about the fighters
+        view = block_of(stats.tab_balance(self.conn, self.scope()), "Who beats whom")["view"]
+        self.assertEqual(view["heroes"], ["Scorpion", "Sub-Zero", "Kitana"])
+        self.assertEqual(view["cells"], [[None, {"w": 1, "l": 1}, {"w": 1, "l": 0}],
+                                         [{"w": 1, "l": 1}, None, {"w": 0, "l": 0}],
+                                         [{"w": 0, "l": 1}, {"w": 0, "l": 0}, None]])
+
+    def test_the_p1_band_is_its_confidence_interval(self):
+        for i in range(3):
+            self.match(f"p1_{i}", winner="a")
+        self.match("p2_0", winner="b")
+        low, high = stats.wilson(3, 4)
+        item = value(stats.tab_balance(self.conn, self.scope()), "P1 win rate")
+        self.assertEqual(item["viz"], {"kind": "interval", "low": low, "high": high, "fair": 0.5})
+
     def test_win_rates_ignore_forfeits_and_mirrors(self):
         self.match("win1", hero1=0, hero2=1, winner="a")
         self.match("win2", hero1=0, hero2=1, winner="b")
@@ -726,6 +867,27 @@ class TestPlayers(StatsCase):
         # Eligible for day 7: old and x. Old fought again on day 7 (day -3).
         self.assertEqual(d7["n"], 2)
         self.assertAlmostEqual(d7["value"], 1 / 2)
+
+    def test_weeks_add_up_to_the_retention_figures(self):
+        # NOW is Friday 2027-01-15, the same four fights as above
+        self.match("o1", created=NOW - 10 * DAY, p1="old", p2="x", winner="old")
+        self.match("o2", created=NOW - 9 * DAY, p1="old", p2="x", winner="old")
+        self.match("o3", created=NOW - 3 * DAY, p1="old", p2="y", winner="old")
+        self.match("n1", created=NOW - 100, p1="new", p2="old", winner="new", length=10)
+        page = stats.tab_players(self.conn, self.scope(days=30))
+        latest, earlier = block_of(page, "By first week")["rows"]
+        # Week of Jan 11: y (Jan 12) and new (Jan 15). New's next day is still to come and y never fought again.
+        self.assertEqual((latest["week"], latest["size"]), ("2027-01-11", 2))
+        self.assertEqual((latest["d1"], latest["d1_n"]), (0, 1))
+        self.assertEqual((latest["d3"], latest["d3_n"]), (0, 1))
+        self.assertEqual((latest["d7"], latest["d7_n"]), (None, 0))
+        # Week of Jan 4: old and x (Jan 5). Both fought on Jan 6, neither on Jan 8, only old on Jan 12.
+        self.assertEqual((earlier["week"], earlier["size"]), ("2027-01-04", 2))
+        self.assertEqual((earlier["d1"], earlier["d1_n"]), (1, 2))
+        self.assertEqual((earlier["d3"], earlier["d3_n"]), (0, 2))
+        self.assertEqual((earlier["d7"], earlier["d7_n"]), (0.5, 2))
+        for key, label in (("d1", "Fought again on the next day"), ("d3", "Fought again on day 3"), ("d7", "Fought again on day 7")):
+            self.assertEqual(latest[f"{key}_n"] + earlier[f"{key}_n"], value(page, label)["n"], label)
 
     def test_a_player_row_adds_up(self):
         self.match("w", p1="a", p2="b", winner="a")
@@ -902,6 +1064,16 @@ class TestEveryPageRenders(StatsCase):
         rows = block_of(stats.tab_devices(self.conn, self.scope()), "Device model")["rows"]
         self.assertEqual(rows[0]["model"], "SM-A135F")
         self.assertEqual(value(stats.tab_devices(self.conn, self.scope()), "Load time")["value"], 900)
+
+    def test_totals_from_phones_are_no_data_until_a_phone_reports(self):
+        self.match("m1")  # the server saw this fight, but no phone has reported it
+        page = stats.tab_netcode(self.conn, self.scope())
+        self.assertIsNone(value(page, "Longest stall")["value"])
+        self.assertIsNone(value(page, "Freezes outside rounds")["value"])
+        self.window("m1", "p1")  # one report saying nothing went wrong is a real zero
+        page = stats.tab_netcode(self.conn, self.scope())
+        self.assertEqual(value(page, "Longest stall")["value"], 0)
+        self.assertEqual(value(page, "Freezes outside rounds")["value"], 0)
 
     def test_a_reading_never_taken_is_not_a_zero(self):
         # /proc is Linux only, so memory can be NULL. That has to read as no data, and a real zero has to stay a zero.

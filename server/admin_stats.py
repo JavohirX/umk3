@@ -51,21 +51,25 @@ LOW_SAMPLE = 30
 # =========================================================================
 
 def kpi(label: str, value: Any, unit: str = "count", n: Optional[int] = None, source: str = SERVER, why: str = "",
-        note: Optional[str] = None, n_label: str = "fights") -> dict:
+        note: Optional[str] = None, n_label: str = "fights", viz: Optional[dict] = None, trend: Optional[dict] = None) -> dict:
+    """viz is a small picture of the value (meter, range_to); trend is its day by day shape (day_trend). Most numbers need neither."""
     return {"type": "kpi", "label": label, "value": value, "unit": unit, "n": n, "n_label": n_label, "source": source,
-            "why": why, "note": note}
+            "why": why, "note": note, "viz": viz, "trend": trend}
 
 
-def kpis(*items: dict, strip: bool = False) -> dict:
+def kpis(*items: dict, strip: bool = False, columns: Optional[int] = None) -> dict:
     """strip: one card holding them all, for numbers that are context rather than the point of the page."""
-    return {"type": "kpis", "items": list(items), "strip": strip}
+    return {"type": "kpis", "items": list(items), "strip": strip, "columns": columns}
 
 
 def tile(label: str, value: Any, unit: str, tone: Optional[str], verdict: Optional[str], detail: str, tab: str, why: str, source: str = SERVER,
-         n: Optional[int] = None, n_label: str = "fights") -> dict:
-    """A number with a verdict on it and the page to open about it. tone is ok, warn or fail; None when there is nothing to judge yet."""
+         n: Optional[int] = None, n_label: str = "fights", viz: Optional[dict] = None, caption: Optional[str] = None, trend: Optional[dict] = None) -> dict:
+    """
+    A number with a verdict on it and the page to open about it. tone is ok, warn or fail; None when there is nothing to judge yet.
+    With a viz, the picture and the short caption stand in for the detail, which stays one click away.
+    """
     return {"type": "tile", "label": label, "value": value, "unit": unit, "tone": tone, "verdict": verdict, "detail": detail, "tab": tab, "why": why,
-            "source": source, "n": n, "n_label": n_label}
+            "source": source, "n": n, "n_label": n_label, "viz": viz, "caption": caption, "trend": trend}
 
 
 def side_by_side(*blocks: dict) -> dict:
@@ -74,19 +78,45 @@ def side_by_side(*blocks: dict) -> dict:
 
 
 def chart(title: str, kind: str, x: List[Any], series: List[dict], unit: str = "count", source: str = SERVER, why: str = "",
-          x_kind: str = "category", compact: bool = False) -> dict:
+          x_kind: str = "category", compact: bool = False, headlines: Optional[List[dict]] = None) -> dict:
+    """headlines: the numbers that belong to this chart, shown on it instead of on cards of their own."""
     return {"type": "chart", "kind": kind, "title": title, "x": x, "series": series, "unit": unit, "source": source,
-            "why": why, "x_kind": x_kind, "compact": compact}
+            "why": why, "x_kind": x_kind, "compact": compact, "headlines": headlines or []}
 
 
-def table(title: str, columns: List[Tuple[str, str, str]], rows: List[dict], source: str = SERVER, why: str = "",
-          empty: str = "Nothing here yet.") -> dict:
-    return {"type": "table", "title": title, "columns": [{"key": k, "label": l, "unit": u} for k, l, u in columns],
-            "rows": rows, "source": source, "why": why, "empty": empty}
+def table(title: str, columns: List[tuple], rows: List[dict], source: str = SERVER, why: str = "",
+          empty: str = "Nothing here yet.", view: Optional[dict] = None, headlines: Optional[List[dict]] = None,
+          heat_from: Optional[dict] = None) -> dict:
+    """
+    Columns are (key, label, unit), with an optional fourth: "bar", "heat" or "flag" to draw that column's values in the cell.
+    view: the same rows drawn as a chart (bars_view and friends). The rows stay the source, and one click shows them as a table.
+    heat_from: {min, label}: a heat cell whose row's "<key>_n" is under min gets no colour, because a share of too few people isn't a finding.
+    """
+    return {"type": "table", "title": title, "columns": [{"key": c[0], "label": c[1], "unit": c[2], "viz": c[3] if len(c) > 3 else None} for c in columns],
+            "rows": rows, "source": source, "why": why, "empty": empty, "view": view, "headlines": headlines or [], "heat_from": heat_from}
 
 
 def section(title: str, *blocks: dict, note: Optional[str] = None) -> dict:
     return {"title": title, "note": note, "blocks": [b for b in blocks if b]}
+
+
+def meter(mark: Optional[float] = None, scale: float = 1) -> dict:
+    """The value as a share of scale. mark is a line across it, such as a threshold."""
+    return {"kind": "meter", "mark": mark, "scale": scale}
+
+
+def range_to(to: Optional[float], label: str = "Slowest 5%") -> Optional[dict]:
+    """A typical value and how far the bad end reaches, as one bar in place of two numbers."""
+    return {"kind": "range", "to": to, "label": label} if to is not None else None
+
+
+def day_trend(axis: List[str], values: List[Optional[float]]) -> dict:
+    return {"x": axis, "values": values, "x_kind": "day"}
+
+
+def bars_view(label: str, value: str, share: bool = False, divider: Optional[dict] = None) -> dict:
+    """Rows as labelled bars. share also prints each row's part of the total. divider: {before: row index, text}."""
+    return {"kind": "bars", "label": label, "value": value, "share": share, "divider": divider}
 
 
 # =========================================================================
@@ -129,10 +159,12 @@ def times(n: int) -> str:
 
 def ms_text(ms: float) -> str:
     """A time written as the page writes it, for verdicts and sentences worked out here."""
-    return f"{ms / 1000:.1f}s" if ms >= 10000 else f"{ms:.1f}ms" if ms < 10 else f"{round(ms):,}ms"
+    return "0ms" if ms == 0 else f"{ms / 1000:.1f}s" if ms >= 10000 else f"{ms:.1f}ms" if ms < 10 else f"{round(ms):,}ms"
 
 
 def secs_text(secs: float) -> str:
+    if secs == 0:
+        return "0s"
     if secs < 10:
         return f"{secs:.1f}s"
     whole = round(secs)
@@ -277,6 +309,16 @@ def phone_delays(sides: Iterable[dict]) -> List[float]:
     return [d for d in (delay_ms(s["delay_hist"]) for s in sides) if d is not None]
 
 
+def sides_by_day(scope: Scope, fights: List[dict], sides: Dict[Tuple[str, str], dict]) -> Dict[str, List[dict]]:
+    """Each phone's reports in each fight, filed under the day the fight started."""
+    days: Dict[str, List[dict]] = defaultdict(list)
+    for fight in fights:
+        for role in ("p1", "p2"):
+            if (fight["match_id"], role) in sides:
+                days[scope.day(fight["fight_started_at"])].append(sides[(fight["match_id"], role)])
+    return days
+
+
 def combine(rows: Iterable[dict]) -> dict:
     total = {c: 0 for c in SUMMED}
     total.update({c: 0 for c in MAXED})
@@ -365,29 +407,34 @@ def fault_words(faults: dict) -> List[str]:
 # OVERVIEW
 # =========================================================================
 
-def freeze_tile(fights: List[dict], judged: List[dict], sides: Dict[Tuple[str, str], dict], longest_stall: float) -> dict:
+def freeze_tile(scope: Scope, axis: List[str], fights: List[dict], judged: List[dict], sides: Dict[Tuple[str, str], dict], longest_stall: float) -> dict:
     clean = [f for f in judged if not any(freezes_in_round(sides[(f["match_id"], r)]) for r in ("p1", "p2"))]
     share = ratio(len(clean), len(judged))
     why = (f"Finished fights where neither phone saw the round stop for 250ms or more, out of those where both phones reported at least half the fight. "
-           f"Asks for a look at {FREEZE_FREE_WARN:.0%} or below.")
+           f"Asks for a look at {FREEZE_FREE_WARN:.0%} or below, the line across the bar.")
     if share is None:
         return tile("Fights without a freeze", None, "pct", None, None, "No finished fight has enough phone reports to judge yet.", "reliability", why, PHONES, 0)
-    detail = f"{len(judged) - len(clean)} of {len(judged)} fights froze. Longest stall: {ms_text(longest_stall)}."
+    frozen = len(judged) - len(clean)
+    detail = f"{frozen} of {len(judged)} fights froze. Longest stall: {ms_text(longest_stall)}."
     unjudged = len([f for f in fights if f["outcome"] != "running"]) - len(judged)
     if unjudged:
         detail += f" {unjudged:,} more had too few reports to judge."
     tone, verdict = ("warn", "Needs a look") if share <= FREEZE_FREE_WARN else ("ok", f"Above {FREEZE_FREE_WARN:.0%}")
-    return tile("Fights without a freeze", share, "pct", tone, verdict, detail, "reliability", why, PHONES, len(judged))
+    judged_on, clean_on = Counter(scope.day(f["fight_started_at"]) for f in judged), Counter(scope.day(f["fight_started_at"]) for f in clean)
+    return tile("Fights without a freeze", share, "pct", tone, verdict, detail, "reliability", why, PHONES, len(judged), viz=meter(mark=FREEZE_FREE_WARN),
+                caption=f"{frozen:,} of {len(judged):,} froze, longest stall {ms_text(longest_stall)}", trend=day_trend(axis, [ratio(clean_on[d], judged_on[d]) for d in axis]))
 
 
 def faults_tile(faults: dict, any_reports: bool) -> dict:
     why = "Desyncs, rollback misses, score conflicts and game loop errors added up. Each one means something is broken, so one is enough to look into."
     if not any_reports:
         return tile("Faults that should never happen", None, "count", None, None, "Phones haven't reported from this range yet, and most faults are theirs to report.", "netcode", why, BOTH)
+    viz = {"kind": "counts", "items": [{"label": "Desyncs", "value": faults["desyncs"]}, {"label": "Misses", "value": faults["rollback_misses"]},
+                                       {"label": "Conflicts", "value": faults["score_conflicts"]}, {"label": "Errors", "value": faults["loop_errors"]}]}
     if not faults["total"]:
-        return tile("Faults that should never happen", 0, "count", "ok", "None", "No desyncs, rollback misses, score conflicts or game loop errors.", "netcode", why, BOTH)
+        return tile("Faults that should never happen", 0, "count", "ok", "None", "No desyncs, rollback misses, score conflicts or game loop errors.", "netcode", why, BOTH, viz=viz)
     words = [w for w in fault_words(faults) if not w.startswith("0 ")]
-    return tile("Faults that should never happen", faults["total"], "count", "fail", "Investigate", f"{', '.join(words)}.", "netcode", why, BOTH)
+    return tile("Faults that should never happen", faults["total"], "count", "fail", "Investigate", f"{', '.join(words)}.", "netcode", why, BOTH, viz=viz)
 
 
 def quality_tile(conn: sqlite3.Connection, scope: Scope) -> dict:
@@ -399,7 +446,9 @@ def quality_tile(conn: sqlite3.Connection, scope: Scope) -> dict:
     tone, verdict = (("fail", f"{status['fail']} failed") if status["fail"] else ("warn", counted(status["warn"], "warning")) if status["warn"] else ("ok", "All passed"))
     # The verdict names the worst kind, so anything else short of passing is said here for the numbers to add up
     also = f" Also {counted(status['warn'], 'warning')}." if status["fail"] and status["warn"] else ""
-    return tile("Data quality", f"{status['ok']} of {len(checks)}", "text", tone, verdict, f"Consistency checks across the whole log.{also}", "quality", why, BOTH)
+    worst_first = sorted((c["status"] for c in checks), key=("fail", "warn", "ok").index)
+    return tile("Data quality", f"{status['ok']} of {len(checks)}", "text", tone, verdict, f"Consistency checks across the whole log.{also}", "quality", why, BOTH,
+                viz={"kind": "cells", "statuses": worst_first}, caption=also.strip() or None)
 
 
 def problem_words(summary: dict, worst_freeze: Optional[float]) -> str:
@@ -490,6 +539,8 @@ def tab_overview(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
     tone, verdict = delay_verdict(delay)
     slowest = percentile(side_delays, 0.95)
     delay_detail = f"Goal {GOAL_DELAY_MS}ms or less. Slowest 5% of phones: {ms_text(slowest)}." if slowest is not None else "Phones haven't reported a live round in this range yet."
+    day_sides = sides_by_day(scope, fights, sides)
+    delay_days = [delay_ms(combine(day_sides[d])["delay_hist"]) if d in day_sides else None for d in axis]
     ended = [("Played to the end", played, "Decided by rounds or a draw."), ("Forfeited", forfeit, "A player left or dropped and did not come back within the 60 second grace period."),
              ("Abandoned", abandoned, "Both players gone, or a fight left open until housekeeping closed it.")]
 
@@ -498,8 +549,8 @@ def tab_overview(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
                 {"type": "status", "items": [
                     tile("Input delay", delay, "ms", tone, verdict, delay_detail, "netcode",
                          "Average delay between a key press and the fight using it, weighted by time, over all live round ticks. The same number as on the Netcode page. The slowest 5% is the 95th percentile across phones of each phone's average in that fight.",
-                         PHONES, len(side_delays), "phones"),
-                    freeze_tile(fights, judged_fights(fights, sides), sides, total["max_stall_ms"]),
+                         PHONES, len(side_delays), "phones", viz={"kind": "goal", "goal": GOAL_DELAY_MS, "scale": DELAY_SCALE_MS, "slowest": slowest}, trend=day_trend(axis, delay_days)),
+                    freeze_tile(scope, axis, fights, judged_fights(fights, sides), sides, total["max_stall_ms"]),
                     faults_tile(fault_counts(conn, scope, total), bool(sides)),
                     quality_tile(conn, scope),
                 ]}),
@@ -603,38 +654,38 @@ def tab_funnel(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
 
     return [
         section("From a challenge to a fight",
-                chart("Challenges at each step", "funnel", labels, [{"name": "Challenges", "values": counts}],
-                      why="One group followed through: every challenge created in this range, excluding rematches. Each step counts those that reached it, however long it took."),
-                table("Step by step", [("step", "Step", "text"), ("count", "Challenges", "count"), ("of_first", "Of all created", "pct"),
-                                       ("of_previous", "Of the step before", "pct")], funnel_rows,
-                      why="A challenge created minutes ago may simply not have got there yet."),
+                table("Challenges at each step", [("step", "Step", "text"), ("count", "Challenges", "count"), ("of_first", "Of all created", "pct"),
+                                                  ("of_previous", "Of the step before", "pct")], funnel_rows,
+                      why="One group followed through: every challenge created in this range, excluding rematches. Each step counts those that reached it, however long it took, so a challenge created minutes ago may simply not have got there yet. The biggest loss between two steps is marked. A rematch is a choice rather than a step everyone should reach, so it's shown as a share and not as a loss.",
+                      view={"kind": "funnel", "label": "step", "value": "count", "optional": ["Rematch agreed"]}),
                 kpis(
                     kpi("Still open", still_open, why="Created in this range and waiting for an opponent right now."),
                     kpi("Expired unanswered", expired, why="Nobody accepted within the 10 minute window, or the creator never came back to an accepted one."),
                     kpi("Lost in hero select", forfeit_in_select, why="Both players connected, but a fight never started: someone left before both heroes were locked. These can show as forfeits on the leaderboard; they are not fights."),
                     kpi("Rematch matches", len(rematches), why="Matches opened by both players agreeing a rematch. Kept apart from the steps above so they don't inflate how many challenges convert."),
-                )),
+                    strip=True)),
         section("How long each step takes",
                 kpis(
                     kpi("Time until someone accepts", percentile(time_to_accept, 0.5), "secs", n=len(time_to_accept), n_label="challenges", why="Median, from the challenge being created to the first other person opening it."),
                     kpi("Time until both are in", percentile(time_both_in, 0.5), "secs", n=len(time_both_in), n_label="challenges", why="Median, from the challenge being created to both players being connected."),
                     kpi("Time in hero select", percentile(time_in_select, 0.5), "secs", n=len(time_in_select), why="Median, from both players being connected to both heroes locked. Includes rematches."),
-                )),
+                    strip=True)),
         section("Where challenges come from",
                 table("By where the challenge was created", [("source", "Source", "text"), ("created", "Created", "count"), ("fought", "Fights", "count"),
-                                                             ("played", "Played to the end", "count"), ("to_fight", "Fights, of created", "pct"),
-                                                             ("to_end", "Played to the end, of created", "pct")], source_rows,
+                                                             ("played", "Played to the end", "count"), ("to_fight", "Fights, of created", "pct", "bar"),
+                                                             ("to_end", "Played to the end, of created", "pct", "bar")], source_rows,
                       why="From the chat id on the match. Excludes rematches.")),
         section("Before the first challenge",
-                kpis(
-                    kpi("Started the bot", len(starters), n_label="people", why="Different people who sent /start in this range."),
-                    kpi("Of those, opened a match", ratio(len(starters & opened), len(starters)), "pct", n=len(starters), n_label="people", why="Connected to a match at any time, as a player."),
-                    kpi("Of those, fought", ratio(len(starters & fought_ids), len(starters)), "pct", n=len(starters), n_label="people", why="Were on one side of a fight at any time. Counted over everyone, whether or not your own fights are hidden."),
-                ),
-                table("Joins the server turned away", [("reason", "Reason", "text"), ("count", "Times", "count")],
-                      [{"reason": k, "count": v} for k, v in rejected.most_common()],
-                      why="Someone opened a link and got nothing to play. Your own fights can't be filtered out of this one.",
-                      empty="Nobody has been turned away.")),
+                side_by_side(
+                    kpis(
+                        kpi("Started the bot", len(starters), n_label="people", why="Different people who sent /start in this range."),
+                        kpi("Then opened a match", ratio(len(starters & opened), len(starters)), "pct", n=len(starters), n_label="people", why="Of those who started the bot: connected to a match at any time, as a player.", viz=meter()),
+                        kpi("Then fought", ratio(len(starters & fought_ids), len(starters)), "pct", n=len(starters), n_label="people", why="Of those who started the bot: were on one side of a fight at any time. Counted over everyone, whether or not your own fights are hidden.", viz=meter()),
+                        strip=True),
+                    table("Joins the server turned away", [("reason", "Reason", "text"), ("count", "Times", "count")],
+                          [{"reason": k, "count": v} for k, v in rejected.most_common()],
+                          why="Someone opened a link and got nothing to play. Your own fights can't be filtered out of this one.",
+                          empty="Nobody has been turned away.", view=bars_view("reason", "count")))),
     ]
 
 
@@ -670,9 +721,11 @@ def quality_row(total: dict) -> dict:
     }
 
 
-QUALITY_COLUMNS = [("live_minutes", "Minutes in round", "number"), ("delay_ms", "Input delay", "ms"),
+QUALITY_COLUMNS = [("live_minutes", "Minutes in round", "number"), ("delay_ms", "Input delay", "ms", "bar"),
                    ("rollbacks_per_min", "Rollbacks a minute", "number"), ("stall_share", "Time stalled", "pct"),
-                   ("freezes_per_10", "Freezes per 10 min", "number")]
+                   ("freezes_per_10", "Freezes per 10 min", "number", "bar")]
+STALL_BUCKETS = ["Under 50ms", "50 to 100ms", "100 to 250ms", "250ms to 1s", "1s and over"]
+STALL_BUCKETS_BELOW_A_FREEZE = 3
 
 
 def delay_share_rows(hist: List[int]) -> List[dict]:
@@ -754,12 +807,11 @@ def tab_netcode(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
 
     # Day by day
     axis = scope.day_axis(fights[0]["fight_started_at"] if fights else None)
-    day_sides: Dict[str, List[dict]] = defaultdict(list)
-    for f in fights:
-        for r in ("p1", "p2"):
-            if (f["match_id"], r) in sides:
-                day_sides[scope.day(f["fight_started_at"])].append(sides[(f["match_id"], r)])
-    daily = {d: quality_row(combine(day_sides[d])) if day_sides[d] else None for d in axis}
+    day_sides = sides_by_day(scope, fights, sides)
+    daily = {d: quality_row(combine(day_sides[d])) if d in day_sides else None for d in axis}
+
+    def by_day(key: str) -> List[Optional[float]]:
+        return [daily[d][key] if daily[d] else None for d in axis]
 
     live_minutes = total["live_secs"] / 60
     delay = delay_ms(hist)
@@ -782,39 +834,43 @@ def tab_netcode(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
                      "average": kpi("Input delay", delay, "ms", n=len(side_delays), source=PHONES, n_label="phones", why="Average delay between a key press and the fight using it, weighted by time, over all live round ticks. This is what the rollback netcode adds; the screen and touch panel add their own on top."),
                      "slowest": kpi("Input delay, slowest 5%", percentile(side_delays, 0.95), "ms", n=len(side_delays), source=PHONES, n_label="phones", why="95th percentile across phones of each phone's average delay in that fight."),
                      "items": [
-                         kpi("Time within the goal", ratio(within_goal, live_ticks), "pct", n=len(side_delays), source=PHONES, n_label="phones", why=f"Share of live round ticks played at {GOAL_DELAY_TICKS} ticks of input delay or less ({GOAL_DELAY_MS}ms). From exact tick counts, not samples."),
-                         kpi("Opponent round trip", percentile(peer, 0.5), "ms", n=len(peer), source=PHONES, n_label="reports", note=f"Slowest 5%: {ms_text(peer_slowest)}" if peer_slowest is not None else None,
+                         kpi("Time within the goal", ratio(within_goal, live_ticks), "pct", n=len(side_delays), source=PHONES, n_label="phones", why=f"Share of live round ticks played at {GOAL_DELAY_TICKS} ticks of input delay or less ({GOAL_DELAY_MS}ms). From exact tick counts, not samples.", viz=meter()),
+                         kpi("Opponent round trip", percentile(peer, 0.5), "ms", n=len(peer), source=PHONES, n_label="reports", viz=range_to(peer_slowest),
                              why="Median of what phones report: a high percentile of their last 10 pings to the opponent over the same paths inputs take, sampled once per report. The slowest 5% is the 95th percentile of the same reports."),
-                         kpi("Server round trip", percentile(server_rtt, 0.5), "ms", n=len(server_rtt), source=PHONES, n_label="reports", why="Median of the latest WebSocket ping to the game server at each report."),
+                         kpi("Server round trip", percentile(server_rtt, 0.5), "ms", n=len(server_rtt), source=PHONES, n_label="reports", viz=range_to(percentile(server_rtt, 0.95)),
+                             why="Median of the latest WebSocket ping to the game server at each report. The slowest 5% is the 95th percentile of the same reports."),
                      ]},
                     delay_shares)),
         section("Freezes",
+                side_by_side(
+                    chart("Freezes per 10 minutes", "line", axis, [{"name": "Freezes", "values": by_day("freezes_per_10")}], "number", PHONES, x_kind="day", compact=True,
+                          headlines=[kpi("Freezes per 10 minutes", ratio(freezes_in_round(total), live_minutes / 10), "number", n=len(with_ticks), source=PHONES, n_label="phones", why="Times a live round visibly stopped for 250ms or more, on one phone, per 10 minutes of round time on that phone. A single freeze usually shows on both phones and counts on each. Drawn by the day the fight started.")]),
+                    chart("Time stalled", "line", axis, [{"name": "Time stalled", "values": by_day("stall_share")}], "pct", PHONES, x_kind="day", compact=True,
+                          headlines=[kpi("Time stalled", ratio(total["live_stall_ms"], total["live_secs"] * 1000), "pct", n=len(with_ticks), source=PHONES, n_label="phones", why="Share of live round time spent waiting because the opponent's input ran more than 8 ticks late, however short the wait. Drawn by the day the fight started.")])),
                 kpis(
-                    kpi("Freezes per 10 minutes", ratio(freezes_in_round(total), live_minutes / 10), "number", n=len(with_ticks), source=PHONES, n_label="phones", why="Times a live round visibly stopped for 250ms or more, on one phone, per 10 minutes of round time on that phone. A single freeze usually shows on both phones and counts on each."),
-                    kpi("Time stalled", ratio(total["live_stall_ms"], total["live_secs"] * 1000), "pct", n=len(with_ticks), source=PHONES, n_label="phones", why="Share of live round time spent waiting because the opponent's input ran more than 8 ticks late, however short the wait."),
                     kpi("Stalls a minute", ratio(total["live_stalls"], live_minutes), "number", n=len(with_ticks), source=PHONES, n_label="phones", why="Waits of any length per minute of live round time."),
-                    kpi("Longest stall", total["max_stall_ms"], "ms", n=len(all_sides), source=PHONES, n_label="phones", why="The longest single wait for the opponent's input in this range. Time with a player gone is not included."),
+                    kpi("Longest stall", total["max_stall_ms"] if all_sides else None, "ms", n=len(all_sides), source=PHONES, n_label="phones", why="The longest single wait for the opponent's input in this range. Time with a player gone is not included."),
                     kpi("Waiting for the opponent to load", ratio(total["load_wait_ms"], len(all_sides)), "ms", n=len(all_sides), source=PHONES, n_label="phones", why="Average per phone in each fight: waiting for the opponent's phone to start at all. Reported apart so a slow loading screen doesn't read as a freeze."),
-                    kpi("Freezes outside rounds", total["freezes_other"], n=len(all_sides), source=PHONES, n_label="phones", why="Same 250ms test, during loading, the round intro or a knockout. Annoying, but they don't lose anyone a fight."),
+                    kpi("Freezes outside rounds", total["freezes_other"] if all_sides else None, n=len(all_sides), source=PHONES, n_label="phones", why="Same 250ms test, during loading, the round intro or a knockout. Annoying, but they don't lose anyone a fight."),
                     strip=True),
                 side_by_side(
                     cause_table(causes, "Likely cause of each freeze"),
-                    chart("How long stalls last, in live rounds", "stackbar", ["Under 50ms", "50 to 100ms", "100 to 250ms", "250ms to 1s", "1s and over"],
-                          [{"name": "Stalls", "values": stall_hist}], source=PHONES, why="Under a frame or two is invisible to players. From 250ms on it counts as a freeze.")),
-                chart("Freezes per 10 minutes, by day", "line", axis,
-                      [{"name": "Freezes", "values": [daily[d]["freezes_per_10"] if daily[d] else None for d in axis]}],
-                      "number", PHONES, "By the day the fight started.", x_kind="day")),
+                    table("How long stalls last, in live rounds", [("length", "Length", "text"), ("count", "Stalls", "count")],
+                          [{"length": label, "count": count} for label, count in zip(STALL_BUCKETS, stall_hist)], PHONES, "Under a frame or two is invisible to players. From 250ms on it counts as a freeze.",
+                          empty="No stalls reported in this range.", view=bars_view("length", "count", divider={"before": STALL_BUCKETS_BELOW_A_FREEZE, "text": "A freeze from here"})))),
         section("Rollback",
-                kpis(
-                    kpi("Rollbacks a minute", ratio(total["rollbacks"], total["active_secs"] / 60), "number", n=len(all_sides), source=PHONES, n_label="phones", why="Times a guess about the opponent's keys was wrong and the fight was rewound, per minute of fight."),
-                    kpi("Average depth", ratio(total["rollback_ticks"], total["rollbacks"]) and ratio(total["rollback_ticks"], total["rollbacks"]) * TICK_MS, "ms", n=total["rollbacks"], source=PHONES, n_label="rollbacks", why="How far back each rewind went on average. The further, the more visibly fighters jump."),
-                    kpi("Deepest", total["max_rollback"] * TICK_MS, "ms", n=total["rollbacks"], source=PHONES, n_label="rollbacks", why="The largest rewind in this range."),
-                    kpi("Ticks run on a guess", ratio(total["predict_sum"], total["ticks"]), "number", n=len(all_sides), source=PHONES, n_label="phones", why="How many ticks past the opponent's last known input the fight ran, on average. The netcode stops at 8 and waits."),
-                    kpi("Inputs that arrived late", ratio(total["late_inputs"], total["inputs_udp"] + total["inputs_tcp"]), "pct", n=len(all_sides), source=PHONES, n_label="phones", why="Opponent inputs for a tick already run on a guess. Late inputs only cost a rollback when the guess was wrong."),
-                    kpi("Inputs first by UDP", ratio(total["inputs_udp"], total["inputs_udp"] + total["inputs_tcp"]), "pct", n=len(all_sides), source=PHONES, n_label="phones", why="Inputs are sent both ways, over the WebRTC channel and the WebSocket. This is how often the UDP copy got there first."),
-                    strip=True)),
+                side_by_side(
+                    chart("Rollbacks a minute", "line", axis, [{"name": "Rollbacks", "values": by_day("rollbacks_per_min")}], "number", PHONES, x_kind="day", compact=True,
+                          headlines=[kpi("Rollbacks a minute", ratio(total["rollbacks"], total["active_secs"] / 60), "number", n=len(all_sides), source=PHONES, n_label="phones", why="Times a guess about the opponent's keys was wrong and the fight was rewound, per minute of fight. Drawn by the day the fight started.")]),
+                    kpis(
+                        kpi("Average depth", ratio(total["rollback_ticks"], total["rollbacks"]) and ratio(total["rollback_ticks"], total["rollbacks"]) * TICK_MS, "ms", n=total["rollbacks"], source=PHONES, n_label="rollbacks", viz=range_to(total["max_rollback"] * TICK_MS, "Deepest"),
+                            why="How far back each rewind went on average. The further, the more visibly fighters jump. Deepest is the largest rewind in this range."),
+                        kpi("Ticks run on a guess", ratio(total["predict_sum"], total["ticks"]), "number", n=len(all_sides), source=PHONES, n_label="phones", viz=meter(scale=8), why="How many ticks past the opponent's last known input the fight ran, on average. The netcode stops at 8 and waits, so the bar runs to 8."),
+                        kpi("Inputs that arrived late", ratio(total["late_inputs"], total["inputs_udp"] + total["inputs_tcp"]), "pct", n=len(all_sides), source=PHONES, n_label="phones", viz=meter(), why="Opponent inputs for a tick already run on a guess. Late inputs only cost a rollback when the guess was wrong."),
+                        kpi("Inputs first by UDP", ratio(total["inputs_udp"], total["inputs_udp"] + total["inputs_tcp"]), "pct", n=len(all_sides), source=PHONES, n_label="phones", viz=meter(), why="Inputs are sent both ways, over the WebRTC channel and the WebSocket. This is how often the UDP copy got there first."),
+                        strip=True, columns=2))),
         section("How inputs travelled",
-                table("By connection", [("transport", "Connection", "text"), ("share", "Share of fight time", "pct"), *QUALITY_COLUMNS], transports, PHONES,
+                table("By connection", [("transport", "Connection", "text"), ("share", "Share of fight time", "pct", "bar"), *QUALITY_COLUMNS], transports, PHONES,
                       "The path each report saw at the moment it was sent. Compare the lines to see what a path is worth.")),
         section("Compared across builds",
                 table("By the server build a fight started on", [("build", "Build", "text"), ("first", "First fight", "time"), ("fights", "Fights", "count"), *QUALITY_COLUMNS], build_rows, PHONES,
@@ -827,7 +883,7 @@ def tab_netcode(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
 # =========================================================================
 
 DEVICE_COLUMNS = [("fight_sides", "Phones in fights", "count"), ("minutes", "Fight minutes", "number"), ("frame_ms", "Average frame", "ms"),
-                  ("slow_share", "Slow frames", "pct"), ("worst_frame", "Worst frame", "ms"), ("hitches_per_10", "Own freezes per 10 min", "number"),
+                  ("slow_share", "Slow frames", "pct", "bar"), ("worst_frame", "Worst frame", "ms"), ("hitches_per_10", "Own freezes per 10 min", "number", "bar"),
                   ("busy", "Main thread busy", "pct"), ("tick_ms", "Tick", "ms"), ("save_ms", "Save", "ms"), ("load_ms", "Restore", "ms")]
 
 
@@ -872,13 +928,18 @@ def tab_devices(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
     all_boots = [b for v in boots.values() for b in v]
 
     names = ["Simulate and draw", "Save state", "Restore state", "Replay after rollback", "Everything else"]
+    boot_rows = [{"platform": platform, "ms": percentile(times_ms, 0.5), "phones": len(times_ms)} for platform, times_ms in sorted(boots.items(), key=lambda kv: -len(kv[1]))]
     return [
         section("How phones cope",
-                kpis(kpi("Load time", percentile(all_boots, 0.5), "ms", n=len(all_boots), source=PHONES, n_label="phones", why="Median, from the page starting to the game being ready to connect, when a player first joins a fight."),
-                     kpi("Load time, slowest 5%", percentile(all_boots, 0.95), "ms", n=len(all_boots), source=PHONES, n_label="phones", why="95th percentile of the same.")),
-                chart("Where a second of fight goes, by platform", "stackbar", [b[0] for b in budget_rows],
-                      [{"name": names[i], "values": [b[1][i] for b in budget_rows]} for i in range(5)], "ms", PHONES,
-                      "Milliseconds of main thread work per second of fight. 1000 means the phone can't keep up at all; well under that leaves room for the browser. Slow frames with low work point at the browser or the system, not the game.")),
+                side_by_side(
+                    table("Load time by platform", [("platform", "Platform", "text"), ("ms", "Load time", "ms"), ("phones", "Phones", "count")], boot_rows, PHONES,
+                          "Median for each platform, from the page starting to the game being ready to connect, when a player first joins a fight.", empty="No phone has reported a load time in this range.",
+                          view=bars_view("platform", "ms"),
+                          headlines=[kpi("Load time", percentile(all_boots, 0.5), "ms", n=len(all_boots), source=PHONES, n_label="phones", why="Median across all platforms."),
+                                     kpi("Load time, slowest 5%", percentile(all_boots, 0.95), "ms", n=len(all_boots), source=PHONES, n_label="phones", why="95th percentile across all platforms.")]),
+                    chart("Where a second of fight goes, by platform", "stackbar", [b[0] for b in budget_rows],
+                          [{"name": names[i], "values": [b[1][i] for b in budget_rows]} for i in range(5)], "ms", PHONES,
+                          "Milliseconds of main thread work per second of fight. 1000 means the phone can't keep up at all; well under that leaves room for the browser. Slow frames with low work point at the browser or the system, not the game."))),
         section("By platform",
                 table("Telegram client", [("platform", "Platform", "text"), *DEVICE_COLUMNS], device_rows(conn, scope, "w.platform", "platform"), PHONES,
                       "As Telegram names it. Own freezes are single frames of 250ms or more on that phone; stalls are in the netcode tab. Tick is per tick; save and restore per snapshot.")),
@@ -888,10 +949,11 @@ def tab_devices(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
                 table("Telegram's own device class", [("perf_class", "Class", "text"), *DEVICE_COLUMNS], device_rows(conn, scope, "w.perf_class", "perf_class"), PHONES,
                       "Telegram for Android rates each device LOW, AVERAGE or HIGH. Unknown is everything else.")),
         section("Who is playing on what",
-                table("Reported memory", [("value", "Memory", "text"), ("count", "Phones", "count")], [{"value": k, "count": v} for k, v in memory.most_common()], PHONES,
-                      "Rounded down by the browser, and only Chrome based browsers report it."),
-                table("Reported network", [("value", "Network", "text"), ("count", "Phones", "count")], [{"value": k, "count": v} for k, v in networks.most_common()], PHONES,
-                      "The browser's estimate when the player joined. iOS doesn't report it.")),
+                side_by_side(
+                    table("Reported memory", [("value", "Memory", "text"), ("count", "Phones", "count")], [{"value": k, "count": v} for k, v in sorted(memory.items(), key=lambda kv: (kv[0] == "Not reported", float(kv[0].split()[0]) if kv[0] != "Not reported" else 0))], PHONES,
+                          "Rounded down by the browser, and only Chrome based browsers report it.", view=bars_view("value", "count", share=True)),
+                    table("Reported network", [("value", "Network", "text"), ("count", "Phones", "count")], [{"value": k, "count": v} for k, v in networks.most_common()], PHONES,
+                          "The browser's estimate when the player joined. iOS doesn't report it.", view=bars_view("value", "count", share=True)))),
     ]
 
 
@@ -900,11 +962,13 @@ def tab_devices(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
 # =========================================================================
 
 CAUSES = {
-    "own_device": "This phone froze: one frame took 250ms or more",
-    "opponent_device": "The opponent's phone froze at that moment",
+    "own_device": "This phone froze",
+    "opponent_device": "The opponent's phone froze",
     "opponent_silent": "The opponent's inputs stopped reaching the server",
-    "own_connection": "The server had the opponent's inputs, this phone didn't get them",
+    "own_connection": "This phone wasn't getting inputs",
 }
+CAUSES_WHY = ("This phone froze: one of its own frames took 250ms or more. The opponent's phone froze: at that same moment, so this one had to wait. "
+              "This phone wasn't getting inputs: the server had the opponent's inputs and they didn't arrive here.")
 
 
 def freeze_causes(events: List[dict]) -> Counter:
@@ -965,7 +1029,12 @@ def cause_table(causes: Counter, title: str) -> dict:
     total = sum(causes.values())
     return table(title, [("cause", "Likely cause", "text"), ("count", "Freezes", "count"), ("share", "Share", "pct")],
                  [{"cause": CAUSES[k], "count": causes[k], "share": ratio(causes[k], total)} for k in CAUSES], BOTH,
-                 "Worked out by lining up three views of the moment: both phones' reports and what the server received. Phone events are placed on the server's clock, good to about 300ms, so a freeze next to another issue can be misfiled. Read it as a guide to where to look first.")
+                 f"{CAUSES_WHY} Worked out by lining up three views of the moment: both phones' reports and what the server received. Phone events are placed on the server's clock, good to about 300ms, so a freeze next to another issue can be misfiled. Read it as a guide to where to look first.",
+                 empty="No freezes in a live round.", view=bars_view("cause", "count", share=True))
+
+
+GAP_BUCKETS = ["Under 25ms", "25 to 50ms", "50 to 100ms", "100 to 250ms", "250 to 500ms", "500ms to 1s", "1s and over"]
+MOST_RECENT_RESTARTS = 5
 
 
 def close_code_label(code: Any) -> str:
@@ -985,11 +1054,14 @@ def tab_reliability(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
     forfeit_kind = Counter()
     fights_with_drop = 0
     connect_restored = 0
+    drops_on, secs_on = Counter(), Counter()
     for fight in fights:
         evs = events.get(fight["match_id"], [])
         fight_drops = analyse_drops(evs)
         drops += fight_drops
         fights_with_drop += 1 if fight_drops else 0
+        drops_on[scope.day(fight["fight_started_at"])] += len(fight_drops)
+        secs_on[scope.day(fight["fight_started_at"])] += fight["active_secs"] or 0
         causes += freeze_causes(evs)
         for e in evs:
             if e["kind"] == "segment_restart":
@@ -1022,44 +1094,55 @@ def tab_reliability(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
     codes = Counter(close_code_label(d["close_code"]) for d in drops)
 
     restarts_at = conn.execute("SELECT at, data FROM match_events WHERE kind = 'server_start' AND at >= ? AND at <= ? ORDER BY at DESC", (scope.since, scope.until)).fetchall()
-    restart_rows = [{"at": r["at"], "build": data_of(r["data"]).get("build")} for r in restarts_at[:30]]
+    restart_rows = [{"at": r["at"], "build": data_of(r["data"]).get("build")} for r in restarts_at[:MOST_RECENT_RESTARTS]]
+    restart_days = scope.day_axis(restarts_at[-1]["at"] if restarts_at else None)
+    restarts_on = Counter(scope.day(r["at"]) for r in restarts_at)
 
+    axis = scope.day_axis(fights[0]["fight_started_at"] if fights else None)
     forfeits = [f for f in fights if f["outcome"] == "forfeit"]
     closed = [f for f in fights if f["outcome"] != "running"]
     return [
         section("Staying connected",
                 kpis(
-                    kpi("Connections lost per 10 minutes", ratio(len(drops), fight_minutes / 10), "number", n=len(fights), why="Times a player's WebSocket closed during a running fight, per 10 minutes of fight. Not counted once a match has ended, when leaving is normal."),
-                    kpi("Fights with a lost connection", ratio(fights_with_drop, len(fights)), "pct", n=len(fights), why="Fights where at least one player's connection closed mid fight."),
-                    kpi("Players who came back", ratio(len(recovered), len(drops)), "pct", n=len(drops), n_label="lost connections", why="Lost connections followed by that player reconnecting to the same match."),
-                    kpi("Time to come back", percentile(timed, 0.5), "secs", n=len(timed), n_label="returns", why="Median, from the server noticing the connection close to the same player reconnecting. A closed page or a killed app is noticed at once. A phone that silently loses signal takes the server about 22 seconds to notice, which this doesn't include, and if it reconnects before then it isn't timed at all."),
-                    kpi("Time to come back, slowest 5%", percentile(timed, 0.95), "secs", n=len(timed), n_label="returns", why="95th percentile of the same. The grace period is 60 seconds."),
+                    kpi("Drops per 10 minutes", ratio(len(drops), fight_minutes / 10), "number", n=len(fights), why="Times a player's WebSocket closed during a running fight, per 10 minutes of fight. Not counted once a match has ended, when leaving is normal. The line is the same number by the day the fight started.",
+                        trend=day_trend(axis, [ratio(drops_on[d], secs_on[d] / 600) for d in axis])),
+                    kpi("Fights with a drop", ratio(fights_with_drop, len(fights)), "pct", n=len(fights), why="Fights where at least one player's connection closed mid fight.", viz=meter()),
+                    kpi("Players who came back", ratio(len(recovered), len(drops)), "pct", n=len(drops), n_label="lost connections", why="Lost connections followed by that player reconnecting to the same match.", viz=meter()),
+                    kpi("Time to come back", percentile(timed, 0.5), "secs", n=len(timed), n_label="returns", viz=range_to(percentile(timed, 0.95)),
+                        why="Median, from the server noticing the connection close to the same player reconnecting. A closed page or a killed app is noticed at once. A phone that silently loses signal takes the server about 22 seconds to notice, which this doesn't include, and if it reconnects before then it isn't timed at all. The slowest 5% is the 95th percentile of the same. The grace period is 60 seconds."),
                     kpi("Bout restarts per fight", ratio(sum(restarts.values()), len(fights)), "number", n=len(fights), why="Restarts of the bout from one saved state. Each one puts both phones through a short reload."),
                 ),
-                table("How connections were lost", [("code", "WebSocket close code", "text"), ("count", "Times", "count")],
-                      [{"code": k, "count": v} for k, v in codes.most_common()],
-                      why="1006 means the connection died with no goodbye: bad network, or the app being killed. 1001 means the page closed.", empty="No connection has been lost during a fight."),
-                table("Why bouts restarted", [("reason", "Reason", "text"), ("count", "Times", "count")],
-                      [{"reason": {"reconnect": "A player reconnected", "desync": "The simulations differed"}.get(k, k), "count": v} for k, v in restarts.most_common()],
-                      empty="No bout has restarted.")),
+                side_by_side(
+                    table("How connections were lost", [("code", "WebSocket close code", "text"), ("count", "Times", "count")],
+                          [{"code": k, "count": v} for k, v in codes.most_common()],
+                          why="1006 means the connection died with no goodbye: bad network, or the app being killed. 1001 means the page closed.", empty="No connection has been lost during a fight.", view=bars_view("code", "count", share=True)),
+                    table("Why bouts restarted", [("reason", "Reason", "text"), ("count", "Times", "count")],
+                          [{"reason": {"reconnect": "A player reconnected", "desync": "The simulations differed"}.get(k, k), "count": v} for k, v in restarts.most_common()],
+                          empty="No bout has restarted.", view=bars_view("reason", "count", share=True)))),
         section("Leaving the app",
-                kpis(
-                    kpi("Times a player left mid fight", aways, n=len(fights), why="The page was hidden during a running fight: minimised, a phone call, switching apps."),
-                    kpi("Came back in time", ratio(returned, aways), "pct", n=aways, n_label="absences", why="Returned before the match ended."),
-                    kpi("Time away", percentile(away_secs, 0.5), "secs", n=len(away_secs), n_label="absences", why="Median length of an absence the player came back from."),
-                    kpi("Forfeit rate", ratio(len(forfeits), len(closed)), "pct", n=len(closed), why="Finished fights that ended with a player gone past the 60 second grace period."),
-                ),
-                table("What the forfeiting player did last", [("what", "Last thing seen", "text"), ("count", "Forfeits", "count")],
-                      [{"what": k, "count": v} for k, v in forfeit_kind.most_common()],
-                      why="Rage quit or bad network? Closing the game cleanly and losing the connection look different to the server.", empty="No forfeits.")),
+                side_by_side(
+                    kpis(
+                        kpi("Times a player left mid fight", aways, n=len(fights), why="The page was hidden during a running fight: minimised, a phone call, switching apps."),
+                        kpi("Came back in time", ratio(returned, aways), "pct", n=aways, n_label="absences", why="Returned before the match ended.", viz=meter()),
+                        kpi("Time away", percentile(away_secs, 0.5), "secs", n=len(away_secs), n_label="absences", why="Median length of an absence the player came back from."),
+                        kpi("Forfeit rate", ratio(len(forfeits), len(closed)), "pct", n=len(closed), why="Finished fights that ended with a player gone past the 60 second grace period.", viz=meter()),
+                        strip=True, columns=2),
+                    table("What the forfeiting player did last", [("what", "Last thing seen", "text"), ("count", "Forfeits", "count")],
+                          [{"what": k, "count": v} for k, v in forfeit_kind.most_common()],
+                          why="Rage quit or bad network? Closing the game cleanly and losing the connection look different to the server.", empty="No forfeits.", view=bars_view("what", "count", share=True)))),
         section("What causes freezes",
-                cause_table(causes, "Likely cause of each freeze in a live round"),
-                chart("Gaps between one phone's inputs, at the server", "column", ["Under 25ms", "25 to 50ms", "50 to 100ms", "100 to 250ms", "250 to 500ms", "500ms to 1s", "1s and over"],
-                      [{"name": "Gaps", "values": gap_hist}], why="A phone sends one input per tick, about every 17ms, so most fall in the first bucket. Includes loading between rounds, which the server can't tell apart from a live round. Measured here, so it holds even when a phone never reports.")),
+                side_by_side(
+                    cause_table(causes, "Likely cause of each freeze in a live round"),
+                    table("Gaps between one phone's inputs, at the server", [("gap", "Gap", "text"), ("count", "Gaps", "count")],
+                          [{"gap": label, "count": count} for label, count in zip(GAP_BUCKETS, gap_hist)],
+                          why="A phone sends one input per tick, about every 17ms, so most fall in the first bucket. Includes loading between rounds, which the server can't tell apart from a live round. Measured here, so it holds even when a phone never reports.",
+                          empty="No data for this range yet.", view=bars_view("gap", "count", share=True)))),
         section("Server restarts",
-                kpis(kpi("Server restarts", len(restarts_at), why="Each deploy or crash. Fights in progress resume once both players are back."),
-                     kpi("Rejoins into a restored fight", connect_restored, n=len(fights), why="Players reconnecting to a fight the server had to rebuild from the database after a restart.")),
-                table("Most recent", [("at", "When", "time"), ("build", "Build", "text")], restart_rows, empty="The server hasn't restarted in this range.")),
+                side_by_side(
+                    chart("Server restarts by day", "column", restart_days, [{"name": "Restarts", "values": [restarts_on[d] for d in restart_days]}], why="Each deploy or crash. Fights in progress resume once both players are back.", x_kind="day", compact=True,
+                          headlines=[kpi("Server restarts", len(restarts_at), why="Each one in this range."),
+                                     kpi("Rejoins into a restored fight", connect_restored, n=len(fights), why="Players reconnecting to a fight the server had to rebuild from the database after a restart.")]),
+                    table("Most recent", [("at", "When", "time"), ("build", "Build", "text")], restart_rows, empty="The server hasn't restarted in this range."))),
     ]
 
 
@@ -1091,33 +1174,39 @@ def tab_server(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
 
     return [
         section("Is the server keeping up",
-                kpis(
-                    kpi("Event loop lag, typical", percentile((s["lag_p50_ms"] for s in all_samples), 0.5), "ms", n=n, n_label="minutes", why="How late a timer fires. Everything on the event loop, every relayed input included, is held up that long. Median of each minute's median."),
-                    kpi("Event loop lag, bad minutes", percentile((s["lag_p99_ms"] for s in all_samples), 0.95), "ms", n=n, n_label="minutes", why="95th percentile of each minute's 99th percentile."),
-                    peak("Worst lag seen", "lag_max_ms", "ms", "The single worst delay in this range. Anything over 50ms is visible as an input gap."),
-                    peak("Peak CPU", "cpu_pct", "pct100", "This process's share of one CPU core, over its busiest minute. The event loop can't use more than one core, so near 100 is the limit."),
-                    peak("Peak memory", "rss_mb", "mb", "Resident memory of the server process, read from the system once a minute. Linux only."),
-                    peak("Most fights at once", "live_fights", "count", "Fights running at the moment of a minute's sample. Short peaks between samples aren't seen."),
-                ),
-                chart("Event loop lag", "line", x, [series("Worst in the period", "lag_max"), series("99th percentile", "lag_p99"), series("Median", "lag_p50")], "ms",
-                      why="If this rises with the number of fights, the server is the bottleneck.", x_kind="time"),
-                chart("Fights running", "line", x, [series("Fights", "live_fights")], why="At each minute's sample.", x_kind="time"),
-                chart("CPU", "line", x, [series("CPU", "cpu")], "pct100", why="Busiest minute of each period.", x_kind="time"),
-                chart("Memory", "line", x, [series("Memory", "rss")], "mb", why="Steady growth without more fights would mean a leak.", x_kind="time")),
+                side_by_side(
+                    chart("Event loop lag", "line", x, [series("Worst in the period", "lag_max"), series("99th percentile", "lag_p99"), series("Median", "lag_p50")], "ms",
+                          why="If this rises with the number of fights, the server is the bottleneck.", x_kind="time", compact=True,
+                          headlines=[kpi("Typical", percentile((s["lag_p50_ms"] for s in all_samples), 0.5), "ms", n=n, n_label="minutes", why="How late a timer fires. Everything on the event loop, every relayed input included, is held up that long. Median of each minute's median."),
+                                     kpi("Bad minutes", percentile((s["lag_p99_ms"] for s in all_samples), 0.95), "ms", n=n, n_label="minutes", why="95th percentile of each minute's 99th percentile."),
+                                     peak("Worst lag seen", "lag_max_ms", "ms", "The single worst delay in this range. Anything over 50ms is visible as an input gap.")]),
+                    chart("Fights running", "line", x, [series("Fights", "live_fights")], why="At each minute's sample.", x_kind="time", compact=True,
+                          headlines=[peak("Most fights at once", "live_fights", "count", "Fights running at the moment of a minute's sample. Short peaks between samples aren't seen.")]),
+                    chart("CPU", "line", x, [series("CPU", "cpu")], "pct100", why="Busiest minute of each period.", x_kind="time", compact=True,
+                          headlines=[peak("Peak CPU", "cpu_pct", "pct100", "This process's share of one CPU core, over its busiest minute. The event loop can't use more than one core, so near 100 is the limit.")]),
+                    chart("Memory", "line", x, [series("Memory", "rss")], "mb", why="Steady growth without more fights would mean a leak.", x_kind="time", compact=True,
+                          headlines=[peak("Peak memory", "rss_mb", "mb", "Resident memory of the server process, read from the system once a minute. Linux only.")]))),
         section("Relay traffic",
-                chart("Inputs relayed per second", "line", x, [{"name": "Messages", "values": [ratio(r["relay_msgs"], r["secs"]) for r in rows]}], "number",
-                      why="Binary messages through the WebSocket relay. Each player in a fight sends about 60 a second.", x_kind="time"),
-                chart("Slowest single relay send", "line", x, [series("Slowest", "relay_send_max")], "ms",
-                      why="How long the slowest forward to an opponent took. A rising line means a player's connection can't take what we send it.", x_kind="time")),
+                side_by_side(
+                    chart("Inputs relayed per second", "line", x, [{"name": "Messages", "values": [ratio(r["relay_msgs"], r["secs"]) for r in rows]}], "number",
+                          why="Binary messages through the WebSocket relay. Each player in a fight sends about 60 a second.", x_kind="time", compact=True),
+                    chart("Slowest single relay send", "line", x, [series("Slowest", "relay_send_max")], "ms",
+                          why="How long the slowest forward to an opponent took. A rising line means a player's connection can't take what we send it.", x_kind="time", compact=True))),
         section("The fight log itself",
-                chart("Database size", "line", x, [series("Size", "db_mb")], "mb", why="The database file and its write ahead log.", x_kind="time"),
-                chart("Log writer", "line", x, [series("Slowest write", "log_write")], "ms", why="How long the background writer's slowest batch took. It runs beside the game, so it can't hold up inputs.", x_kind="time")),
+                side_by_side(
+                    chart("Database size", "line", x, [series("Size", "db_mb")], "mb", why="The database file and its write ahead log.", x_kind="time", compact=True),
+                    chart("Log writer", "line", x, [series("Slowest write", "log_write")], "ms", why="How long the background writer's slowest batch took. It runs beside the game, so it can't hold up inputs.", x_kind="time", compact=True))),
     ]
 
 
 # =========================================================================
 # BALANCE
 # =========================================================================
+
+MATCHUP_COLOUR_FROM = 5          # fewer decided games than this between two fighters get no colour: 1 to 0 isn't dominance
+COHORT_COLOUR_FROM = 5           # fewer players than this behind a cell get no colour: 1 of 1 isn't retention
+COHORT_WEEKS = 8
+
 
 def tab_balance(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
     fights = load_fights(conn, scope)
@@ -1184,23 +1273,29 @@ def tab_balance(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
         if match_id in clean:
             round_secs += [later[0] - earlier[0] for earlier, later in zip(evs, evs[1:])]
 
+    fought = [h for h in range(n_heroes) if games[h]]
     return [
         section("Fighters",
                 table("Pick rate and win rate", [("hero", "Fighter", "text"), ("picks", "Picks", "count"), ("pick_share", "Pick share", "pct"), ("games", "Decided games", "count"),
                                                  ("wins", "Wins", "count"), ("win_rate", "Win rate", "pct"), ("low", "Could be as low as", "pct"), ("high", "Could be as high as", "pct")], hero_rows,
-                      why="Picks count every fight. Win rate only counts fights decided by rounds between two different fighters: a forfeit says nothing about a fighter, and a mirror match is always one win and one loss. The range is a 95% confidence interval; two fighters whose ranges overlap may not differ at all."),
+                      why="Picks count every fight. Win rate only counts fights decided by rounds between two different fighters: a forfeit says nothing about a fighter, and a mirror match is always one win and one loss. The line through each dot is a 95% confidence interval; two fighters whose lines overlap may not differ at all.",
+                      view={"kind": "fighters"}),
                 table("Who beats whom", [("hero", "Wins and losses against", "text")] + [(f"h{o}", name, "text") for o, name in enumerate(HERO_NAMES)], matchups,
-                      why="Read across: the row fighter's wins to losses against the column fighter.")),
+                      why=f"Read across: the row fighter's wins to losses against the column fighter. Coloured from {MATCHUP_COLOUR_FROM} games, because one win from one game would otherwise look like total dominance.",
+                      view={"kind": "matrix", "heroes": [HERO_NAMES[h] for h in fought], "min_games": MATCHUP_COLOUR_FROM,
+                            "cells": [[None if a == b else {"w": matchup_wins[a][b], "l": matchup_wins[b][a]} for b in fought] for a in fought]})),
         section("Fairness",
                 kpis(
-                    kpi("P1 win rate", ratio(p1_wins, len(decided)), "pct", n=len(decided), note=None if low is None else f"Could be {low * 100:.0f}% to {high * 100:.0f}%", why="P1 is whoever locked a fighter first and fights on the left. Near 50% is fair. The range is a 95% confidence interval."),
+                    kpi("P1 win rate", ratio(p1_wins, len(decided)), "pct", n=len(decided), note=None if low is None else f"Could be {low * 100:.0f}% to {high * 100:.0f}%",
+                        viz=None if low is None else {"kind": "interval", "low": low, "high": high, "fair": 0.5}, why="P1 is whoever locked a fighter first and fights on the left. Near 50% is fair, the line down the middle. The band is a 95% confidence interval."),
                     kpi("Mirror matches", mirrors, n=len(decided), why="Decided fights where both players picked the same fighter."),
                     kpi("Round length", percentile(round_secs, 0.5), "secs", n=len(round_secs), n_label="rounds", why="Median time between rounds being settled, in fights with no pause or restart, and from the start of the fight for the first round, so it includes the intro."),
-                ),
-                table("Final scores", [("score", "Score", "text"), ("count", "Fights", "count")], [{"score": k, "count": v} for k, v in scores.most_common()],
-                      why="Fights played to the end. Close 2 to 1 games are usually the fun ones."),
-                table("Arenas", [("stage", "Arena", "text"), ("count", "Fights", "count")], [{"stage": f"Arena {k + 1}", "count": v} for k, v in sorted(stages.items())],
-                      why="Picked at random by the server, so these should come out roughly even.")),
+                    strip=True),
+                side_by_side(
+                    table("Final scores", [("score", "Score", "text"), ("count", "Fights", "count")], [{"score": k, "count": v} for k, v in scores.most_common()],
+                          why="Fights played to the end. Close 2 to 1 games are usually the fun ones.", view=bars_view("score", "count", share=True)),
+                    table("Arenas", [("stage", "Arena", "text"), ("count", "Fights", "count")], [{"stage": f"Arena {k + 1}", "count": v} for k, v in sorted(stages.items())],
+                          why="Picked at random by the server, so these should come out roughly even.", view=bars_view("stage", "count", share=True)))),
     ]
 
 
@@ -1278,17 +1373,23 @@ def tab_players(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
     returned_any = [pid for pid in in_range if len(days_active[pid]) > 1]
     repeat = [s for s in rows if s["fights"] > 1]
 
-    # Cohorts by the day of a player's first fight
+    # Cohorts by the week of a player's first fight, Monday first. A day's new players are too few to read during a beta.
+    def week_of(day: str) -> str:
+        date = datetime.strptime(day, "%Y-%m-%d")
+        return (date - timedelta(days=date.weekday())).strftime("%Y-%m-%d")
+
     cohorts = defaultdict(list)
     for pid in in_range:
-        cohorts[first_day[pid]].append(pid)
+        cohorts[week_of(first_day[pid])].append(pid)
     cohort_rows = []
-    for day in sorted(cohorts, reverse=True)[:21]:
-        members = cohorts[day]
-        row: Dict[str, Any] = {"day": day, "size": len(members)}
+    for week in sorted(cohorts, reverse=True)[:COHORT_WEEKS]:
+        members = cohorts[week]
+        row: Dict[str, Any] = {"week": week, "size": len(members)}
         for n in (1, 3, 7):
-            target = later(day, n)
-            row[f"d{n}"] = ratio(sum(1 for pid in members if target in days_active[pid]), len(members)) if target <= today else None
+            # Each player's own day, and only once it has come, so these add up to the figures above
+            due = [pid for pid in members if later(first_day[pid], n) <= today]
+            row[f"d{n}"] = ratio(sum(1 for pid in due if later(first_day[pid], n) in days_active[pid]), len(due))
+            row[f"d{n}_n"] = len(due)
         cohort_rows.append(row)
 
     return [
@@ -1296,18 +1397,22 @@ def tab_players(conn: sqlite3.Connection, scope: Scope) -> List[dict]:
                 kpis(
                     kpi("Players who fought", len(stats), n=len(fights), why="Different accounts on either side of a fight in this range."),
                     kpi("New players", len(in_range), why="Players whose first fight ever falls in this range."),
-                    kpi("Played more than once", ratio(len(repeat), len(rows)), "pct", n=len(rows), n_label="players", why="Players with two or more fights in this range."),
-                    kpi("Fought again on the next day", d1, "pct", n=d1_n, n_label="players", why="New players who fought on the day after their first fight. Only counts those whose next day has already come."),
-                    kpi("Fought again on day 3", d3, "pct", n=d3_n, n_label="players", why="The same, three days after the first fight."),
-                    kpi("Fought again on day 7", d7, "pct", n=d7_n, n_label="players", why="The same, seven days after the first fight."),
-                    kpi("Came back on any later day", ratio(len(returned_any), len(in_range)), "pct", n=len(in_range), n_label="players", why="New players who fought on at least one later day so far. Rises with time, so recent players pull it down."),
-                ),
-                chart("Players per day", "stack", axis, [{"name": "New", "values": [new_by_day[d] for d in axis]}, {"name": "Returning", "values": [returning_by_day[d] for d in axis]}],
-                      why="Players with a fight that day. New means it was their first day fighting.", x_kind="day"),
-                table("By first day", [("day", "First fight", "text"), ("size", "New players", "count"), ("d1", "Next day", "pct"), ("d3", "Day 3", "pct"), ("d7", "Day 7", "pct")], cohort_rows,
-                      why="Blank means that day hasn't come yet.", empty="No new players in this range.")),
+                    kpi("Played more than once", ratio(len(repeat), len(rows)), "pct", n=len(rows), n_label="players", why="Players with two or more fights in this range.", viz=meter()),
+                    strip=True),
+                kpis(
+                    kpi("Fought again on the next day", d1, "pct", n=d1_n, n_label="players", why="New players who fought on the day after their first fight. Only counts those whose next day has already come.", viz=meter()),
+                    kpi("Fought again on day 3", d3, "pct", n=d3_n, n_label="players", why="The same, three days after the first fight.", viz=meter()),
+                    kpi("Fought again on day 7", d7, "pct", n=d7_n, n_label="players", why="The same, seven days after the first fight.", viz=meter()),
+                    kpi("Came back on any later day", ratio(len(returned_any), len(in_range)), "pct", n=len(in_range), n_label="players", why="New players who fought on at least one later day so far. Rises with time, so recent players pull it down.", viz=meter()),
+                    strip=True),
+                side_by_side(
+                    chart("Players per day", "stack", axis, [{"name": "New", "values": [new_by_day[d] for d in axis]}, {"name": "Returning", "values": [returning_by_day[d] for d in axis]}],
+                          why="Players with a fight that day. New means it was their first day fighting.", x_kind="day"),
+                    table("By first week", [("week", "Week of", "text"), ("size", "New players", "count"), ("d1", "Next day", "pct", "heat"), ("d3", "Day 3", "pct", "heat"), ("d7", "Day 7", "pct", "heat")], cohort_rows,
+                          why=f"New players by the week of their first fight, the latest {COHORT_WEEKS} weeks. Each cell only counts players whose day has come, the same as the figures above, and a dash means nobody's has yet. Darker means more of them came back. Coloured from {COHORT_COLOUR_FROM} players, because one player coming back would otherwise look like perfect retention.",
+                          empty="No new players in this range.", heat_from={"min": COHORT_COLOUR_FROM, "label": "players"}))),
         section("Everyone who fought",
-                table("Players", [("player", "Player", "text"), ("player_id", "Telegram id", "text"), ("fights", "Fights", "count"), ("played", "Played out", "count"), ("wins", "Wins", "count"),
+                table("Players", [("player", "Player", "text"), ("player_id", "Telegram id", "text"), ("fights", "Fights", "count", "bar"), ("played", "Played out", "count"), ("wins", "Wins", "count"),
                                   ("losses", "Losses", "count"), ("draws", "Draws", "count"), ("win_rate", "Win rate", "pct"), ("forfeits_lost", "Forfeits lost", "count"), ("forfeits_won", "Forfeits won", "count"),
                                   ("days_active", "Days active", "count"), ("last", "Last fight", "time"), ("device", "Last device", "text")], rows[:300],
                       why="Fights in this range. Win rate only counts fights played to the end. Days active is all time.")),
@@ -1365,8 +1470,8 @@ def tab_fights(conn: sqlite3.Connection, scope: Scope, query: str = "", only: st
         rows = [r for r in rows if r["outcome_key"] != "running" and (r["coverage"] or 0) < MIN_COVERAGE]
     total = len(rows)
     columns = [("started", "Started", "time"), ("p1", "P1", "text"), ("p2", "P2", "text"), ("heroes", "Fighters", "text"), ("outcome", "Result", "text"),
-               ("score", "Score", "text"), ("secs", "Length", "secs"), ("freezes", "Freezes", "count"), ("desyncs", "Desyncs", "count"), ("drops", "Lost connections", "count"),
-               ("restarts", "Restarts", "count"), ("delay_ms", "Input delay", "ms"), ("rollbacks", "Rollbacks", "count"), ("coverage", "Reported", "pct")]
+               ("score", "Score", "text"), ("secs", "Length", "secs"), ("freezes", "Freezes", "count", "flag"), ("desyncs", "Desyncs", "count", "flag"), ("drops", "Lost connections", "count", "flag"),
+               ("restarts", "Restarts", "count", "flag"), ("delay_ms", "Input delay", "ms"), ("rollbacks", "Rollbacks", "count"), ("coverage", "Reported", "pct", "bar")]
     log = table(f"{total} fights", columns, rows[offset:offset + limit], BOTH,
                 "Newest first. Select a fight to see its timeline. Reported is the share of the fight covered by the phone with the least reports.",
                 empty="No fights match. Try a wider range, or include your own fights.")
@@ -1436,6 +1541,27 @@ def worse_side(sides: Dict[str, dict]) -> Dict[str, str]:
     return worse
 
 
+def gone_spans(events: List[dict], zero: float, end: float) -> Dict[str, List[dict]]:
+    """
+    When each player was gone from a running fight, from the server's own record: connection lost, or the app left. Someone
+    who never came back is gone until the end. A connection the phone had already replaced cost no time at all, so it's left out.
+    """
+    spans: Dict[str, List[dict]] = {"p1": [], "p2": []}
+    for i, e in enumerate(events):
+        data = data_of(e["data"])
+        if e["role"] not in spans or not data.get("in_fight"):
+            continue
+        if e["kind"] == "player_disconnected" and not data.get("replaced"):
+            kind, back_kind = "lost", "player_connected"
+        elif e["kind"] == "player_away":
+            kind, back_kind = "away", "player_back"
+        else:
+            continue
+        back = next((x for x in events[i + 1:] if x["kind"] == back_kind and x["player_id"] == e["player_id"]), None)
+        spans[e["role"]].append({"t": e["at"] - zero, "secs": max(0.0, (back["at"] if back else end) - e["at"]), "kind": kind, "came_back": back is not None})
+    return spans
+
+
 def fight_story(fight: dict, sides: Dict[str, dict], events: List[dict]) -> Optional[dict]:
     """What the fight's page leads with. The sentence is built from counts, so it can't claim more than was measured."""
     if not fight["fight_started_at"]:
@@ -1487,7 +1613,8 @@ def fight_story(fight: dict, sides: Dict[str, dict], events: List[dict]) -> Opti
     end = fight["ended_at"] or max((e["at"] for e in events), default=zero)
     listed = sum(len(marks) for marks in lanes.values())
     span = max([end - zero, 1.0] + [m["t"] + m["ms"] / 1000 for marks in lanes.values() for m in marks])
-    return {"sentence": " ".join(sentences), "lanes": lanes, "span": span, "unlisted": max(0, freezes - listed), "paused": fight["paused_secs"] or 0}
+    rounds = [{"t": e["at"] - zero, "p1": d.get("p1"), "p2": d.get("p2")} for e, d in ((e, data_of(e["data"])) for e in events if e["kind"] == "round_settled")]
+    return {"sentence": " ".join(sentences), "lanes": lanes, "gone": gone_spans(events, zero, end), "rounds": rounds, "span": span, "unlisted": max(0, freezes - listed), "paused": fight["paused_secs"] or 0}
 
 
 def fight_detail(conn: sqlite3.Connection, match_id: str) -> Optional[dict]:
@@ -1689,8 +1816,8 @@ def tab_quality(conn: sqlite3.Connection, scope: Scope, writer_health: Optional[
     health = writer_health or {}
     return [
         section("Do the numbers hold up",
-                {"type": "checks", "items": checks},
-                note="Facts that must be true if the data is right, most comparing records written independently. These always cover all time. A failure means a number elsewhere may be wrong: investigate before relying on it. A warning is expected now and then."),
+                {"type": "checks", "items": checks, "source": BOTH, "title": "Consistency checks",
+                 "why": "Facts that must be true if the data is right, most comparing records written independently. These always cover all time. A failure means a number elsewhere may be wrong: investigate before relying on it. A warning is expected now and then."}),
         section("The log itself",
                 kpis(
                     kpi("Logging since", first_event, "time", why="The first event in the log. Fights before this have no timeline, and aren't counted anywhere in this panel."),
@@ -1699,11 +1826,12 @@ def tab_quality(conn: sqlite3.Connection, scope: Scope, writer_health: Optional[
                     kpi("Rows dropped since restart", health.get("dropped"), why="The writer's queue was full and a row was thrown away rather than slowing a fight. Should stay at zero."),
                     kpi("Write errors since restart", health.get("write_errors"), why="Rows the database refused. Should stay at zero."),
                     kpi("Phone reports refused", health.get("windows_rejected"), why="Past the limit of 30 a minute from one phone. Should stay at zero; more means a client misbehaving."),
-                ),
+                    strip=True),
                 table("What is stored", [("table", "Table", "text"), ("rows", "Rows", "count")], tables,
-                      why="matches: one per challenge. match_events: each match's timeline. net_windows: phone reports, about one per 10s per phone. server_samples: one a minute. players: everyone who has opened a match. replays: only the latest 500 are kept.")),
-        section("How to read this panel",
-                {"type": "text", "items": [
+                      why="matches: one per challenge. match_events: each match's timeline. net_windows: phone reports, about one per 10s per phone. server_samples: one a minute. players: everyone who has opened a match. replays: only the latest 500 are kept.",
+                      view=bars_view("table", "rows"))),
+        section("",
+                {"type": "text", "title": "How to read this panel", "items": [
                     "Server means the game server measured it, so a phone can't lose or misreport it.",
                     "Phones means phones reported it. It's lost if a phone dies before its next report, which is why the fight log shows how much of each fight was reported.",
                     f"With fewer than {LOW_SAMPLE} fights in a range, a note at the top of the page says so. With more, any number resting on fewer than {LOW_SAMPLE} samples is marked as a small sample. Percentages from a handful of fights swing wildly; don't decide anything from them alone.",
